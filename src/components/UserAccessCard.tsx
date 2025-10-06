@@ -61,7 +61,7 @@ export function UserAccessCard({
         <div className="flex-1">
           <div className="flex items-center space-x-3 mb-2">
             <h3 className="text-lg font-medium text-gray-900">
-              {userAccess.firstName} {userAccess.lastName}
+              {userAccess.name} {userAccess.lastName}
             </h3>
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getAccessTypeBadgeColor(userAccess.accessType)}`}>
               {getAccessTypeLabel(userAccess.accessType)}

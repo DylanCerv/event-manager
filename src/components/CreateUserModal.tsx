@@ -1,26 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, AlertCircle, Eye, EyeOff, ChevronDown } from 'lucide-react';
-import { creatorsStorage } from '../lib/creators-storage';
-import type { Creator } from '../types/creator';
-
-interface User {
-  id: string;
-  firstName: string;
-  lastName: string;
-  company: string;
-  country: string;
-  city: string;
-  address: string;
-  phone: string;
-  email: string;
-  username: string;
-  password: string;
-  role: string;
-  status: string;
-  eventsCount: number;
-  lastLogin: string;
-  createdAt: string;
-}
+import { createUserAPI } from '../endpoints/user';
+import { useUser } from '../contexts/UserContext';
+import type { ApiUser } from '../types/auth';
 
 interface UserFormData {
   firstName: string;
@@ -43,12 +25,11 @@ interface FormErrors {
 interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (user: User) => void;
-  existingUsers: User[];
+  onCreated?: (apiUser: any) => void;
 }
 
-export function CreateUserModal({ isOpen, onClose, onSubmit, existingUsers }: CreateUserModalProps) {
-  const [formData, setFormData] = React.useState<UserFormData>({
+export function CreateUserModal({ isOpen, onClose, onCreated }: CreateUserModalProps) {
+  const [formData, setFormData] = useState<UserFormData>({
     firstName: '',
     lastName: '',
     company: '',
@@ -62,17 +43,18 @@ export function CreateUserModal({ isOpen, onClose, onSubmit, existingUsers }: Cr
     createdBy: ''
   });
 
-  const [errors, setErrors] = React.useState<FormErrors>({});
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [showPassword, setShowPassword] = React.useState(false);
-  const [creators, setCreators] = React.useState<Creator[]>([]);
-  const [loadingCreators, setLoadingCreators] = React.useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const { filterByRoleId } = useUser();
+  const [creators, setCreators] = useState<ApiUser[]>([]);
+  const [loadingCreators, setLoadingCreators] = useState(false);
 
   const loadCreators = async () => {
     try {
       setLoadingCreators(true);
-      const creatorsData = await creatorsStorage.getCreators();
-      setCreators(creatorsData.filter(creator => creator.status === 'active'));
+      const list = filterByRoleId('CREATOR');
+      setCreators(list);
     } catch (error) {
       console.error('Error loading creators:', error);
     } finally {
@@ -80,7 +62,7 @@ export function CreateUserModal({ isOpen, onClose, onSubmit, existingUsers }: Cr
     }
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       loadCreators();
     }
@@ -126,20 +108,6 @@ export function CreateUserModal({ isOpen, onClose, onSubmit, existingUsers }: Cr
       newErrors.email = 'El formato del email no es válido';
     }
 
-    // Check for duplicate email or username
-    const isDuplicate = existingUsers.some(user => 
-      user.email === formData.email || user.username === formData.username
-    );
-
-    if (isDuplicate) {
-      if (existingUsers.some(user => user.email === formData.email)) {
-        newErrors.email = 'Este email ya está registrado';
-      }
-      if (existingUsers.some(user => user.username === formData.username)) {
-        newErrors.username = 'Este nombre de usuario ya está en uso';
-      }
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -149,23 +117,54 @@ export function CreateUserModal({ isOpen, onClose, onSubmit, existingUsers }: Cr
     if (!validateForm()) return;
 
     setIsLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      // Map modal form to API payload
+      const payload = {
+        name: formData.firstName,
+        last_name: formData.lastName,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        country: formData.country || null,
+        city: formData.city || null,
+        address: formData.address || null,
+        phone: formData.phone || null,
+        company: formData.company || null,
+        role_id: 2, // ADMIN
+        creator_id: formData.createdBy || null,
+        status: 'active',
+      };
 
-    const newUser: User = {
-      id: crypto.randomUUID(),
-      ...formData,
-      role: 'ADMIN',
-      status: 'active',
-      eventsCount: 0,
-      lastLogin: new Date().toISOString(),
-      createdAt: new Date().toISOString()
-    };
-
-    onSubmit(newUser);
-    resetForm();
-    setIsLoading(false);
+      const response = await createUserAPI(payload);
+      if (response.status === 201) {
+        try { onCreated?.(response); } catch {}
+        onClose();
+        resetForm();
+      } else {
+        // Show backend validation errors if available
+        const apiMessage = response?.message;
+        const apiErrors = response?.errors;
+        if (apiErrors && typeof apiErrors === 'object') {
+          const newErrors: Record<string, string> = {};
+          Object.keys(apiErrors).forEach((key) => {
+            const val = apiErrors[key];
+            if (Array.isArray(val) && val.length > 0) newErrors[key] = val[0];
+          });
+          if (Object.keys(newErrors).length > 0) {
+            setErrors(prev => ({ ...prev, ...newErrors, submit: apiMessage || 'Errores de validación' }));
+          } else {
+            setErrors({ submit: apiMessage || 'Error al crear el usuario' });
+          }
+        } else {
+          setErrors({ submit: apiMessage || 'Error al crear el usuario' });
+        }
+      }
+    } catch (error: any) {
+      console.error('Create user failed:', error);
+      setErrors({ submit: error?.message || 'No se pudo crear el usuario' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleClose = () => {
@@ -191,6 +190,22 @@ export function CreateUserModal({ isOpen, onClose, onSubmit, existingUsers }: Cr
         </div>
         <div className="px-6 py-4">
           <form onSubmit={handleSubmit} className="space-y-4">
+            {errors.submit && (
+              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 flex items-start">
+                <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                <div>
+                  <div>{errors.submit}</div>
+                  {/* Field errors summary (optional) */}
+                  {Object.entries(errors).filter(([k]) => k !== 'submit').length > 0 && (
+                    <ul className="list-disc ml-5 mt-1">
+                      {Object.entries(errors).filter(([k]) => k !== 'submit').map(([field, msg]) => (
+                        <li key={field}>{field}: {msg}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
@@ -437,8 +452,8 @@ export function CreateUserModal({ isOpen, onClose, onSubmit, existingUsers }: Cr
                 >
                   <option value="">Selecciona un creador</option>
                   {creators.map((creator) => (
-                    <option key={creator.id} value={creator.id}>
-                      {creator.firstName} {creator.lastName} ({creator.country})
+                    <option key={String(creator.id)} value={String(creator.id)}>
+                      {creator.name} {creator.last_name || ''}
                     </option>
                   ))}
                 </select>

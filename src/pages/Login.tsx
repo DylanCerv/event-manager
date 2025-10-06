@@ -4,10 +4,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { LogIn, X, KeyRound, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 
 export function Login() {
-  const { login, user } = useAuth();
+  const { role, loginWithApi } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('superadmin@bolt-events.local');
+  const [password, setPassword] = useState('123456789');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -15,11 +15,12 @@ export function Login() {
   const [resetRequestSent, setResetRequestSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  if (user) {
-    const redirectPath = user.role === 'SUPER_ADMIN' ? '/super-admin' :
-                        user.role === 'ACCESS_CONTROL' ? '/access-control' :
-                        user.role === 'MODERATOR' ? '/moderador' :
-                        user.role === 'CREATOR' ? '/creator' :
+  if (role) {
+    const roleName = role?.name;
+    const redirectPath = roleName === 'SUPER_ADMIN' ? '/super-admin' :
+                        roleName === 'ACCESS_CONTROL' ? '/access-control' :
+                        roleName === 'MODERATOR' ? '/moderador' :
+                        roleName === 'CREATOR' ? '/creator' :
                         '/home';
     return <Navigate to={redirectPath} />;
   };
@@ -30,27 +31,24 @@ export function Login() {
     setIsLoading(true);
 
     try {
-      if (username === 'superadmin' && password === '123') {
-        await login('SUPER_ADMIN');
+      const apiUser = await loginWithApi(username, password);
+      const roleName = apiUser.role?.name as string | undefined;
+      
+      if (roleName === 'SUPER_ADMIN') {
         navigate('/super-admin');
-      } else if (username === 'admin' && password === '123') {
-        // Legacy admin login
-        await login('ADMIN', 'admin', '123');
+      } else if (roleName === 'ADMIN') {
         navigate('/home');
+      } else if (roleName === 'ACCESS_CONTROL') {
+        navigate('/access-control');
+      } else if (roleName === 'MODERATOR') {
+        navigate('/moderador');
+      } else if (roleName === 'CREATOR') {
+        navigate('/creator');
       } else {
-        // Try to login as different user types
-        try {
-          await login('ADMIN', username, password);
-          navigate('/home');
-        } catch (adminError) {
-          try {
-            await login('CREATOR', username, password);
-            navigate('/creator');
-          } catch (creatorError) {
-            throw adminError; // Show original admin error
-          }
-        }
+        navigate('/home');
       }
+      
+      setIsLoading(false);
     } catch (err) {
       if (err instanceof Error) {
         if (err.message === 'User account is suspended') {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Clock, MapPin, Phone, Mail, Facebook, Instagram, Sparkles, Heart, Check, Utensils, Music, Gift, Timer, Accessibility, Star } from 'lucide-react';
+import { Calendar, Clock, MapPin, Phone, Mail, Facebook, Instagram, Sparkles, Heart, Check, Utensils, Music, Gift, Timer, Accessibility, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Importar todas las opciones de fondos disponibles
 // Bodas
@@ -67,6 +67,11 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   const [mobilityRestrictions, setMobilityRestrictions] = React.useState(guest.mobility_restrictions || '');
   const [imageBrightness, setImageBrightness] = React.useState<'light' | 'dark' | 'medium'>('medium');
   const [showContent, setShowContent] = React.useState(false);
+  
+  // Estados para el carrusel
+  const [currentSlide, setCurrentSlide] = React.useState(0);
+  const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const [isPaused, setIsPaused] = React.useState(false);
 
   // Obtener el tema seleccionado o usar el tema por defecto
   const template = getTemplateById(eventCard.event_type || 'wedding') || getTemplateById('wedding')!;
@@ -153,6 +158,42 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
     return null;
   };
+
+  // Funciones para el carrusel
+  const galleryImages = eventCard.gallery_images?.filter(img => img) || [];
+  const totalSlides = galleryImages.length;
+
+  const nextSlide = () => {
+    if (isTransitioning || totalSlides <= 1) return;
+    setIsTransitioning(true);
+    setCurrentSlide((prev) => (prev + 1) % totalSlides);
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
+
+  const prevSlide = () => {
+    if (isTransitioning || totalSlides <= 1) return;
+    setIsTransitioning(true);
+    setCurrentSlide((prev) => (prev - 1 + totalSlides) % totalSlides);
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
+
+  const goToSlide = (index: number) => {
+    if (isTransitioning || index === currentSlide) return;
+    setIsTransitioning(true);
+    setCurrentSlide(index);
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
+
+  // Auto-play cada 3 segundos
+  React.useEffect(() => {
+    if (totalSlides <= 1 || isPaused) return;
+    
+    const interval = setInterval(() => {
+      nextSlide();
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [currentSlide, totalSlides, isPaused, isTransitioning]);
 
   // Función para detectar luminosidad de la imagen
   const detectImageBrightness = React.useCallback((imageUrl: string) => {
@@ -2136,39 +2177,150 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             )}
 
 
-            {/* Imagen 1 - Estilo polaroid izquierda */}
-            {(eventCard.gallery_images?.[0] || eventCard.cover_image) && (
-              <div className="absolute w-32 h-40 top-6 left-1 -rotate-6 md:w-56 md:h-64 md:top-16 md:left-8 md:-rotate-12 bg-white rounded-lg shadow-2xl transform z-10 p-3">
-                <div className="w-full h-32 md:h-52 rounded overflow-hidden">
-                  <img src={eventCard.gallery_images?.[0] || eventCard.cover_image} alt="Imagen 1" className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700" />
+            {/* Carrusel con Preview - Responsive */}
+            {totalSlides > 0 && (
+              <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6 px-6 md:px-4 py-8">
+                
+                {/* Miniatura izquierda - Solo desktop */}
+                <div className="hidden md:block">
+                  {totalSlides > 1 && (
+                    <div 
+                      className={`w-24 h-32 bg-white rounded-lg shadow-lg transform -rotate-12 cursor-pointer transition-all duration-300 p-2 ${
+                        currentSlide === (currentSlide - 1 + totalSlides) % totalSlides ? 'opacity-100 scale-105' : 'opacity-60 hover:opacity-80'
+                      }`}
+                      onClick={() => goToSlide((currentSlide - 1 + totalSlides) % totalSlides)}
+                    >
+                      <div className="w-full h-24 rounded overflow-hidden">
+                        <img 
+                          src={galleryImages[(currentSlide - 1 + totalSlides) % totalSlides]} 
+                          alt="Imagen anterior" 
+                          className="w-full h-full object-cover" 
+                        />
+                      </div>
+                      <div className="h-6 flex items-center justify-center">
+                        <div className="w-4 h-0.5 bg-gray-200 rounded"></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="h-8 flex items-center justify-center">
-                  <div className="w-8 h-1 bg-gray-200 rounded"></div>
+
+                {/* Imagen principal */}
+                <div 
+                  className="relative group"
+                  onMouseEnter={() => setIsPaused(true)}
+                  onMouseLeave={() => setIsPaused(false)}
+                  onTouchStart={() => setIsPaused(true)}
+                  onTouchEnd={() => setTimeout(() => setIsPaused(false), 2000)}
+                >
+                  <div className="w-64 h-72 md:w-80 md:h-96 bg-white rounded-lg shadow-2xl transform rotate-1 p-4 transition-all duration-300">
+                    <div className="w-full h-56 md:h-80 rounded overflow-hidden relative">
+                      <img 
+                        src={galleryImages[currentSlide]} 
+                        alt={`Imagen ${currentSlide + 1}`} 
+                        className={`w-full h-full object-cover transition-all duration-300 ${
+                          isTransitioning ? 'opacity-80 scale-95' : 'opacity-100 scale-100'
+                        }`}
+                      />
+                      
+                      {/* Controles de navegación sutiles - Solo si hay más de 1 imagen */}
+                      {totalSlides > 1 && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setIsPaused(true);
+                              prevSlide();
+                              setTimeout(() => setIsPaused(false), 1000);
+                            }}
+                            className="absolute left-1 top-1/2 transform -translate-y-1/2 bg-black/20 hover:bg-black/40 rounded-full p-1.5 transition-all duration-200 opacity-0 hover:opacity-100 group-hover:opacity-100"
+                            disabled={isTransitioning}
+                          >
+                            <ChevronLeft className="w-3 h-3 text-white" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsPaused(true);
+                              nextSlide();
+                              setTimeout(() => setIsPaused(false), 1000);
+                            }}
+                            className="absolute right-1 top-1/2 transform -translate-y-1/2 bg-black/20 hover:bg-black/40 rounded-full p-1.5 transition-all duration-200 opacity-0 hover:opacity-100 group-hover:opacity-100"
+                            disabled={isTransitioning}
+                          >
+                            <ChevronRight className="w-3 h-3 text-white" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <div className="h-12 flex items-center justify-center">
+                      <div className="w-12 h-1 bg-gray-200 rounded"></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Miniatura derecha - Solo desktop */}
+                <div className="hidden md:block">
+                  {totalSlides > 1 && (
+                    <div 
+                      className={`w-24 h-32 bg-white rounded-lg shadow-lg transform rotate-12 cursor-pointer transition-all duration-300 p-2 ${
+                        currentSlide === (currentSlide + 1) % totalSlides ? 'opacity-100 scale-105' : 'opacity-60 hover:opacity-80'
+                      }`}
+                      onClick={() => goToSlide((currentSlide + 1) % totalSlides)}
+                    >
+                      <div className="w-full h-24 rounded overflow-hidden">
+                        <img 
+                          src={galleryImages[(currentSlide + 1) % totalSlides]} 
+                          alt="Imagen siguiente" 
+                          className="w-full h-full object-cover" 
+                        />
+                      </div>
+                      <div className="h-6 flex items-center justify-center">
+                        <div className="w-4 h-0.5 bg-gray-200 rounded"></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
-            
-            {/* Imagen 2 - Estilo polaroid derecha superior */}
-            {eventCard.gallery_images?.[1] && (
-              <div className="absolute w-32 h-40 top-2 right-1 rotate-6 md:w-56 md:h-64 md:top-8 md:right-12 md:rotate-12 bg-white rounded-lg shadow-2xl transform z-5 p-3">
-                <div className="w-full h-32 md:h-52 rounded overflow-hidden">
-                  <img src={eventCard.gallery_images[1]} alt="Imagen 2" className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700" />
-                </div>
-                <div className="h-8 flex items-center justify-center">
-                  <div className="w-6 h-1 bg-gray-200 rounded"></div>
-                </div>
+
+            {/* Miniaturas horizontales - Solo móvil */}
+            {totalSlides > 1 && (
+              <div className="flex md:hidden justify-center gap-3 px-4 pb-4">
+                {galleryImages.map((image, index) => (
+                  <div
+                    key={index}
+                    className={`w-16 h-20 bg-white rounded-md shadow-md cursor-pointer transition-all duration-300 p-1.5 ${
+                      index === currentSlide ? 'opacity-100 scale-110 ring-2 ring-white' : 'opacity-60'
+                    }`}
+                    onClick={() => goToSlide(index)}
+                  >
+                    <div className="w-full h-12 rounded overflow-hidden">
+                      <img 
+                        src={image} 
+                        alt={`Miniatura ${index + 1}`} 
+                        className="w-full h-full object-cover" 
+                      />
+                    </div>
+                    <div className="h-4 flex items-center justify-center">
+                      <div className="w-3 h-0.5 bg-gray-200 rounded"></div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            
-            {/* Imagen 3 - Estilo polaroid centro-abajo */}
-            {eventCard.gallery_images?.[2] && (
-              <div className="absolute w-32 h-40 bottom-16 left-1/2 transform -translate-x-1/2 rotate-1 md:w-56 md:h-64 md:bottom-8 md:rotate-2 bg-white rounded-lg shadow-2xl z-5 p-3">
-                <div className="w-full h-32 md:h-52 rounded overflow-hidden">
-                  <img src={eventCard.gallery_images[2]} alt="Imagen 3" className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700" />
-                </div>
-                <div className="h-8 flex items-center justify-center">
-                  <div className="w-5 h-1 bg-gray-200 rounded"></div>
-                </div>
+
+            {/* Indicadores de posición */}
+            {totalSlides > 1 && (
+              <div className="flex justify-center gap-2 pb-4">
+                {galleryImages.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => goToSlide(index)}
+                    className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                      index === currentSlide 
+                        ? 'bg-white scale-125' 
+                        : 'bg-white/50 hover:bg-white/70'
+                    }`}
+                  />
+                ))}
               </div>
             )}
 

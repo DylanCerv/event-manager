@@ -1,6 +1,8 @@
 import React from 'react';
 import { X, AlertCircle, Eye, EyeOff, Shield } from 'lucide-react';
-import type { CreateUserAccessData, UserAccess } from '../types/roles';
+import type { CreateUserAccessData } from '../types/roles';
+import type { ApiUser } from '../types/auth';
+import { createUserAPI, updateUserAPI } from '../endpoints/user';
 
 interface FormErrors {
   [key: string]: string;
@@ -9,23 +11,23 @@ interface FormErrors {
 interface CreateUserAccessModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: CreateUserAccessData) => void;
+  onSaved?: (user: ApiUser) => void;
   isLoading?: boolean;
   existingUsernames: string[];
-  editingUserAccess?: UserAccess | null;
+  editingUserAccess?: ApiUser | null;
 }
 
 export function CreateUserAccessModal({ 
   isOpen, 
   onClose, 
-  onSubmit, 
+  onSaved,
   isLoading = false,
   existingUsernames,
   editingUserAccess
 }: CreateUserAccessModalProps) {
   const [formData, setFormData] = React.useState<CreateUserAccessData>({
     accessType: 'control_acceso',
-    firstName: '',
+    name: '',
     lastName: '',
     username: '',
     password: ''
@@ -38,16 +40,16 @@ export function CreateUserAccessModal({
   React.useEffect(() => {
     if (editingUserAccess) {
       setFormData({
-        accessType: editingUserAccess.accessType,
-        firstName: editingUserAccess.firstName,
-        lastName: editingUserAccess.lastName,
-        username: editingUserAccess.username,
-        password: editingUserAccess.password
+        accessType: (editingUserAccess.role_id === 4 ? 'moderador' : 'control_acceso') as any,
+        name: editingUserAccess.name || '',
+        lastName: (editingUserAccess.last_name as string) || '',
+        username: (editingUserAccess.username as string) || '',
+        password: (editingUserAccess as any).password_plain || ''
       });
     } else {
       setFormData({
         accessType: 'control_acceso',
-        firstName: '',
+        name: '',
         lastName: '',
         username: '',
         password: ''
@@ -58,7 +60,7 @@ export function CreateUserAccessModal({
   const resetForm = () => {
     setFormData({
       accessType: 'control_acceso',
-      firstName: '',
+      name: '',
       lastName: '',
       username: '',
       password: ''
@@ -70,8 +72,8 @@ export function CreateUserAccessModal({
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = 'El nombre es requerido';
+    if (!formData.name.trim()) {
+      newErrors.name = 'El nombre es requerido';
     }
 
     if (!formData.lastName.trim()) {
@@ -95,11 +97,56 @@ export function CreateUserAccessModal({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
-      onSubmit(formData);
-      resetForm();
+    if (!validateForm()) return;
+
+    try {
+      const role_id = formData.accessType === 'moderador' ? 4 : 3;
+      const payload: any = {
+        name: formData.name,
+        last_name: formData.lastName,
+        username: formData.username,
+        password: formData.password,
+        role_id,
+        status: 'active',
+      };
+
+      let response: any;
+      if (editingUserAccess) {
+        // For edit, send only changed password if length >= 6
+        const updatePayload: any = {
+          name: formData.name,
+          last_name: formData.lastName,
+          username: formData.username,
+          role_id,
+        };
+        if (formData.password && formData.password.length >= 6) {
+          updatePayload.password = formData.password;
+        }
+        response = await updateUserAPI(Number(editingUserAccess.id), updatePayload);
+      } else {
+        response = await createUserAPI(payload);
+      }
+
+      if (response && (response.status === 201 || response.id || response.status === 200)) {
+        try { onSaved?.(response.data ?? response); } catch {}
+        resetForm();
+        onClose();
+      } else {
+        const apiMessage = response?.message || 'Error al guardar acceso';
+        const apiErrors = response?.errors;
+        const newErrors: Record<string, string> = {};
+        if (apiErrors && typeof apiErrors === 'object') {
+          Object.keys(apiErrors).forEach((key) => {
+            const val = apiErrors[key];
+            if (Array.isArray(val) && val.length > 0) newErrors[key] = val[0];
+          });
+        }
+        setErrors(prev => ({ ...prev, ...newErrors, submit: apiMessage }));
+      }
+    } catch (error: any) {
+      setErrors({ submit: error?.message || 'Error al guardar acceso' });
     }
   };
 
@@ -129,6 +176,14 @@ export function CreateUserAccessModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {errors.submit && (
+            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 flex items-start">
+              <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              <div>
+                <div>{errors.submit}</div>
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Tipo de acceso <span className="text-red-500">*</span>
@@ -156,17 +211,17 @@ export function CreateUserAccessModal({
               </label>
               <input
                 type="text"
-                value={formData.firstName}
-                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm ${
-                  errors.firstName ? 'border-red-300' : ''
+                  errors.name ? 'border-red-300' : ''
                 }`}
                 placeholder="Ingresa el nombre"
               />
-              {errors.firstName && (
+              {errors.name && (
                 <p className="mt-1 text-sm text-red-600 flex items-center">
                   <AlertCircle className="h-4 w-4 mr-1" />
-                  {errors.firstName}
+                  {errors.name}
                 </p>
               )}
             </div>

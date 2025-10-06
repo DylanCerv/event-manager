@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { creatorsStorage } from '../lib/creators-storage';
+import { updateUserAPI } from '../endpoints/user';
 import type { Creator } from '../types/creator';
 
 interface User {
@@ -45,12 +46,10 @@ interface FormErrors {
 interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (user: User) => void;
-  existingUsers: User[];
   editingUser: User | null;
 }
 
-export function EditUserModal({ isOpen, onClose, onSubmit, existingUsers, editingUser }: EditUserModalProps) {
+export function EditUserModal({ isOpen, onClose, editingUser }: EditUserModalProps) {
   const [formData, setFormData] = React.useState<UserFormData>({
     firstName: '',
     lastName: '',
@@ -83,7 +82,7 @@ export function EditUserModal({ isOpen, onClose, onSubmit, existingUsers, editin
         phone: editingUser.phone,
         email: editingUser.email,
         username: editingUser.username,
-        password: editingUser.password,
+        password: ((editingUser as any).password_plain ?? editingUser.password) || '',
         createdBy: editingUser.createdBy || '',
         status: editingUser.status
       });
@@ -152,21 +151,6 @@ export function EditUserModal({ isOpen, onClose, onSubmit, existingUsers, editin
       newErrors.email = 'El formato del email no es válido';
     }
 
-    // Check for duplicate email or username (excluding current user)
-    const isDuplicate = existingUsers.some(user => 
-      (user.email === formData.email || user.username === formData.username) &&
-      user.id !== editingUser?.id
-    );
-
-    if (isDuplicate) {
-      if (existingUsers.some(user => user.email === formData.email && user.id !== editingUser?.id)) {
-        newErrors.email = 'Este email ya está registrado';
-      }
-      if (existingUsers.some(user => user.username === formData.username && user.id !== editingUser?.id)) {
-        newErrors.username = 'Este nombre de usuario ya está en uso';
-      }
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -176,18 +160,35 @@ export function EditUserModal({ isOpen, onClose, onSubmit, existingUsers, editin
     if (!validateForm() || !editingUser) return;
 
     setIsLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const payload: Record<string, any> = {
+        name: formData.firstName,
+        last_name: formData.lastName,
+        username: formData.username,
+        email: formData.email,
+        country: formData.country,
+        city: formData.city,
+        address: formData.address,
+        phone: formData.phone,
+        company: formData.company,
+        status: formData.status,
+      };
+      if (formData.password && formData.password.trim().length >= 6) {
+        payload.password = formData.password;
+      }
 
-    const updatedUser: User = {
-      ...editingUser,
-      ...formData
-    };
-
-    onSubmit(updatedUser);
-    resetForm();
-    setIsLoading(false);
+      const response = await updateUserAPI(Number(editingUser.id), payload);
+      if (response.status == 200) {
+        resetForm();
+      } else {
+        alert(response?.message || 'Error al actualizar el usuario');
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Error al actualizar el usuario');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleClose = () => {

@@ -7,7 +7,7 @@ import { RewardsModal } from './RewardsModal';
 import { SupportModal } from './SupportModal';
 
 export function Navigation() {
-  const { user, logout } = useAuth();
+  const { user, role, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = React.useState(false);
   const [isRewardsModalOpen, setIsRewardsModalOpen] = React.useState(false);
@@ -71,7 +71,7 @@ export function Navigation() {
     { to: '/creadores', icon: User, label: 'Creadores' },
     { to: '/communications', icon: Radio, label: 'Comunicaciones' },
     { to: '/configuraciones', icon: Settings, label: 'Configuraciones' },
-  ];
+  ];  
 
   // Navigation items for Admin
   const adminNavItems = [
@@ -94,9 +94,9 @@ export function Navigation() {
   ];
 
   const getNavItems = () => {
-    if (user.role === 'SUPER_ADMIN') return superAdminNavItems;
-    if (user.role === 'ACCESS_CONTROL') return accessControlNavItems;
-    if (user.role === 'MODERATOR') return moderatorNavItems;
+    if (role?.name == 'SUPER_ADMIN') return superAdminNavItems;
+    if (role?.name == 'ACCESS_CONTROL') return accessControlNavItems;
+    if (role?.name == 'MODERATOR') return moderatorNavItems;
     return adminNavItems;
   };
 
@@ -166,16 +166,16 @@ export function Navigation() {
           {/* User Info and Logout */}
           <div className="flex items-center space-x-4 relative">
             {/* Profile Section - Hidden for Access Control and Moderator users */}
-            {user.role !== 'ACCESS_CONTROL' && user.role !== 'MODERATOR' && (
+            {role?.name !== 'ACCESS_CONTROL' && role?.name !== 'MODERATOR' && (
               <>
                 <button
                   onClick={toggleProfileDropdown}
                   className="flex items-center space-x-2 text-sm text-gray-700 hidden sm:flex hover:text-gray-900 transition-colors"
                 >
                   <div className="flex-shrink-0">
-                    {user.profilePhoto ? (
+                    {user.profile_photo ? (
                       <img 
-                        src={user.profilePhoto} 
+                        src={user.profile_photo} 
                         alt="Perfil" 
                         className="h-8 w-8 rounded-full object-cover"
                       />
@@ -187,7 +187,7 @@ export function Navigation() {
                   </div>
                   
                   <span>
-                    {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 
+                    {role?.name === 'SUPER_ADMIN' ? 'Super Admin' : 
                      truncateCompanyName(user.company || 'Mi Empresa')}
                   </span>
                 </button>
@@ -203,7 +203,7 @@ export function Navigation() {
             )}
             
             {/* Support Button - For Admin, Access Control and Moderator users */}
-            {['ADMIN', 'ACCESS_CONTROL', 'MODERATOR'].includes(user.role) && (
+            {['ADMIN', 'ACCESS_CONTROL', 'MODERATOR'].includes(role?.name as string) && (
               <button
                 onClick={openSupportModal}
                 className="inline-flex items-center p-2 border border-transparent rounded-md text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
@@ -225,7 +225,7 @@ export function Navigation() {
       </div>
 
       {/* Rewards Modal - Hidden for Access Control users */}
-      {user.role !== 'ACCESS_CONTROL' && (
+      {role?.name !== 'ACCESS_CONTROL' && (
         <RewardsModal
           isOpen={isRewardsModalOpen}
           onClose={closeRewardsModal}
@@ -241,7 +241,7 @@ export function Navigation() {
       )}
 
       {/* Support Modal - For Admin, Access Control and Moderator users */}
-      {['ADMIN', 'ACCESS_CONTROL', 'MODERATOR'].includes(user.role) && (
+      {['ADMIN', 'ACCESS_CONTROL', 'MODERATOR'].includes(role?.name as string) && (
         <SupportModal
           isOpen={isSupportModalOpen}
           onClose={closeSupportModal}
@@ -278,7 +278,7 @@ export function Navigation() {
               ))}
               
               {/* Mobile User Info - Hidden for Access Control and Moderator users */}
-              {user.role !== 'ACCESS_CONTROL' && user.role !== 'MODERATOR' && (
+              {role?.name !== 'ACCESS_CONTROL' && role?.name !== 'MODERATOR' && (
                 <div className="border-t border-gray-200 pt-4 pb-3">
                   <button 
                     onClick={toggleProfileDropdown}
@@ -299,8 +299,8 @@ export function Navigation() {
                     </div>
                     <div className="ml-3 flex-1 text-left">
                       <div className="text-base font-medium text-gray-800">
-                        {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 
-                         user.role === 'MODERATOR' ? 'Moderador' : 
+                        {role?.name === 'SUPER_ADMIN' ? 'Super Admin' : 
+                         role?.name === 'MODERATOR' ? 'Moderador' : 
                          truncateCompanyName((user as any).company, 6)}
                       </div>
                       <div className="text-sm text-gray-500">
@@ -312,7 +312,7 @@ export function Navigation() {
               )}
               <div className="mt-3 px-4 space-y-2">
                 {/* Support Button Mobile - For Admin, Access Control and Moderator users */}
-                {['ADMIN', 'ACCESS_CONTROL', 'MODERATOR'].includes(user.role) && (
+                {['ADMIN', 'ACCESS_CONTROL', 'MODERATOR'].includes(role?.name as string) && (
                   <button
                     onClick={() => {
                       openSupportModal();

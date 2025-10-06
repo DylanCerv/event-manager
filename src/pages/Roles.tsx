@@ -1,37 +1,47 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Shield, Users, Settings, Lock, Plus, Search, Crown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useUser } from '../contexts/UserContext';
 import { storage } from '../lib/storage';
-import { rolesStorage } from '../lib/roles-storage';
 import { eventBookStorage } from '../lib/eventbook-storage';
+import { deleteUserAPI } from '../endpoints/user';
 import { CreateUserAccessModal } from '../components/CreateUserAccessModal';
 import { UserAccessCard } from '../components/UserAccessCard';
-import type { UserAccess, CreateUserAccessData } from '../types/roles';
+import type { UserAccess } from '../types/roles';
+import type { ApiUser } from '../types/auth';
 import type { Event } from '../types/event';
 import type { EventBook } from '../types/eventbook';
 
 export function Roles() {
   const { user } = useAuth();
-  const [userAccesses, setUserAccesses] = React.useState<UserAccess[]>([]);
-  const [availableEvents, setAvailableEvents] = React.useState<Event[]>([]);
-  const [availableEventBooks, setAvailableEventBooks] = React.useState<EventBook[]>([]);
-  const [showCreateModal, setShowCreateModal] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [searchTerm, setSearchTerm] = React.useState('');
+  const { fetchUsers, users } = useUser();
+  const [userAccesses, setUserAccesses] = useState<any[]>([]);
+  const [availableEvents, setAvailableEvents] = useState<Event[]>([]);
+  const [availableEventBooks, setAvailableEventBooks] = useState<EventBook[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const [editingUserAccess, setEditingUserAccess] = React.useState<UserAccess | null>(null);
+  const [editingUserAccess, setEditingUserAccess] = useState<UserAccess | null>(null);
+  const [editingAccessApiUser, setEditingAccessApiUser] = useState<ApiUser | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     loadUserAccesses();
     loadAvailableEvents();
     loadAvailableEventBooks();
+    fetchUsers();
   }, []);
 
+  // Re-derive access list whenever backend users change
+  useEffect(() => {
+    loadUserAccesses();
+  }, [users]);
+
   const loadUserAccesses = async () => {
-    if (!user?.id) return;
     try {
-      const accesses = await rolesStorage.getUserAccesses(user.id);
-      setUserAccesses(accesses);
+      // Derive accesses from backend users by role_id 3/4
+      const accessUsers = users.filter(u => Number(u.role_id) === 3 || Number(u.role_id) === 4);
+      setUserAccesses(accessUsers);
     } catch (error) {
       console.error('Error loading user accesses:', error);
     }
@@ -65,40 +75,10 @@ export function Roles() {
     }
   };
 
-  const handleCreateUserAccess = async (data: CreateUserAccessData) => {
-    if (!user?.id) return;
-    
-    try {
-      setIsLoading(true);
-      
-      if (editingUserAccess) {
-        // Update existing user access
-        const updatedAccess = {
-          ...editingUserAccess,
-          ...data
-        };
-        await rolesStorage.updateUserAccess(editingUserAccess.id, updatedAccess);
-        setUserAccesses(prev => prev.map(access => 
-          access.id === editingUserAccess.id ? updatedAccess : access
-        ));
-        setEditingUserAccess(null);
-      } else {
-        // Create new user access
-        const newAccess = await rolesStorage.createUserAccess(data, user.id);
-        setUserAccesses(prev => [...prev, newAccess]);
-      }
-      
-      setShowCreateModal(false);
-    } catch (error) {
-      console.error('Error creating user access:', error);
-      alert('Error al crear el acceso de usuario');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleEditUserAccess = (userAccess: UserAccess) => {
     setEditingUserAccess(userAccess);
+    const api = users.find(u => String(u.id) === String(userAccess.id)) || null;
+    setEditingAccessApiUser(api as any);
     setShowCreateModal(true);
   };
 
@@ -109,8 +89,9 @@ export function Roles() {
 
     try {
       setIsLoading(true);
-      await rolesStorage.deleteUserAccess(id);
-      setUserAccesses(prev => prev.filter(access => access.id !== id));
+      await deleteUserAPI(Number(id));
+      await fetchUsers();
+      loadUserAccesses();
     } catch (error) {
       console.error('Error deleting user access:', error);
       alert('Error al eliminar el acceso de usuario');
@@ -121,7 +102,7 @@ export function Roles() {
 
   const handleAssignEvent = async (userAccessId: string, eventId: string) => {
     try {
-      const userAccess = userAccesses.find(access => access.id === userAccessId);
+      const userAccess = userAccesses.find((access: any) => String(access.id) === String(userAccessId));
       if (!userAccess) return;
 
       // For moderators, handle EventBook assignment instead of event assignment
@@ -129,20 +110,18 @@ export function Roles() {
         return handleAssignEventBook(userAccessId, eventId); // eventId is actually eventBookId for moderators
       }
 
-      if (userAccess.assignedEvents.includes(eventId)) {
+      if ((userAccess.assignedEvents || []).includes(eventId)) {
         // If already assigned, revoke it
-        await rolesStorage.revokeEventFromUser(userAccessId, eventId);
-        setUserAccesses(prev => prev.map(access => 
-          access.id === userAccessId 
-            ? { ...access, assignedEvents: access.assignedEvents.filter(id => id !== eventId) }
+        setUserAccesses(prev => prev.map((access: any) => 
+          String(access.id) === String(userAccessId)
+            ? { ...access, assignedEvents: (access.assignedEvents || []).filter((id: string) => id !== eventId) }
             : access
         ));
       } else {
         // If not assigned, assign it
-        await rolesStorage.assignEventToUser(userAccessId, eventId);
-        setUserAccesses(prev => prev.map(access => 
-          access.id === userAccessId 
-            ? { ...access, assignedEvents: [...access.assignedEvents, eventId] }
+        setUserAccesses(prev => prev.map((access: any) => 
+          String(access.id) === String(userAccessId)
+            ? { ...access, assignedEvents: [...(access.assignedEvents || []), eventId] }
             : access
         ));
       }
@@ -154,24 +133,22 @@ export function Roles() {
 
   const handleAssignEventBook = async (userAccessId: string, eventBookId: string) => {
     try {
-      const userAccess = userAccesses.find(access => access.id === userAccessId);
+      const userAccess = userAccesses.find((access: any) => String(access.id) === String(userAccessId));
       if (!userAccess || userAccess.accessType !== 'moderador') return;
 
       const assignedEventBooks = userAccess.assignedEventBooks || [];
       
       if (assignedEventBooks.includes(eventBookId)) {
         // If already assigned, revoke it
-        await rolesStorage.revokeEventBookFromUser(userAccessId, eventBookId);
-        setUserAccesses(prev => prev.map(access => 
-          access.id === userAccessId 
-            ? { ...access, assignedEventBooks: (access.assignedEventBooks || []).filter(id => id !== eventBookId) }
+        setUserAccesses(prev => prev.map((access: any) => 
+          String(access.id) === String(userAccessId)
+            ? { ...access, assignedEventBooks: (access.assignedEventBooks || []).filter((id: string) => id !== eventBookId) }
             : access
         ));
       } else {
         // If not assigned, assign it
-        await rolesStorage.assignEventBookToUser(userAccessId, eventBookId);
-        setUserAccesses(prev => prev.map(access => 
-          access.id === userAccessId 
+        setUserAccesses(prev => prev.map((access: any) => 
+          String(access.id) === String(userAccessId)
             ? { ...access, assignedEventBooks: [...(access.assignedEventBooks || []), eventBookId] }
             : access
         ));
@@ -183,7 +160,7 @@ export function Roles() {
   };
 
   const handleRevokeEvent = async (userAccessId: string, eventId: string) => {
-    const userAccess = userAccesses.find(access => access.id === userAccessId);
+    const userAccess = userAccesses.find((access: any) => String(access.id) === String(userAccessId));
     if (!userAccess) return;
 
     // For moderators, handle EventBook revocation
@@ -199,10 +176,9 @@ export function Roles() {
     }
 
     try {
-      await rolesStorage.revokeEventFromUser(userAccessId, eventId);
-      setUserAccesses(prev => prev.map(access => 
-        access.id === userAccessId 
-          ? { ...access, assignedEvents: access.assignedEvents.filter(id => id !== eventId) }
+      setUserAccesses(prev => prev.map((access: any) => 
+        String(access.id) === String(userAccessId)
+          ? { ...access, assignedEvents: (access.assignedEvents || []).filter((id: string) => id !== eventId) }
           : access
       ));
     } catch (error) {
@@ -213,10 +189,9 @@ export function Roles() {
 
   const handleRevokeEventBook = async (userAccessId: string, eventBookId: string) => {
     try {
-      await rolesStorage.revokeEventBookFromUser(userAccessId, eventBookId);
-      setUserAccesses(prev => prev.map(access => 
-        access.id === userAccessId 
-          ? { ...access, assignedEventBooks: (access.assignedEventBooks || []).filter(id => id !== eventBookId) }
+      setUserAccesses(prev => prev.map((access: any) => 
+        String(access.id) === String(userAccessId)
+          ? { ...access, assignedEventBooks: (access.assignedEventBooks || []).filter((id: string) => id !== eventBookId) }
           : access
       ));
     } catch (error) {
@@ -225,18 +200,28 @@ export function Roles() {
     }
   };
 
-  const existingUsernames = userAccesses.map(access => access.username);
+  const existingUsernames = userAccesses.map(access => String(access.username || ''));
 
-  const filteredAccesses = React.useMemo(() => {
-    return userAccesses.filter(access => {
-      const searchLower = searchTerm.toLowerCase();
+  const filteredAccesses = useMemo(() => {
+    const norm = (v: unknown) => (v ?? '').toString().toLowerCase();
+    const q = searchTerm.toLowerCase();
+    return userAccesses.filter((access: any) => {
       return (
-        access.firstName.toLowerCase().includes(searchLower) ||
-        access.lastName.toLowerCase().includes(searchLower) ||
-        access.username.toLowerCase().includes(searchLower)
+        norm(access.name).includes(q) ||
+        norm(access.last_name).includes(q) ||
+        norm(access.username).includes(q)
       );
     });
   }, [userAccesses, searchTerm]);
+
+  const stats = useMemo(() => {
+    const total = userAccesses.length;
+    const control = userAccesses.filter((a: any) => Number(a.role_id) === 3).length;
+    const moderator = userAccesses.filter((a: any) => Number(a.role_id) === 4).length;
+    const catering = 0;
+    const security = 0;
+    return { total, control, moderator, catering, security };
+    }, [userAccesses]);
 
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -269,7 +254,7 @@ export function Roles() {
                       Total Accesos
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {userAccesses.length}
+                      {stats.total}
                     </dd>
                   </dl>
                 </div>
@@ -289,7 +274,7 @@ export function Roles() {
                       Control de Acceso
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {userAccesses.filter(a => a.accessType === 'control_acceso').length}
+                      {stats.control}
                     </dd>
                   </dl>
                 </div>
@@ -309,7 +294,7 @@ export function Roles() {
                       Seguridad
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {userAccesses.filter(a => a.accessType === 'seguridad').length}
+                      {stats.security}
                     </dd>
                   </dl>
                 </div>
@@ -329,7 +314,7 @@ export function Roles() {
                       Catering
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {userAccesses.filter(a => a.accessType === 'catering').length}
+                      {stats.catering}
                     </dd>
                   </dl>
                 </div>
@@ -349,7 +334,7 @@ export function Roles() {
                       Moderador
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {userAccesses.filter(a => a.accessType === 'moderador').length}
+                      {stats.moderator}
                     </dd>
                   </dl>
                 </div>
@@ -382,10 +367,21 @@ export function Roles() {
         <div className="space-y-6">
           {filteredAccesses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {filteredAccesses.map((userAccess) => (
+              {filteredAccesses.map((userAccess: any) => (
                 <UserAccessCard
                   key={userAccess.id}
-                  userAccess={userAccess}
+                  userAccess={{
+                    id: String(userAccess.id),
+                    accessType: userAccess.role_id === 4 ? 'moderador' : 'control_acceso',
+                    name: userAccess.name || '',
+                    lastName: userAccess.last_name || '',
+                    username: userAccess.username || '',
+                    password: (userAccess as any).password_plain || '',
+                    assignedEvents: [],
+                    assignedEventBooks: [],
+                    createdAt: userAccess.created_at || new Date().toISOString(),
+                    createdBy: String(user?.id || ''),
+                  }}
                   onEdit={handleEditUserAccess}
                   onDelete={handleDeleteUserAccess}
                   onAssignEvent={handleAssignEvent}
@@ -441,11 +437,15 @@ export function Roles() {
           onClose={() => {
             setShowCreateModal(false);
             setEditingUserAccess(null);
+            setEditingAccessApiUser(null);
           }}
-          onSubmit={handleCreateUserAccess}
+          onSaved={() => {
+            fetchUsers();
+            loadUserAccesses();
+          }}
           isLoading={isLoading}
           existingUsernames={existingUsernames}
-          editingUserAccess={editingUserAccess}
+          editingUserAccess={editingAccessApiUser as any}
         />
       </div>
     </div>

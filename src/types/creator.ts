@@ -22,5 +22,5 @@ export interface CreateCreatorData {
   phone: string;
   country: string;
   commissionPercentage: number;
-  createdBy: string;
+  createdBy: number;
 }

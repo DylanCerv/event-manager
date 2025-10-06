@@ -1,8 +1,10 @@
 import React from 'react';
 import { storage } from '../lib/storage';
 import { creatorsStorage } from '../lib/creators-storage';
+import { useUser } from '../contexts/UserContext';
+import type { ApiUser } from '../types/auth';
 import { eventBookStorage } from '../lib/eventbook-storage';
-import { Users, Plus, Edit, Trash2, Shield, Star, Search, Calendar, Gift, Settings, X, Minus, Clock, UserPlus, Eye, BarChart3, UserCheck, CheckCircle, XCircle, BookOpen, FileText } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Shield, Star, Search, Calendar, Gift, Settings, X, Minus, Clock, UserPlus, Eye, BarChart3, BookOpen, FileText } from 'lucide-react';
 import { CreateUserModal } from '../components/CreateUserModal';
 import { EditUserModal } from '../components/EditUserModal';
 import { AwardPrizeModal } from '../components/AwardPrizeModal';
@@ -30,6 +32,7 @@ interface User {
 }
 
 export function Usuarios() {
+  const { fetchUsers: fetchAllUsers, filterByRoleId, getUserById } = useUser();
   const [activeTab, setActiveTab] = React.useState<'gestion' | 'puntos'>('gestion');
   const [users, setUsers] = React.useState<User[]>([]);
   const [creators, setCreators] = React.useState<Creator[]>([]);
@@ -83,7 +86,7 @@ export function Usuarios() {
 
   React.useEffect(() => {
     console.log('Component mounted, loading data...');
-    loadUsers();
+    reloadAdminsFromAPI();
     loadCreators();
     loadUserPoints();
     loadUserTransactions();
@@ -201,12 +204,34 @@ export function Usuarios() {
     }
   };
 
-  const loadUsers = async () => {
+  const mapApiUserToLocalUser = (u: ApiUser): User => ({
+    id: String(u.id),
+    firstName: u.name || '',
+    lastName: u.last_name || '',
+    company: (u as any).company || '',
+    country: (u as any).country || '',
+    city: (u as any).city || '',
+    address: (u as any).address || '',
+    phone: (u as any).phone || '',
+    email: u.email,
+    username: u.username || '',
+    password: '',
+    role: (u.role?.name as string) || 'ADMIN',
+    status: (u as any).status || 'active',
+    eventsCount: 0,
+    lastLogin: new Date().toISOString(),
+    createdAt: (u as any).created_at || new Date().toISOString(),
+    createdBy: (u as any).creator_id ? String((u as any).creator_id) : undefined,
+  });
+
+  const reloadAdminsFromAPI = async () => {
     try {
-      const storedUsers = await storage.getUsers();
-      setUsers(storedUsers);
+      await fetchAllUsers();
+      const admins = filterByRoleId('ADMIN');
+      const mapped = admins.map(mapApiUserToLocalUser);
+      setUsers(mapped);
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('Error loading admins from API:', error);
     }
   };
 
@@ -221,9 +246,9 @@ export function Usuarios() {
 
   const calculatePointsStats = async () => {
     try {
-      const events = await storage.getEvents();
+      // const events = await storage.getEvents();
       const requests = await storage.getEventRequests();
-      const allGuests = await storage.getAllGuests();
+      // const allGuests = await storage.getAllGuests();
       
       // Obtener rango de fechas para el filtro
       const dateRange = getStatsDateFilterRange(statsDateFilter, statsStartDate, statsEndDate);
@@ -313,6 +338,7 @@ export function Usuarios() {
     return { startDate: filterStartDate, endDate: filterEndDate };
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getDateFilterRange = (filter: string, specificDate: string) => {
     const now = new Date();
     let startDate: Date;
@@ -469,32 +495,10 @@ export function Usuarios() {
     }
   };
 
-  const getCreatorName = (creatorId: string) => {
-    const creator = creators.find(c => c.id === creatorId);
-    return creator ? `${creator.firstName} ${creator.lastName}` : creatorId;
-  };
-
-  const handleCreateUser = async (newUser: User) => {
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    await storage.saveUsers(updatedUsers);
-    await storage.saveUsers(updatedUsers);
-    setUsers(updatedUsers);
-    setShowCreateModal(false);
-  };
-
-  const handleEditUser = async (updatedUser: User) => {
-    const updatedUsers = users.map(user =>
-      user.id === updatedUser.id
-        ? updatedUser
-        : user
-    );
-
-    await storage.saveUsers(updatedUsers);
-    await storage.saveUsers(updatedUsers);
-    setUsers(updatedUsers);
-    setShowEditModal(false);
-    setEditingUser(null);
+  const getCreatorName = (creatorId: string | undefined) => {
+    if (!creatorId) return '-';
+    const creator = getUserById(creatorId);
+    return creator ? `${creator.name} ${creator.last_name || ''}`.trim() : creatorId;
   };
 
   const handleDeleteUser = async (userId: string) => {
@@ -561,7 +565,7 @@ export function Usuarios() {
 
       // 8. Finalmente eliminar el usuario
       const updatedUsers = users.filter(user => user.id !== userId);
-      await storage.saveUsers(updatedUsers);
+    // Persisting to local storage disabled for API-driven users
       setUsers(updatedUsers);
       
       setShowDeleteConfirm(null);
@@ -963,10 +967,10 @@ export function Usuarios() {
                   </div>
                   
                   <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="text-sm">
-                      <span className="font-medium text-gray-700">🏢 Empresa:</span>
-                      <span className="ml-1 text-gray-900">{user.company}</span>
-                    </div>
+                  <div className="text-sm">
+                    <span className="font-medium text-gray-700">🏢 Empresa:</span>
+                    <span className="ml-1 text-gray-900">{user.company}</span>
+                  </div>
                     <div className="text-sm">
                       <span className="font-medium text-gray-700">📍 Ubicación:</span>
                       <span className="ml-1 text-gray-900">{user.city}, {user.country}</span>
@@ -1037,8 +1041,11 @@ export function Usuarios() {
         <CreateUserModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
-          onSubmit={handleCreateUser}
-          existingUsers={users}
+          onCreated={(apiUser) => {
+            // Optimistic update local list to avoid full refetch
+            const mapped = mapApiUserToLocalUser(apiUser);
+            setUsers((prev) => [mapped, ...prev]);
+          }}
         />
 
         {/* Edit User Modal */}
@@ -1048,8 +1055,6 @@ export function Usuarios() {
             setShowEditModal(false);
             setEditingUser(null);
           }}
-          onSubmit={handleEditUser}
-          existingUsers={users}
           editingUser={editingUser}
         />
 
@@ -1610,7 +1615,7 @@ export function Usuarios() {
                         return (
                           creator.firstName?.toLowerCase().includes(searchLower) ||
                           creator.lastName?.toLowerCase().includes(searchLower) ||
-                          creator.company?.toLowerCase().includes(searchLower)
+                          creator.country?.toLowerCase().includes(searchLower)
                         );
                       })
                       .map((creator) => (
@@ -1624,7 +1629,7 @@ export function Usuarios() {
                               </div>
                               <div>
                                 <h5 className="font-medium text-gray-900">{creator.firstName} {creator.lastName}</h5>
-                                <p className="text-sm text-gray-600">{creator.company}</p>
+                                <p className="text-sm text-gray-600">{creator.country}</p>
                               </div>
                             </div>
                             <div className="text-right">

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Phone, Globe, Lock, Eye, EyeOff, Percent } from 'lucide-react';
 import type { Creator } from '../types/creator';
+import type { ApiUser } from '../types/auth';
+import { updateUserAPI } from '../endpoints/user';
 
 interface EditCreatorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (id: string, updates: Partial<Creator>) => Promise<void>;
-  creator: Creator | null;
+  creator: ApiUser | null;
 }
 
-export default function EditCreatorModal({ isOpen, onClose, onSubmit, creator }: EditCreatorModalProps) {
+export default function EditCreatorModal({ isOpen, onClose, creator }: EditCreatorModalProps) {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -29,15 +30,15 @@ export default function EditCreatorModal({ isOpen, onClose, onSubmit, creator }:
   useEffect(() => {
     if (creator) {
       setFormData({
-        firstName: creator.firstName,
-        lastName: creator.lastName,
+        firstName: creator.name,
+        lastName: creator.last_name as string,
         email: creator.email,
-        username: creator.username,
-        password: creator.password,
-        phone: creator.phone,
-        country: creator.country,
-        commissionPercentage: creator.commissionPercentage || 15,
-        status: creator.status
+        username: creator.username as string,
+        password: (creator as any).password_plain as string,
+        phone: creator.phone as string,
+        country: creator.country as string,
+        commissionPercentage: creator.commission_percentage as number || 15,
+        status: creator.status as 'active' | 'suspended'
       });
     }
   }, [creator]);
@@ -96,8 +97,27 @@ export default function EditCreatorModal({ isOpen, onClose, onSubmit, creator }:
 
     setIsSubmitting(true);
     try {
-      await onSubmit(creator.id, formData);
-      handleClose();
+      const payload: Record<string, any> = {
+        name: formData.firstName,
+        last_name: formData.lastName,
+        username: formData.username,
+        email: formData.email,
+        country: formData.country || null,
+        phone: formData.phone || null,
+        commission_percentage: formData.commissionPercentage,
+        status: formData.status,
+      };
+      if (formData.password && formData.password.trim().length >= 6) {
+        payload.password = formData.password;
+      }
+
+      const response = await updateUserAPI(Number(creator.id), payload);
+      console.log(response);
+      if (response.status == 200) {
+        handleClose();
+      } else {
+        setErrors({ submit: response?.message || 'Error al actualizar creador' });
+      }
     } catch (error) {
       setErrors({ submit: error instanceof Error ? error.message : 'Error al actualizar creador' });
     } finally {

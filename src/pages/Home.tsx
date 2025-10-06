@@ -12,7 +12,8 @@ import type { EventBook } from '../types/eventbook';
 import type { StoredUser } from '../types/user';
 
 export function Home() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+
   const [activeTab, setActiveTab] = React.useState<'statistics' | 'calendar'>('statistics');
   const [companyName, setCompanyName] = React.useState<string>('');
   const [events, setEvents] = React.useState<Event[]>([]);
@@ -72,11 +73,9 @@ export function Home() {
 
   const loadCompanyName = async () => {
     try {
-      if (user?.role === 'ADMIN') {
-        const users = await storage.getUsers();
-        const currentUser = users.find(u => u.id === user.id);
-        if (currentUser) {
-          setCompanyName(currentUser.company);
+      if (role?.name === 'ADMIN') {
+        if (user) {
+          setCompanyName(user.company || '');
         }
       }
     } catch (error) {

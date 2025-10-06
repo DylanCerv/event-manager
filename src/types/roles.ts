@@ -1,7 +1,7 @@
 export interface UserAccess {
   id: string;
   accessType: 'control_acceso' | 'seguridad' | 'catering' | 'moderador';
-  firstName: string;
+  name: string;
   lastName: string;
   username: string;
   password: string;
@@ -13,7 +13,7 @@ export interface UserAccess {
 
 export interface CreateUserAccessData {
   accessType: 'control_acceso' | 'seguridad' | 'catering' | 'moderador';
-  firstName: string;
+  name: string;
   lastName: string;
   username: string;
   password: string;

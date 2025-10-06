@@ -1,5 +1,5 @@
 import React from 'react';
-import { InboxIcon, Clock, CheckCircle, XCircle, QrCode, AlertTriangle, Loader2, Download, Eye, Trash2, Users, Calendar, MapPin, Building2, Mail, Phone, Globe, User, Archive, RotateCcw, Filter, CalendarDays } from 'lucide-react';
+import { InboxIcon, Clock, CheckCircle, XCircle, QrCode, Loader2, Download, Trash2, Archive, RotateCcw, Filter } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../lib/storage';
 import { generateGuestQRPDF } from '../lib/qr';
@@ -8,14 +8,12 @@ import { creatorsStorage } from '../lib/creators-storage';
 import type { Event as CustomEvent, EventRequest } from '../types/event';
 
 export function Requests() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [events, setEvents] = React.useState<CustomEvent[]>([]);
   const [requests, setRequests] = React.useState<EventRequest[]>([]);
   const [users, setUsers] = React.useState<any[]>([]);
   const [creators, setCreators] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
-  const [showPreview, setShowPreview] = React.useState(false);
-  const [selectedEventId, setSelectedEventId] = React.useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<string | null>(null);
   const [deleteType, setDeleteType] = React.useState<'event' | 'request'>('event');
   const [activeTab, setActiveTab] = React.useState<'active' | 'archived'>('active');
@@ -294,7 +292,7 @@ export function Requests() {
       let requestsToShow;
       let allRequestsForStats;
       
-      if (user?.role === 'SUPER_ADMIN') {
+      if (role?.name === 'SUPER_ADMIN') {
         allRequestsForStats = await storage.getEventRequests();
         requestsToShow = allRequestsForStats;
         
@@ -583,7 +581,7 @@ export function Requests() {
     }
   };
 
-  if (user?.role === 'SUPER_ADMIN') {
+  if (role?.name === 'SUPER_ADMIN') {
     return (
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">

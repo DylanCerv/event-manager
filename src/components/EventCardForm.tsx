@@ -406,9 +406,9 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
             }`}
           >
             <div className="text-center space-y-3">
-              <div className="text-3xl">🖼️</div>
-              <div className="text-sm font-semibold text-gray-900">Galería Decorativa</div>
-              <div className="text-xs text-gray-500 leading-tight">Hasta 3 imágenes pequeñas distribuidas</div>
+              <div className="text-3xl">🎠</div>
+              <div className="text-sm font-semibold text-gray-900">Carrusel Polaroid</div>
+              <div className="text-xs text-gray-500 leading-tight">Carrusel interactivo con miniaturas laterales</div>
             </div>
           </button>
 

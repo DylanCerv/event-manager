@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { UserProvider } from './contexts/UserContext';
 import { Navigation } from './components/Navigation';
 import { Login } from './pages/Login';
 import { SuperAdmin } from './pages/SuperAdmin';
@@ -24,61 +25,62 @@ import { ModeradorEventBook } from './pages/ModeradorEventBook';
 import CreatorDashboard from './pages/creator/CreatorDashboard';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+
   if (!user) {
     return <Navigate to="/" replace />;
   }
   
   // Handle CREATOR user routing
-  if (user.role === 'CREATOR') {
+  if (role?.name === 'CREATOR') {
     if (!window.location.pathname.startsWith('/creator')) {
       return <Navigate to="/creator" replace />;
     }
   }
   
   // Handle ACCESS_CONTROL user routing
-  if (user.role === 'ACCESS_CONTROL') {
+  if (role?.name === 'ACCESS_CONTROL') {
     if (!window.location.pathname.startsWith('/access-control')) {
       return <Navigate to="/access-control" replace />;
     }
   }
   
   // Handle MODERATOR user routing
-  if (user.role === 'MODERATOR') {
+  if (role?.name === 'MODERATOR') {
     if (!window.location.pathname.startsWith('/moderador')) {
       return <Navigate to="/moderador" replace />;
     }
   }
   
   // Redirect other users away from CREATOR dashboard
-  if (user.role !== 'CREATOR' && window.location.pathname.startsWith('/creator')) {
-    const redirectPath = user.role === 'SUPER_ADMIN' ? '/super-admin' : 
-                        user.role === 'ACCESS_CONTROL' ? '/access-control' :
-                        user.role === 'MODERATOR' ? '/moderador' : '/home';
+  if (role?.name !== 'CREATOR' && window.location.pathname.startsWith('/creator')) {
+    const redirectPath = role?.name === 'SUPER_ADMIN' ? '/super-admin' : 
+                        role?.name === 'ACCESS_CONTROL' ? '/access-control' :
+                        role?.name === 'MODERATOR' ? '/moderador' : '/home';
     return <Navigate to={redirectPath} replace />;
   }
   
   // Redirect other users away from ACCESS_CONTROL dashboard
-  if (user.role !== 'ACCESS_CONTROL' && window.location.pathname.startsWith('/access-control')) {
-    const redirectPath = user.role === 'SUPER_ADMIN' ? '/super-admin' : 
-                        user.role === 'CREATOR' ? '/creator' :
-                        user.role === 'MODERATOR' ? '/moderador' : '/home';
+  if (role?.name !== 'ACCESS_CONTROL' && window.location.pathname.startsWith('/access-control')) {
+    const redirectPath = role?.name === 'SUPER_ADMIN' ? '/super-admin' : 
+                        role?.name === 'CREATOR' ? '/creator' :
+                        role?.name === 'MODERATOR' ? '/moderador' : '/home';
     return <Navigate to={redirectPath} replace />;
   }
   
   // Redirect other users away from MODERATOR dashboard
-  if (user.role !== 'MODERATOR' && window.location.pathname.startsWith('/moderador')) {
-    const redirectPath = user.role === 'SUPER_ADMIN' ? '/super-admin' : 
-                        user.role === 'CREATOR' ? '/creator' :
-                        user.role === 'ACCESS_CONTROL' ? '/access-control' : '/home';
+  if (role?.name !== 'MODERATOR' && window.location.pathname.startsWith('/moderador')) {
+    const redirectPath = role?.name === 'SUPER_ADMIN' ? '/super-admin' : 
+                        role?.name === 'CREATOR' ? '/creator' :
+                        role?.name === 'ACCESS_CONTROL' ? '/access-control' : '/home';
     return <Navigate to={redirectPath} replace />;
   }
   
   // Redirect other users away from ACCESS_CONTROL management page
-  if (user.role !== 'ACCESS_CONTROL' && window.location.pathname === '/access-control/gestionar') {
-    const redirectPath = user.role === 'SUPER_ADMIN' ? '/super-admin' : 
-                        user.role === 'CREATOR' ? '/creator' :
-                        user.role === 'MODERATOR' ? '/moderador' : '/home';
+  if (role?.name !== 'ACCESS_CONTROL' && window.location.pathname === '/access-control/gestionar') {
+    const redirectPath = role?.name === 'SUPER_ADMIN' ? '/super-admin' : 
+                        role?.name === 'CREATOR' ? '/creator' :
+                        role?.name === 'MODERATOR' ? '/moderador' : '/home';
     return <Navigate to={redirectPath} replace />;
   }
   
@@ -86,11 +88,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { user } = useAuth();
-  
+  const { role } = useAuth();
   return (
     <div className="min-h-screen bg-gray-100">
-      {user?.role !== 'CREATOR' && <Navigation />}
+      {role?.name !== 'CREATOR' && <Navigation />}
       <Routes>
         <Route path="/" element={<Login />} />
         {/* Super Admin Routes */}
@@ -261,7 +262,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <UserProvider>
+          <AppRoutes />
+        </UserProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -1,22 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit, Trash2, Users, Shield, DollarSign, BarChart3, Check, Eye, X, Calendar, CheckCircle, XCircle, Clock, BookOpen, UserCheck } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Plus, Users, Shield, DollarSign, BarChart3, Check, Eye, X, Calendar, CheckCircle, XCircle, Clock, BookOpen, UserCheck, Edit, Trash2 } from 'lucide-react';
 import { creatorsStorage } from '../lib/creators-storage';
+import { deleteUserAPI } from '../endpoints/user';
 import { commissionsStorage } from '../lib/commissions-storage';
 import { storage } from '../lib/storage';
 import { eventBookStorage } from '../lib/eventbook-storage';
 import CreateCreatorModal from '../components/CreateCreatorModal';
+import { useUser } from '../contexts/UserContext';
+import type { ApiUser } from '../types/auth';
 import EditCreatorModal from '../components/EditCreatorModal';
 import type { Creator, CreateCreatorData } from '../types/creator';
 import type { CommissionSummary } from '../types/commission';
 import type { Event as CustomEvent } from '../types/event';
 
 export default function Creadores() {
+  const { filterByRoleId, users: apiUsers, fetchUsers } = useUser();
   const [activeTab, setActiveTab] = useState<'creators' | 'finances'>('creators');
   const [searchTerm, setSearchTerm] = useState('');
   const [creators, setCreators] = useState<Creator[]>([]);
+  const backendCreators: ApiUser[] = useMemo(() => filterByRoleId('CREATOR'), [apiUsers]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedCreator, setSelectedCreator] = useState<Creator | null>(null);
+  const [selectedCreator, setSelectedCreator] = useState<ApiUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [commissionSummaries, setCommissionSummaries] = useState<CommissionSummary[]>([]);
   const [globalStats, setGlobalStats] = useState({
@@ -28,8 +33,8 @@ export default function Creadores() {
   const [commissions, setCommissions] = useState<any[]>([]);
   const [events, setEvents] = useState<CustomEvent[]>([]);
   const [creatorStats, setCreatorStats] = useState({
-    total: 0,
-    active: 0,
+    total: filterByRoleId('CREATOR').length,
+    active: filterByRoleId('CREATOR').filter(c => c.status === 'active').length,
     topPerformer: null as { name: string; amount: number } | null,
     newThisMonth: 0
   });
@@ -53,6 +58,7 @@ export default function Creadores() {
 
   useEffect(() => {
     loadCreators();
+    fetchUsers().catch(() => {});
     loadEvents();
   }, []);
 
@@ -121,34 +127,13 @@ export default function Creadores() {
     }
   };
 
-  const handleCreateCreator = async (data: CreateCreatorData) => {
-    try {
-      await creatorsStorage.createCreator(data);
-      await loadCreators();
-      setShowCreateModal(false);
-    } catch (error) {
-      console.error('Error creating creator:', error);
-      throw error;
-    }
-  };
-
-  const handleEditCreator = async (id: string, updates: Partial<Creator>) => {
-    try {
-      await creatorsStorage.updateCreator(id, updates);
-      await loadCreators();
-      setShowEditModal(false);
-      setSelectedCreator(null);
-    } catch (error) {
-      console.error('Error updating creator:', error);
-      throw error;
-    }
-  };
-
-  const handleDeleteCreator = async (id: string) => {
+  const handleDeleteCreator = async (id: string | number) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este creador?')) {
       try {
-        await creatorsStorage.deleteCreator(id);
-        await loadCreators();
+        const response = await deleteUserAPI(Number(id));
+        if (response && (response.id || response.status === 200 || response.message)) {
+          await fetchUsers();
+        }
       } catch (error) {
         console.error('Error deleting creator:', error);
         alert('Error al eliminar el creador');
@@ -156,7 +141,7 @@ export default function Creadores() {
     }
   };
 
-  const openEditModal = (creator: Creator) => {
+  const openEditModal = (creator: ApiUser) => {
     setSelectedCreator(creator);
     setShowEditModal(true);
   };
@@ -625,13 +610,9 @@ export default function Creadores() {
               </div>
             </div>
 
-            {/* Creators Cards */}
+            {/* Creators Cards from API (UserContext) */}
             <div className="space-y-4">
-              {isLoading ? (
-                <div className="flex justify-center items-center py-8">
-                  <div className="text-gray-500">Cargando creadores...</div>
-                </div>
-              ) : filteredCreators.length === 0 ? (
+              {!backendCreators || backendCreators.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="mx-auto h-12 w-12 text-gray-400" />
                   <h3 className="mt-2 text-sm font-medium text-gray-900">No se encontraron creadores</h3>
@@ -640,75 +621,87 @@ export default function Creadores() {
                   </p>
                 </div>
               ) : (
-                filteredCreators.map((creator) => (
-                  <div key={creator.id} className="bg-white shadow rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center space-x-4 mb-4 sm:mb-0">
-                        <div className="flex-shrink-0">
-                          <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
-                            <span className="text-lg font-medium text-purple-700">
-                              {creator.firstName[0]}{creator.lastName[0]}
+                backendCreators
+                  .filter((creator) => {
+                    if (!searchTerm.trim()) return true;
+                    const q = searchTerm.toLowerCase();
+                    return (
+                      (creator.name || '').toLowerCase().includes(q) ||
+                      (creator.last_name || '').toLowerCase().includes(q) ||
+                      (creator.email || '').toLowerCase().includes(q) ||
+                      ((creator.country || '') as string).toLowerCase().includes(q)
+                    );
+                  })
+                  .map((creator) => (
+                    <div key={String(creator.id)} className="bg-white shadow rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center space-x-4 mb-4 sm:mb-0">
+                          <div className="flex-shrink-0">
+                            <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
+                              <span className="text-lg font-medium text-purple-700">
+                                {(creator.name || 'C')[0]}{(creator.last_name || 'R')[0]}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-lg font-medium text-gray-900 truncate">
+                              {creator.name} {creator.last_name}
+                            </div>
+                            <div className="text-sm text-gray-500 truncate">{creator.email}</div>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <span className="text-sm text-gray-600">{(creator.country as string) || '-'}</span>
+                              <span className="text-gray-300">•</span>
+                              <span className="text-sm text-gray-600">{creator.phone || '-'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                          <div className="flex items-center justify-between sm:justify-start space-x-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              creator.status === 'active'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {creator.status === 'active' ? 'Activo' : 'Suspendido'}
+                            </span>
+                            <span className="text-sm text-gray-500">
+                              {creator.created_at ? new Date(creator.created_at as string).toLocaleDateString('es-ES', {day: '2-digit', month: '2-digit', year: 'numeric'}) : '-'}
                             </span>
                           </div>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-lg font-medium text-gray-900 truncate">
-                            {creator.firstName} {creator.lastName}
+
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => {
+                                // Opcional: si quieres métricas con API, adapta calculateCreatorMetrics
+                              }}
+                              className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                              title="Ver detalles"
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              Ver
+                            </button>
+                            <button
+                              onClick={() => openEditModal(creator)}
+                              className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                              title="Editar creador"
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCreator(creator.id)}
+                              className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                              title="Eliminar creador"
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Eliminar
+                            </button>
                           </div>
-                          <div className="text-sm text-gray-500 truncate">{creator.email}</div>
-                          <div className="flex flex-wrap items-center gap-2 mt-1">
-                            <span className="text-sm text-gray-600">{creator.country}</span>
-                            <span className="text-gray-300">•</span>
-                            <span className="text-sm text-gray-600">{creator.phone}</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
-                        <div className="flex items-center justify-between sm:justify-start space-x-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            creator.status === 'active'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {creator.status === 'active' ? 'Activo' : 'Suspendido'}
-                          </span>
-                          <span className="text-sm text-gray-500">
-                            {new Date(creator.createdAt).toLocaleDateString('es-ES', {day: '2-digit', month: '2-digit', year: 'numeric'})}
-                          </span>
-                        </div>
-                        
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => calculateCreatorMetrics(creator)}
-                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                            title="Ver detalles y métricas"
-                            disabled={isLoadingMetrics}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </button>
-                          <button 
-                            onClick={() => openEditModal(creator)}
-                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                            title="Editar creador"
-                          >
-                            <Edit className="h-4 w-4 mr-1" />
-                            Editar
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteCreator(creator.id)}
-                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                            title="Eliminar creador"
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Eliminar
-                          </button>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))
               )}
             </div>
 
@@ -1015,8 +1008,10 @@ export default function Creadores() {
 
       <CreateCreatorModal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSubmit={handleCreateCreator}
+        onClose={async () => {
+          setShowCreateModal(false);
+          await fetchUsers();
+        }}
       />
 
       <EditCreatorModal
@@ -1025,7 +1020,6 @@ export default function Creadores() {
           setShowEditModal(false);
           setSelectedCreator(null);
         }}
-        onSubmit={handleEditCreator}
         creator={selectedCreator}
       />
 

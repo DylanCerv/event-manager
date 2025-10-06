@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { X, User, Mail, Phone, Globe, Lock, Eye, EyeOff, Percent } from 'lucide-react';
 import type { CreateCreatorData } from '../types/creator';
+import { createUserAPI } from '../endpoints/user';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CreateCreatorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: CreateCreatorData) => Promise<void>;
+  // onSubmit: (data: CreateCreatorData) => Promise<void>;
 }
 
-export default function CreateCreatorModal({ isOpen, onClose, onSubmit }: CreateCreatorModalProps) {
+export default function CreateCreatorModal({ isOpen, onClose }: CreateCreatorModalProps) {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<CreateCreatorData>({
     firstName: '',
     lastName: '',
@@ -18,7 +21,7 @@ export default function CreateCreatorModal({ isOpen, onClose, onSubmit }: Create
     phone: '',
     country: '',
     commissionPercentage: 15,
-    createdBy: 'superadmin'
+    createdBy: user?.id as number
   });
   
   const [showPassword, setShowPassword] = useState(false);
@@ -79,8 +82,27 @@ export default function CreateCreatorModal({ isOpen, onClose, onSubmit }: Create
 
     setIsSubmitting(true);
     try {
-      await onSubmit(formData);
-      handleClose();
+      // Map modal form to API payload
+      const payload = {
+        name: formData.firstName,
+        last_name: formData.lastName,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        country: formData.country || null,
+        phone: formData.phone || null,
+        role_id: 5, // CREATOR
+        commission_percentage: formData.commissionPercentage || null,
+        creator_id: formData.createdBy || null,
+        status: 'active',
+      };
+      const response = await createUserAPI(payload);
+
+      if (response.status === 201) {
+        handleClose();
+      } else {
+        setErrors({ submit: response.message || 'Error al crear creador' });
+      }
     } catch (error) {
       setErrors({ submit: error instanceof Error ? error.message : 'Error al crear creador' });
     } finally {
@@ -98,7 +120,7 @@ export default function CreateCreatorModal({ isOpen, onClose, onSubmit }: Create
       phone: '',
       country: '',
       commissionPercentage: 15,
-      createdBy: 'superadmin'
+      createdBy: user?.id as number
     });
     setErrors({});
     setShowPassword(false);

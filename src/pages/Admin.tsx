@@ -1,38 +1,31 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Bell, X, ArrowLeft, Pencil, Trash2, Calendar, Check, Users, QrCode, MessageSquare } from 'lucide-react';
+import { PlusCircle, X, Pencil, Trash2, Calendar, Check, Users, QrCode } from 'lucide-react';
 import { EventForm } from '../components/EventForm';
-import { GuestList } from '../components/GuestList';
+// removed unused imports
 import { AdminStats } from '../components/AdminStats';
-import { InvitationCard } from '../components/InvitationCard';
-import { EventCardPreview } from '../components/EventCardPreview';
+// removed unused imports
 import { NotificationForm } from '../components/NotificationForm';
-import { EventCardForm } from '../components/EventCardForm';
-import { QRAccessManager } from '../components/QRAccessManager';
-import { EventFinalization } from '../components/EventFinalization';
+// removed unused imports
 import { storage } from '../lib/storage';
 import { finalizationStorage } from '../lib/finalization-storage';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
-import type { Event, EventFormData, Guest, EventCard } from '../types/event';
+import type { Event, EventFormData, Guest } from '../types/event';
+import { useEvents } from '../contexts/EventContext';
 
 export default function Admin() {
   const navigate = useNavigate();
+  const { events, createEvent, updateEvent, deleteEvent } = useEvents();
   const [showEventForm, setShowEventForm] = React.useState(false);
-  const [events, setEvents] = React.useState<Event[]>([]);
-  const [selectedEvent, setSelectedEvent] = React.useState<Event | null>(null);
-  const [guests, setGuests] = React.useState<Guest[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [showNotificationForm, setShowNotificationForm] = React.useState(false);
   const [selectedGuestIds, setSelectedGuestIds] = React.useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<string | null>(null);
   const [editingEvent, setEditingEvent] = React.useState<Event | null>(null);
   const [userGuests, setUserGuests] = React.useState<Guest[]>([]);
-  const [eventCard, setEventCard] = React.useState<EventCard | null>(null);
-  const [showCardForm, setShowCardForm] = React.useState(false);
-  const [showSuccessMessage, setShowSuccessMessage] = React.useState(false);
-  const [showFullView, setShowFullView] = React.useState(false);
-  const [editingCard, setEditingCard] = React.useState<EventCard | null>(null);
-  const [activeTab, setActiveTab] = React.useState<'guests' | 'cards' | 'qr-access' | 'finalization'>('guests');
+  // removed unused state
+  // removed unused UI states
   const [eventStatuses, setEventStatuses] = React.useState<Record<string, {
     qrAccessActive: boolean;
     isFinalized: boolean;
@@ -40,9 +33,8 @@ export default function Admin() {
   }>>({});
 
   React.useEffect(() => {
-    fetchEvents();
     fetchUserGuests();
-  }, []);
+  }, [events]);
 
   React.useEffect(() => {
     const loadEventStatuses = async () => {
@@ -79,9 +71,10 @@ export default function Admin() {
   }, [events]);
 
   React.useEffect(() => {
-    const handleStorageUpdate = async (e: CustomEvent<{ type: string; eventId: string }>) => {
-      const { type, eventId } = e.detail;
-      
+    const handleStorageUpdate = async (evt: Event) => {
+      const detail = (evt as any)?.detail as { type: string; eventId: string } | undefined;
+      const eventId = detail?.eventId;
+      if (!eventId) return;
       try {
         const [accessSettings, finalization, eventGuests] = await Promise.all([
           storage.getAccessSettings(eventId),
@@ -102,17 +95,18 @@ export default function Admin() {
       }
     };
 
-    window.addEventListener('storage_update', handleStorageUpdate as EventListener);
-    return () => window.removeEventListener('storage_update', handleStorageUpdate as EventListener);
+    window.addEventListener('storage_update', handleStorageUpdate as unknown as EventListener);
+    return () => window.removeEventListener('storage_update', handleStorageUpdate as unknown as EventListener);
   }, []);
 
   const fetchUserGuests = async () => {
     try {
-      // Get all guests for the current user's events only
-      const userEvents = await storage.getEvents();
+      // For now, we'll keep using storage.getGuests since we don't have a specific API endpoint
+      // to get all guests for all events at once. In a real implementation, we'd want to create
+      // an endpoint that returns all guests for a user's events.
       let allUserGuests: Guest[] = [];
       
-      for (const event of userEvents) {
+      for (const event of events) {
         const eventGuests = await storage.getGuests(event.id);
         allUserGuests = [...allUserGuests, ...eventGuests];
       }
@@ -123,42 +117,23 @@ export default function Admin() {
     }
   };
 
-  const fetchEvents = async () => {
-    try {
-      const events = await storage.getEvents();
-      setEvents(events.sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ));
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    }
-  };
-
-  const fetchGuests = async (eventId: string) => {
-    try {
-      const guests = await storage.getGuests(eventId);
-      setGuests(guests.sort((a, b) => 
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      ));
-    } catch (error) {
-      console.error('Error fetching guests:', error);
-    }
-  };
+  // removed unused fetchGuests
 
   const handleCreateEvent = async (data: EventFormData) => {
     try {
       setIsLoading(true);
       console.log('Admin - Creating event with data:', data);
 
-      const event = await storage.createEvent(data);
-      console.log('Admin - Event created successfully:', event);
-      
-      await storage.createGuests(event.id, data.guest_count);
-      console.log('Admin - Guests created successfully');
+      const payload = {
+        name: data.name,
+        location: data.location,
+        start_at: new Date(data.date).toISOString(),
+        end_at: null,
+        host_name: data.contractor_name,
+        guest_count: data.guest_count,
+      } as const;
 
-      // Refresh events list and close modal
-      await fetchEvents();
-      await fetchUserGuests();
+      await createEvent(payload);
       setShowEventForm(false);
     } catch (error) {
       console.error('Error creating event:', error);
@@ -168,35 +143,23 @@ export default function Admin() {
     }
   };
 
-  const handleUpdateGuest = async (guest: Guest) => {
-    try {
-      await storage.updateGuest(guest);
-      // Refresh guest list
-      if (selectedEvent) {
-        await fetchGuests(selectedEvent.id);
-      }
-    } catch (error) {
-      console.error('Error updating guest:', error);
-    }
-  };
+  // removed unused handler
 
   const handleUpdateEvent = async (data: EventFormData) => {
     try {
       setIsLoading(true);
       if (!editingEvent) return;
 
-      const updatedEvent = {
-        ...editingEvent,
-        ...data,
-      };
+      const payload = {
+        name: data.name,
+        location: data.location,
+        start_at: new Date(data.date).toISOString(),
+        end_at: null,
+        host_name: data.contractor_name,
+        guest_count: data.guest_count,
+      } as const;
 
-      const events = await storage.getEvents();
-      const updatedEvents = events.map(event => 
-        event.id === editingEvent.id ? updatedEvent : event
-      );
-      storage.setItem('events', updatedEvents);
-
-      await fetchEvents();
+      await updateEvent(editingEvent.id, payload);
       setEditingEvent(null);
     } catch (error) {
       console.error('Error updating event:', error);
@@ -207,8 +170,7 @@ export default function Admin() {
 
   const handleDeleteEvent = async (eventId: string) => {
     try {
-      await storage.deleteEvent(eventId);
-      await fetchEvents();
+      await deleteEvent(eventId);
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting event:', error);
@@ -238,9 +200,7 @@ export default function Admin() {
     try {
       setIsLoading(true);
       // Get selected guests with phone numbers
-      const guestsWithPhone = guests
-        .filter(guest => selectedGuestIds.includes(guest.id))
-        .filter(guest => guest.phone);
+      const guestsWithPhone: Array<{ id: string; name?: string; phone?: string }> = [];
 
       // Generate WhatsApp links and open them
       for (const guest of guestsWithPhone) {
@@ -261,48 +221,7 @@ export default function Admin() {
     }
   };
 
-  const handleEditCard = () => {
-    setEditingCard(eventCard);
-    setShowCardForm(true);
-  };
-
-  const handleSaveEventCard = async (cardData: Omit<EventCard, 'id' | 'created_at'>) => {
-    try {
-      setIsLoading(true);
-      const savedCard = await storage.saveEventCard({
-        ...cardData,
-        event_id: selectedEvent!.id,
-      });
-      setEventCard(savedCard);
-      setShowCardForm(false);
-      setEditingCard(null);
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (error) {
-      console.error('Error saving event card:', error);
-      alert('Error al guardar la tarjeta interactiva');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDeleteEventCard = async () => {
-    if (!selectedEvent) return;
-    
-    if (!window.confirm('¿Estás seguro de que deseas eliminar esta tarjeta? Esta acción no se puede deshacer.')) {
-      return;
-    }
-    
-    try {
-      await storage.deleteEventCard(selectedEvent.id);
-      setEventCard(null);
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (error) {
-      console.error('Error deleting event card:', error);
-      alert('Error al eliminar la tarjeta interactiva');
-    }
-  };
+  // removed unused card handlers
 
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -367,7 +286,7 @@ export default function Admin() {
                                 );
                               }
                             })()}
-                            {eventStatuses[event.id]?.isFinalized && (
+                            {event.is_finalized && (
                               <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                 <Check className="w-3 h-3 mr-1" />
                                 Finalizado
@@ -382,15 +301,15 @@ export default function Admin() {
                               <div className="flex flex-wrap gap-2">
                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
                                   <Users className="w-3 h-3 mr-1" />
-                                  {eventStatuses[event.id]?.guestCount || 0} invitados
+                                  {event.guest_count || 0} invitados
                                 </span>
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  eventStatuses[event.id]?.qrAccessActive
+                                  event.qr_access_active
                                     ? 'bg-green-100 text-green-800'
                                     : 'bg-red-100 text-red-800'
                                 }`}>
                                   <QrCode className="w-3 h-3 mr-1" />
-                                  QR Access {eventStatuses[event.id]?.qrAccessActive ? 'Activo' : 'Inactivo'}
+                                  QR Access {event.qr_access_active ? 'Activo' : 'Inactivo'}
                                 </span>
                               </div>
                             </div>

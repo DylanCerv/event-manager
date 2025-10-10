@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Guest } from '../types/event';
 import { Mail, Phone, Search, UserCheck, UserX, ClipboardCheck, ClipboardX } from 'lucide-react';
 
@@ -9,22 +9,72 @@ interface GuestListProps {
 }
 
 export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestListProps) {
-  const [search, setSearch] = React.useState('');
-  const [selectedGuests, setSelectedGuests] = React.useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [selectedGuests, setSelectedGuests] = useState<Set<string>>(new Set());
+  // Estado local para mantener los cambios en los invitados antes de enviarlos al API
+  const [localGuests, setLocalGuests] = useState<Record<string, Guest>>({});
+  // Referencia para almacenar los temporizadores por ID de invitado
+  const timersRef = useRef<Record<string, NodeJS.Timeout>>({});
+
+  // Combinar los invitados originales con las actualizaciones locales
+  const mergedGuests = React.useMemo(() => {
+    return guests.map(guest => {
+      return localGuests[guest.id] ? { ...guest, ...localGuests[guest.id] } : guest;
+    });
+  }, [guests, localGuests]);
 
   React.useEffect(() => {
     onSelectionChange(Array.from(selectedGuests));
   }, [selectedGuests, onSelectionChange]);
 
+  // Función para actualizar localmente un invitado
+  const updateLocalGuest = useCallback((guest: Guest) => {
+    setLocalGuests(prev => ({
+      ...prev,
+      [guest.id]: { ...prev[guest.id], ...guest }
+    }));
+  }, []);
+
+  // Función para enviar actualizaciones al API
+  const sendUpdateToAPI = useCallback((guest: Guest) => {
+    // Llamar a la función de actualización del padre (API)
+    onUpdateGuest(guest);
+
+    // Ya no limpiamos el estado local para mantener los cambios visibles
+    // Esto evita que la UI vuelva al estado anterior
+  }, [onUpdateGuest]);
+
+  // Manejar cambios en los inputs con actualización local inmediata y debounce
+  const handleGuestChange = useCallback((guest: Guest, field: string, value: any) => {
+    const updatedGuest = { ...guest, [field]: value };
+    const guestId = guest.id;
+
+    // Actualizar inmediatamente en la UI
+    updateLocalGuest(updatedGuest);
+
+    // Cancelar el temporizador anterior para este invitado si existe
+    if (timersRef.current[guestId]) {
+      clearTimeout(timersRef.current[guestId]);
+    }
+
+    // Crear un nuevo temporizador para este invitado
+    timersRef.current[guestId] = setTimeout(() => {
+      // Enviar al API después del delay
+      sendUpdateToAPI(updatedGuest);
+      // Limpiar la referencia del temporizador
+      delete timersRef.current[guestId];
+    }, 1000); // 1 segundo de delay
+  }, [updateLocalGuest, sendUpdateToAPI]);
+
   const filteredGuests = React.useMemo(() => {
-    return guests.filter(guest => 
+    return mergedGuests.filter(guest =>
       guest.name?.toLowerCase().includes(search.toLowerCase()) ||
       guest.guest_number?.toString().includes(search) ||
       guest.email?.toLowerCase().includes(search.toLowerCase()) ||
       (guest.confirmed && 'confirmed'.includes(search.toLowerCase())) ||
       (!guest.confirmed && 'not confirmed'.includes(search.toLowerCase()))
     ).sort((a, b) => (a.guest_number || 0) - (b.guest_number || 0));
-  }, [guests, search]);
+  }, [mergedGuests, search]);
 
   const toggleGuestSelection = (guestId: string) => {
     setSelectedGuests(prev => {
@@ -40,30 +90,44 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
 
   const stats = React.useMemo(() => {
     const isGuestComplete = (guest: any) => {
-      // Un invitado está completo si:
-      const hasName = !!guest.name;
+      // Campos básicos que todos los invitados deben tener
+      const hasName = !!guest.name && guest.name.trim() !== '';
       const hasTableNumber = !!guest.table_number;
-      
-      // Si tiene categoría de edad explícita, usar esa lógica
-      if (guest.age_category === 'minor') {
-        return hasName && hasTableNumber; // Menor: solo nombre + mesa
-      } else if (guest.age_category === 'adult') {
-        return hasName && guest.email && guest.phone && hasTableNumber; // Mayor: nombre + contacto + mesa
+      const hasConfirmationStatus = guest.confirmed !== undefined;
+      const hasHealthInfo = !!guest.health_info && guest.health_info.trim() !== '';
+      const hasMobilityInfo = !!guest.mobility_restrictions && guest.mobility_restrictions.trim() !== '';
+
+      // Verificar la categoría de edad
+      const isMinor = guest.age_category === 'minor' ||
+        (guest.age_category === undefined && (!guest.email && !guest.phone));
+      const isAdult = guest.age_category === 'adult' ||
+        (guest.age_category === undefined && !!guest.email && !!guest.phone);
+
+      // Requisitos específicos según la edad
+      if (isMinor) {
+        // Para menores: nombre, mesa, estado de confirmación, info de salud y movilidad
+        return hasName && hasTableNumber && hasConfirmationStatus && hasHealthInfo && hasMobilityInfo;
+      } else if (isAdult) {
+        // Para adultos: todo lo anterior + email y teléfono
+        const hasEmail = !!guest.email && guest.email.trim() !== '';
+        const hasPhone = !!guest.phone && guest.phone.trim() !== '';
+
+        return hasName && hasTableNumber && hasConfirmationStatus &&
+          hasHealthInfo && hasMobilityInfo && hasEmail && hasPhone;
       } else {
-        // Fallback a lógica actual para compatibilidad con datos existentes
-        const isMinor = hasName && (!guest.email && !guest.phone); // Menor de 16
-        const isAdult = hasName && guest.email && guest.phone; // Mayor de 16
-        return (isMinor || isAdult) && hasTableNumber;
+        // Si no podemos determinar la edad, usamos criterios básicos
+        return hasName && hasTableNumber && hasConfirmationStatus &&
+          hasHealthInfo && hasMobilityInfo;
       }
     };
 
     return {
-      complete: guests.filter(isGuestComplete).length,
-      incomplete: guests.filter(guest => !isGuestComplete(guest)).length,
-      confirmed: guests.filter(guest => guest.confirmed).length,
-      notConfirmed: guests.filter(guest => !guest.confirmed).length,
+      complete: mergedGuests.filter(isGuestComplete).length,
+      incomplete: mergedGuests.filter(guest => !isGuestComplete(guest)).length,
+      confirmed: mergedGuests.filter(guest => guest.confirmed).length,
+      notConfirmed: mergedGuests.filter(guest => !guest.confirmed).length,
     };
-  }, [guests]);
+  }, [mergedGuests]);
 
   return (
     <div className="flex flex-col h-full">
@@ -155,20 +219,17 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {filteredGuests.map((guest) => (
-                  <tr 
+                  <tr
                     key={guest.id}
-                    className={`${
-                      selectedGuests.has(guest.id) ? 'bg-gray-50' : ''
-                    } hover:bg-gray-50 cursor-pointer`}
-                    onClick={() => toggleGuestSelection(guest.id)}
+                    className={`${selectedGuests.has(guest.id) ? 'bg-gray-50' : ''
+                      } hover:bg-gray-50`}
                   >
-                    <td className="relative w-12 px-6 sm:w-16 sm:px-8">
+                    <td className="relative w-12 px-6 sm:w-16 sm:px-8" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 sm:left-6"
                         checked={selectedGuests.has(guest.id)}
-                        onChange={(e) => {
-                          e.stopPropagation();
+                        onChange={() => {
                           toggleGuestSelection(guest.id);
                         }}
                       />
@@ -181,7 +242,9 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                         <input
                           type="text"
                           value={guest.name || ''}
-                          onChange={(e) => onUpdateGuest({ ...guest, name: e.target.value })}
+                          onChange={(e) => {
+                            handleGuestChange(guest, 'name', e.target.value);
+                          }}
                           placeholder="Nombre del Invitado"
                           className="block w-full min-w-[200px] border-0 p-0 text-gray-900 placeholder-gray-500 focus:ring-0 sm:text-sm"
                         />
@@ -192,10 +255,11 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                         value={guest.age_category || 'auto'}
                         onChange={(e) => {
                           const value = e.target.value;
-                          onUpdateGuest({ 
-                            ...guest, 
-                            age_category: value === 'auto' ? undefined : value as 'minor' | 'adult'
-                          });
+                          handleGuestChange(
+                            guest,
+                            'age_category',
+                            value === 'auto' ? undefined : value
+                          );
                         }}
                         className="block w-full border-0 p-0 text-gray-900 focus:ring-0 sm:text-sm"
                       >
@@ -207,9 +271,9 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                     <td className="px-2 py-4 text-sm text-gray-500">
                       {(() => {
                         // Determinar si es menor basado en age_category o fallback a lógica actual
-                        const isMinor = guest.age_category === 'minor' || 
+                        const isMinor = guest.age_category === 'minor' ||
                           (guest.age_category === undefined && guest.name && (!guest.email && !guest.phone));
-                        
+
                         return isMinor ? (
                           // Menor de 16 años - mostrar indicador
                           <div className="flex items-center space-x-1 text-blue-600">
@@ -219,16 +283,20 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                           // Mayor de 16 años - mostrar campos de contacto
                           <div className="flex flex-col space-y-1">
                             <input
-                              type="email" 
+                              type="email"
                               value={guest.email || ''}
-                              onChange={(e) => onUpdateGuest({ ...guest, email: e.target.value })}
+                              onChange={(e) => {
+                                handleGuestChange(guest, 'email', e.target.value);
+                              }}
                               placeholder="Correo"
                               className="block w-32 border-0 p-0 text-gray-900 placeholder-gray-500 focus:ring-0 text-xs"
                             />
                             <input
                               type="tel"
                               value={guest.phone || ''}
-                              onChange={(e) => onUpdateGuest({ ...guest, phone: e.target.value })}
+                              onChange={(e) => {
+                                handleGuestChange(guest, 'phone', e.target.value);
+                              }}
                               placeholder="Teléfono"
                               className="block w-32 border-0 p-0 text-gray-900 placeholder-gray-500 focus:ring-0 text-xs"
                             />
@@ -241,11 +309,33 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                         value={guest.attended ? 'attended' : (guest.confirmed ? 'confirmed' : 'not_confirmed')}
                         onChange={(e) => {
                           const value = e.target.value;
-                          onUpdateGuest({
+                          const confirmed = value === 'confirmed' || value === 'attended';
+                          const attended = value === 'attended';
+
+                          // Actualizar ambos campos a la vez usando handleGuestChange
+                          // Para este caso especial, actualizamos múltiples campos a la vez
+                          const updatedGuest = {
                             ...guest,
-                            confirmed: value === 'confirmed' || value === 'attended',
-                            attended: value === 'attended'
-                          });
+                            confirmed,
+                            attended
+                          };
+
+                          // Usar el mismo patrón de debounce
+                          const guestId = guest.id;
+
+                          // Actualizar inmediatamente en la UI
+                          updateLocalGuest(updatedGuest);
+
+                          // Cancelar el temporizador anterior si existe
+                          if (timersRef.current[guestId]) {
+                            clearTimeout(timersRef.current[guestId]);
+                          }
+
+                          // Crear un nuevo temporizador
+                          timersRef.current[guestId] = setTimeout(() => {
+                            sendUpdateToAPI(updatedGuest);
+                            delete timersRef.current[guestId];
+                          }, 1000);
                         }}
                         className="block w-full border-0 p-0 text-gray-900 focus:ring-0 sm:text-sm"
                       >
@@ -257,8 +347,10 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                       <input
                         type="text"
-                        value={guest.dietary_restrictions || ''}
-                        onChange={(e) => onUpdateGuest({ ...guest, dietary_restrictions: e.target.value })}
+                        value={guest.health_info || ''}
+                        onChange={(e) => {
+                          handleGuestChange(guest, 'health_info', e.target.value);
+                        }}
                         placeholder="Información de Salud"
                         className="block w-full border-0 p-0 text-gray-900 placeholder-gray-500 focus:ring-0 sm:text-sm"
                       />
@@ -267,7 +359,9 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                       <input
                         type="text"
                         value={guest.mobility_restrictions || ''}
-                        onChange={(e) => onUpdateGuest({ ...guest, mobility_restrictions: e.target.value })}
+                        onChange={(e) => {
+                          handleGuestChange(guest, 'mobility_restrictions', e.target.value);
+                        }}
                         placeholder="Información de Movilidad"
                         className="block w-full border-0 p-0 text-gray-900 placeholder-gray-500 focus:ring-0 sm:text-sm"
                       />
@@ -276,7 +370,13 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                       <input
                         type="number"
                         value={guest.table_number || ''}
-                        onChange={(e) => onUpdateGuest({ ...guest, table_number: parseInt(e.target.value) || undefined })}
+                        onChange={(e) => {
+                          handleGuestChange(
+                            guest,
+                            'table_number',
+                            parseInt(e.target.value) || undefined
+                          );
+                        }}
                         placeholder="Mesa #"
                         min="1"
                         className="block w-20 border-0 p-0 text-gray-900 placeholder-gray-500 focus:ring-0 sm:text-sm"

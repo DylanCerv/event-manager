@@ -9,6 +9,8 @@ export interface Event {
   created_at: string;
   created_by: string;
   request_status?: 'pending' | 'approved' | 'rejected';
+  qr_access_active: boolean;
+  is_finalized: boolean;
 }
 
 export interface EventCard {

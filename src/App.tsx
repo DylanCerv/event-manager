@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UserProvider } from './contexts/UserContext';
+import { EventProvider } from './contexts/EventContext';
 import { Navigation } from './components/Navigation';
 import { Login } from './pages/Login';
 import { SuperAdmin } from './pages/SuperAdmin';
@@ -263,7 +264,9 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <UserProvider>
-          <AppRoutes />
+          <EventProvider>
+            <AppRoutes />
+          </EventProvider>
         </UserProvider>
       </AuthProvider>
     </BrowserRouter>

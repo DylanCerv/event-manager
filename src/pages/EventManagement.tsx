@@ -1,9 +1,8 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Users, QrCode, MessageSquare, PartyPopper, Check, X, Mail, Monitor, Smartphone } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+// import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../lib/storage';
-import { finalizationStorage } from '../lib/finalization-storage';
 import { GuestList } from '../components/GuestList';
 import { EventCardForm } from '../components/EventCardForm';
 import { EventCardPreview } from '../components/EventCardPreview';
@@ -13,11 +12,13 @@ import { NotificationForm } from '../components/NotificationForm';
 import { InvitationCard } from '../components/InvitationCard';
 import { sendMassiveEmails, type EmailRecipient } from '../lib/email';
 import type { Event, Guest, EventCard } from '../types/event';
+import { updateEventGuestAPI, getEventGuestsByEventIdAPI } from '../endpoints/eventGuest';
+import { useEvents } from '../contexts/EventContext';
 
 export function EventManagement() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { getEventById } = useEvents();
   const [event, setEvent] = React.useState<Event | null>(null);
   const [guests, setGuests] = React.useState<Guest[]>([]);
   const [eventCard, setEventCard] = React.useState<EventCard | null>(null);
@@ -30,11 +31,7 @@ export function EventManagement() {
   const [showSuccessMessage, setShowSuccessMessage] = React.useState(false);
   const [showFullView, setShowFullView] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<'desktop' | 'mobile'>('desktop');
-  const [eventStatus, setEventStatus] = React.useState({
-    qrAccessActive: false,
-    isFinalized: false,
-    guestCount: 0
-  });
+  // Event status is now part of the event object from context
 
   React.useEffect(() => {
     if (id) {
@@ -42,63 +39,18 @@ export function EventManagement() {
     }
   }, [id]);
 
-  React.useEffect(() => {
-    const loadEventStatus = async () => {
-      if (!event) return;
-      
-      try {
-        const [accessSettings, finalization, eventGuests] = await Promise.all([
-          storage.getAccessSettings(event.id),
-          finalizationStorage.getEventFinalization(event.id),
-          storage.getGuests(event.id)
-        ]);
+  // Event status is now handled by the EventContext
 
-        setEventStatus({
-          qrAccessActive: accessSettings?.is_active || false,
-          isFinalized: finalization?.is_finalized || false,
-          guestCount: eventGuests.length
-        });
-      } catch (error) {
-        console.error(`Error loading status for event ${event.id}:`, error);
-      }
-    };
-
-    loadEventStatus();
-  }, [event]);
-
-  React.useEffect(() => {
-    const handleStorageUpdate = async (e: CustomEvent<{ type: string; eventId: string }>) => {
-      if (!event || e.detail.eventId !== event.id) return;
-      
-      try {
-        const [accessSettings, finalization, eventGuests] = await Promise.all([
-          storage.getAccessSettings(event.id),
-          finalizationStorage.getEventFinalization(event.id),
-          storage.getGuests(event.id)
-        ]);
-
-        setEventStatus({
-          qrAccessActive: accessSettings?.is_active || false,
-          isFinalized: finalization?.is_finalized || false,
-          guestCount: eventGuests.length
-        });
-      } catch (error) {
-        console.error(`Error updating event status:`, error);
-      }
-    };
-
-    window.addEventListener('storage_update', handleStorageUpdate as EventListener);
-    return () => window.removeEventListener('storage_update', handleStorageUpdate as EventListener);
-  }, [event]);
+  // Storage updates are now handled by the EventContext
 
   const loadEvent = async () => {
     if (!id) return;
     
     try {
       setIsLoading(true);
-      const events = await storage.getEvents();
-      const foundEvent = events.find(e => e.id === id);
       
+      // Get event from context
+      const foundEvent = getEventById(id);
       if (!foundEvent) {
         navigate('/events');
         return;
@@ -123,10 +75,77 @@ export function EventManagement() {
 
   const fetchGuests = async (eventId: string) => {
     try {
-      const guests = await storage.getGuests(eventId);
-      setGuests(guests.sort((a, b) => 
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      ));
+      // Get event to know how many guests should be
+      const eventData = getEventById(eventId);
+      if (!eventData) return;
+      
+      const totalGuestCount = eventData.guest_count;
+      
+      // Fetch actual guests from API
+      const response = await getEventGuestsByEventIdAPI(Number(eventId));
+      const actualGuests = response?.data || [];
+      
+      // Map API guests to our Guest interface
+      const mappedGuests = actualGuests.map((apiGuest: any): Guest => ({
+        id: String(apiGuest.id),
+        event_id: String(apiGuest.event_id),
+        name: apiGuest.name || '',
+        guest_number: Number(apiGuest.guest_number) || 0,
+        table_number: apiGuest.table_number ? Number(apiGuest.table_number) : undefined,
+        email: apiGuest.email,
+        phone: apiGuest.phone,
+        confirmed: apiGuest.confirmation_status === 'confirmed',
+        attended: apiGuest.attended || false,
+        attended_at: apiGuest.check_in_time,
+        health_info: apiGuest.health_information || '',
+        mobility_restrictions: apiGuest.transportation_status || '',
+        qr_code: apiGuest.qr_code || '',
+        created_at: apiGuest.created_at || new Date().toISOString(),
+        health_form_submitted: !!apiGuest.health_information,
+        mobility_form_submitted: !!apiGuest.transportation_status,
+        forms_completed: !!apiGuest.health_information && !!apiGuest.transportation_status,
+        age_category: apiGuest.age < 18 ? 'minor' : 'adult',
+      }));
+      
+      // Create placeholder guests for the remaining count
+      const existingGuestNumbers = new Set(mappedGuests.map((g: Guest) => g.guest_number));
+      const placeholderGuests: Guest[] = [];
+      
+      // Starting from 100 (as shown in the UI example)
+      let guestNumber = 1;
+      
+      // Create placeholder guests until we reach the total count
+      while (mappedGuests.length + placeholderGuests.length < totalGuestCount) {
+        // Skip guest numbers that already exist
+        while (existingGuestNumbers.has(guestNumber)) {
+          guestNumber++;
+        }
+        
+        placeholderGuests.push({
+          id: `placeholder-${guestNumber}`,
+          event_id: eventId,
+          name: '',
+          guest_number: guestNumber,
+          confirmed: false,
+          attended: false,
+          qr_code: '',
+          health_info: '',
+          mobility_restrictions: '',
+          health_form_submitted: false,
+          mobility_form_submitted: false,
+          forms_completed: false,
+          created_at: new Date().toISOString(),
+        });
+        
+        existingGuestNumbers.add(guestNumber);
+        guestNumber++;
+      }
+      
+      // Combine actual guests with placeholders and sort by guest number
+      const allGuests = [...mappedGuests, ...placeholderGuests];
+      allGuests.sort((a, b) => a.guest_number - b.guest_number);
+      
+      setGuests(allGuests);
     } catch (error) {
       console.error('Error fetching guests:', error);
     }
@@ -134,9 +153,65 @@ export function EventManagement() {
 
   const handleUpdateGuest = async (guest: Guest) => {
     try {
-      await storage.updateGuest(guest);
-      if (event) {
-        await fetchGuests(event.id);
+      console.log('guest:', guest);
+      // Prepare common payload for both new and existing guests
+      const payload = {
+        event_id: Number(guest.event_id),
+        name: guest.name || 'Invitado',
+        last_name: '',
+        age: guest.age_category === 'minor' ? 15 : 30,
+        email: guest.email,
+        phone: guest.phone,
+        confirmation_status: guest.confirmed ? 'confirmed' : undefined,
+        health_information: guest.health_info || '',
+        transportation_status: guest.mobility_restrictions || '',
+        guest_number: String(guest.guest_number),
+        table_number: guest.table_number ? String(guest.table_number) : undefined,
+        attended: guest.attended,
+        qr_code: guest.qr_code,
+        qr_code_status: guest.qr_code ? true : false,
+        status: 'active',
+      };
+      
+      // Use updateEventGuestAPI with event ID and guest number
+      // The backend will create a new guest if it doesn't exist
+      const eventId = Number(guest.event_id);
+      const guestNumber = guest.guest_number;
+      
+      // Si es un placeholder, necesitamos actualizar el estado después de la respuesta
+      const response = await updateEventGuestAPI(eventId, guestNumber, payload);
+      
+      // Actualizar el invitado en la lista local con los datos de la respuesta
+      const apiGuest = response.data;
+      if (apiGuest) {
+        // Mapear la respuesta del API al formato Guest
+        const updatedGuest: Guest = {
+          id: String(apiGuest.id),
+          event_id: String(apiGuest.event_id),
+          name: apiGuest.name || '',
+          guest_number: Number(apiGuest.guest_number) || 0,
+          table_number: apiGuest.table_number ? Number(apiGuest.table_number) : undefined,
+          email: apiGuest.email,
+          phone: apiGuest.phone,
+          confirmed: apiGuest.confirmation_status === 'confirmed',
+          attended: apiGuest.attended || false,
+          attended_at: apiGuest.check_in_time,
+          health_info: apiGuest.health_information || '',
+          mobility_restrictions: apiGuest.transportation_status || '',
+          qr_code: apiGuest.qr_code || '',
+          created_at: apiGuest.created_at || new Date().toISOString(),
+          health_form_submitted: !!apiGuest.health_information,
+          mobility_form_submitted: !!apiGuest.transportation_status,
+          forms_completed: !!apiGuest.health_information && !!apiGuest.transportation_status,
+          age_category: apiGuest.age < 18 ? 'minor' : 'adult',
+        };
+        
+        // Actualizar el estado de invitados reemplazando el placeholder
+        setGuests(currentGuests => {
+          return currentGuests.map(g => 
+            g.id === guest.id ? updatedGuest : g
+          );
+        });
       }
     } catch (error) {
       console.error('Error updating guest:', error);
@@ -320,7 +395,7 @@ export function EventManagement() {
                         }
                       })()}
                     </span>
-                    {eventStatus.isFinalized && (
+                    {event.is_finalized && (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                         <Check className="w-3 h-3 mr-1" />
                         Finalizado
@@ -332,14 +407,14 @@ export function EventManagement() {
                     <span>•</span>
                     <span className="inline-flex items-center">
                       <Users className="w-4 h-4 mr-1" />
-                      {eventStatus.guestCount} invitados
+                      {event.guest_count} invitados
                     </span>
                     <span>•</span>
                     <span className={`inline-flex items-center ${
-                      eventStatus.qrAccessActive ? 'text-green-600' : 'text-red-600'
+                      event.qr_access_active ? 'text-green-600' : 'text-red-600'
                     }`}>
                       <QrCode className="w-4 h-4 mr-1" />
-                      QR Access {eventStatus.qrAccessActive ? 'Activo' : 'Inactivo'}
+                      QR Access {event.qr_access_active ? 'Activo' : 'Inactivo'}
                     </span>
                   </div>
                 </div>

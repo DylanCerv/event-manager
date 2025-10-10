@@ -1,36 +1,25 @@
 import React from 'react';
 import { Users, Calendar, CalendarCheck, UserCheck } from 'lucide-react';
-import type { Event, Guest } from '../types/event';
+import { useEvents } from '../contexts/EventContext';
 
-interface AdminStatsProps {
-  events: Event[];
-  guests: Guest[];
-}
-
-export function AdminStats({ events, guests }: AdminStatsProps) {
+export function AdminStats() {
+  const {events} = useEvents();
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
 
   const stats = React.useMemo(() => {
     const thisMonthEvents = events.filter(event => {
-      const eventDate = new Date(event.date);
-      return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear;
-    });
-
-    const thisMonthGuests = guests.filter(guest => {
-      const event = events.find(e => e.id === guest.event_id);
-      if (!event) return false;
-      const eventDate = new Date(event.date);
+      const eventDate = new Date(event.date); // date is mapped from start_at in EventContext
       return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear;
     });
 
     return {
       totalEvents: events.length,
-      totalGuests: guests.length,
+      totalGuests: events.reduce((acc, event) => acc + event.guest_count, 0),
       monthEvents: thisMonthEvents.length,
-      monthGuests: thisMonthGuests.length,
+      monthGuests: thisMonthEvents.reduce((acc, event) => acc + event.guest_count, 0),
     };
-  }, [events, guests, currentMonth, currentYear]);
+  }, [events, currentMonth, currentYear]);
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">

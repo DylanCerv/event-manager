@@ -215,7 +215,7 @@ export default function Creadores() {
       const finishedEvents = creatorEvents.filter(event => new Date(event.date) < now);
       
       // Calcular solicitudes de los usuarios del creador
-      let creatorRequests = allRequests.filter(request => creatorUserIds.includes(request.requested_by));
+      let creatorRequests = allRequests.filter(request => creatorUserIds.includes(request.creator_id));
       
       // Aplicar filtro de fecha a solicitudes si está seleccionado
       if (dateRange) {

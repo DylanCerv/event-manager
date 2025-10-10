@@ -417,7 +417,7 @@ export function Usuarios() {
       const finishedEvents = userEvents.filter(event => new Date(event.date) < now);
       
       // Calcular solicitudes del usuario
-      let userRequests = requests.filter(request => request.requested_by === user.id);
+      let userRequests = requests.filter(request => request.creator_id ===  Number(user.id));
       
       // Aplicar filtro de fecha a solicitudes si está seleccionado
       if (dateFilter !== 'all') {
@@ -519,9 +519,9 @@ export function Usuarios() {
 
       // 3. Eliminar todas las solicitudes hechas por el usuario
       const requests = await storage.getEventRequests();
-      const userRequests = requests.filter(request => request.requested_by === userId);
+      const userRequests = requests.filter(request => request.creator_id === Number(userId));
       for (const request of userRequests) {
-        await storage.deleteEventRequest(request.id);
+        await storage.deleteEventRequest(request.id.toString());
       }
 
       // 4. Eliminar EventBooks del usuario

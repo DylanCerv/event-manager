@@ -6,9 +6,13 @@ const token = sessionStorage.getItem('auth_token');
 /**
  * Get all Bolt Events
  */
-export const getBoltEventsAPI = async (): Promise<any> => {
+export const getBoltEventsAPI = async ({ queryParams }: { queryParams?: { include_requests?: boolean } }): Promise<any> => {
     try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/bolt-events`, {
+        const urlParams = new URLSearchParams();
+        if (queryParams?.include_requests) urlParams.append('include_requests', 'true');
+        let url = `${import.meta.env.VITE_API_URL}/bolt-events?${urlParams.toString()}`;
+        
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',

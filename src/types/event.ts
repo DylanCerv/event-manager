@@ -8,7 +8,8 @@ export interface Event {
   logo_url?: string;
   created_at: string;
   created_by: string;
-  request_status?: 'pending' | 'approved' | 'rejected';
+  status?: 'pending' | 'approved' | 'rejected';
+  request?: EventRequest;
   qr_access_active: boolean;
   is_finalized: boolean;
 }
@@ -163,11 +164,31 @@ export interface EventFormData {
 }
 
 export interface EventRequest {
-  id: string;
-  event_id: string;
+  id: number;
+  bolt_event_id: number;
+  creator_id: number;
+  request_details?: string;
+  processed: boolean;
   status: 'pending' | 'approved' | 'rejected';
-  requested_by: string;
-  processed_by?: string;
-  processed_at?: string;
   created_at: string;
+  updated_at: string;
+  creator?: {
+    id: number;
+    name?: string;
+    last_name?: string;
+    username?: string;
+    email?: string;
+    country?: string;
+    city?: string;
+    address?: string;
+    phone?: string;
+    company?: string;
+    commission_percentage?: number;
+    role_id?: number;
+    creator_id?: number;
+    status?: string;
+    email_verified_at?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
 }

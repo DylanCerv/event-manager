@@ -63,8 +63,8 @@ const mapApiEventToLocal = (apiEvent: any): Event => ({
     logo_url: apiEvent.logo || undefined,
     qr_access_active: apiEvent.qr_access_active,
     is_finalized: apiEvent.is_finalized,
-    request_status: apiEvent.status === 'scheduled' ? 'approved' :
-        apiEvent.status === 'cancelled' ? 'rejected' : 'pending',
+    status: apiEvent.status,
+    request: apiEvent.request || undefined,
 });
 
 // Provider component
@@ -86,7 +86,11 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLoading(true);
             setError(null);
 
-            const response = await getBoltEventsAPI();
+            const response = await getBoltEventsAPI({
+                queryParams: {
+                    include_requests: true
+                }
+            });
             const apiEvents = response?.data || [];
 
             // Map API response to local Event format

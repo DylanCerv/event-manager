@@ -1,53 +1,139 @@
-import React from 'react';
-import { InboxIcon, Clock, CheckCircle, XCircle, QrCode, Loader2, Download, Trash2, Archive, RotateCcw, Filter } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { InboxIcon, Clock, CheckCircle, XCircle, QrCode, Loader2, Download, Trash2, Archive, RotateCcw, Filter, Calendar, Users, CalendarCheck, UserCheck, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { storage } from '../lib/storage';
+import { useEvents } from '../contexts/EventContext';
 import { generateGuestQRPDF } from '../lib/qr';
-import { commissionsStorage } from '../lib/commissions-storage';
-import { creatorsStorage } from '../lib/creators-storage';
-import type { Event as CustomEvent, EventRequest } from '../types/event';
+import { getEventGuestsByEventIdAPI } from '../endpoints/eventGuest';
+import { createEventRequestAPI, updateEventRequestStatusAPI, deleteEventRequestAPI } from '../endpoints/eventRequest';
+
+// Definir interfaces para trabajar con la respuesta del API
+interface Creator {
+  id: number;
+  name?: string;
+  last_name?: string;
+  company?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  username?: string;
+}
+
+interface EventRequest {
+  id: number;
+  bolt_event_id: number;
+  creator_id: number;
+  status: 'pending' | 'approved' | 'rejected';
+  processed: boolean;
+  created_at: string;
+  updated_at: string;
+  creator?: Creator;
+  request_details?: string;
+  bolt_event?: BoltEvent;
+}
+
+interface BoltEvent {
+  id: number;
+  name: string;
+  location: string;
+  start_at: string;
+  end_at: string;
+  host_name: string;
+  guest_count: number;
+  logo: string | null;
+  description: string;
+  is_public: boolean;
+  is_finalized: boolean;
+  user_id: number;
+  creator_id: number;
+  qr_access_active: boolean;
+  welcome_message: string | null;
+  rejection_message: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  request: EventRequest | null;
+  creator?: {
+    id: number;
+    first_name?: string;
+    last_name?: string;
+    company?: string;
+    country?: string;
+    phone?: string;
+    email?: string;
+  };
+}
+
+import type { Event as CustomEvent } from '../types/event';
 
 export function Requests() {
-  const { user, role } = useAuth();
-  const [events, setEvents] = React.useState<CustomEvent[]>([]);
-  const [requests, setRequests] = React.useState<EventRequest[]>([]);
-  const [users, setUsers] = React.useState<any[]>([]);
-  const [creators, setCreators] = React.useState<any[]>([]);
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<string | null>(null);
-  const [deleteType, setDeleteType] = React.useState<'event' | 'request'>('event');
-  const [activeTab, setActiveTab] = React.useState<'active' | 'archived'>('active');
-  const [archivedRequests, setArchivedRequests] = React.useState<string[]>([]);
-  const [dateFilter, setDateFilter] = React.useState<'all' | 'week' | 'month' | 'year' | 'specific'>('all');
-  const [specificDate, setSpecificDate] = React.useState<string>('');
-  const [selectedYear, setSelectedYear] = React.useState<number>(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = React.useState<number>(new Date().getMonth() + 1);
-  const [mainTab, setMainTab] = React.useState<'eventos' | 'canjes'>('eventos');
-  const [adminStats, setAdminStats] = React.useState({
+  const { role } = useAuth();
+  const { events, refreshEvents } = useEvents();
+  const [isLoading, setIsLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | undefined | null>(undefined);
+  const [deleteType, setDeleteType] = useState<'event' | 'request'>('event');
+  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
+  const [archivedRequests, setArchivedRequests] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<'all' | 'week' | 'month' | 'year' | 'specific'>('all');
+  const [specificDate, setSpecificDate] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  const [mainTab, setMainTab] = useState<'eventos' | 'canjes'>('eventos');
+  const [statistics, setStatistics] = useState({
     total: 0,
     pending: 0,
     approved: 0,
     rejected: 0
   });
-  const [superAdminStats, setSuperAdminStats] = React.useState({
-    total: 0,
-    approved: 0,
-    rejected: 0,
-    pending: 0
-  });
-  const [prizeRequests, setPrizeRequests] = React.useState<any[]>([]);
-  const [prizeRequestsStats, setPrizeRequestsStats] = React.useState({
+  const [prizeRequests, setPrizeRequests] = useState<any[]>([]);
+  const [prizeRequestsStats, setPrizeRequestsStats] = useState({
     total: 0,
     pending: 0,
     approved: 0,
     rejected: 0
+  });
+  const [eventsStats, setEventsStats] = useState({
+    totalEvents: 0,
+    totalGuests: 0,
+    monthEvents: 0,
+    monthGuests: 0
   });
 
-  React.useEffect(() => {
-    loadEvents();
+  useEffect(() => {
+    refreshEvents();
     loadArchivedRequests();
     loadPrizeRequests();
+    refreshEvents(); // Cargar eventos desde el contexto
   }, []);
+  
+  // Usar eventos del contexto
+  useEffect(() => {
+    if (events && events.length > 0) {
+      
+      // Calcular estadísticas de eventos
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      
+      const thisMonthEvents = events.filter(event => {
+        const eventDate = new Date(event.date);
+        return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear;
+      });
+      
+      setEventsStats({
+        totalEvents: events.length,
+        totalGuests: events.reduce((acc, event) => acc + event.guest_count, 0),
+        monthEvents: thisMonthEvents.length,
+        monthGuests: thisMonthEvents.reduce((acc, event) => acc + event.guest_count, 0)
+      });
+
+      console.log('events', events);
+      setStatistics({
+        total: events.length,
+        pending: events.filter(event => event.request?.status === 'pending').length,
+        approved: events.filter(event => event.request?.status === 'approved').length,
+        rejected: events.filter(event => event.request?.status === 'rejected').length
+      });
+    }
+  }, [events]);
 
   // Cargar solicitudes de premios desde localStorage
   const loadPrizeRequests = () => {
@@ -207,141 +293,37 @@ export function Requests() {
     setArchivedRequests(archivedIds);
   };
 
-  // Función para obtener información del usuario dueño del evento
-  const getEventOwnerInfo = (eventCreatedBy: string) => {
-    const owner = users.find(u => u.id === eventCreatedBy);
-    if (owner) {
-      return {
-        name: `${owner.firstName} ${owner.lastName}`,
-        company: owner.company,
-        email: owner.email,
-        username: owner.username,
-        createdBy: owner.createdBy,
-        country: owner.country,
-        phone: owner.phone
-      };
-    }
-    return {
-      name: eventCreatedBy,
-      company: 'N/A',
-      email: 'N/A', 
-      username: 'N/A',
-      createdBy: 'N/A',
-      country: 'N/A',
-      phone: 'N/A'
-    };
-  };
-
-  // Función para obtener información del creador del usuario
-  const getUserCreatorInfo = (createdBy: string) => {
-    const creator = creators.find(c => c.id === createdBy || c.username === createdBy);
-    if (creator) {
-      return `${creator.firstName} ${creator.lastName}`;
-    }
-    return createdBy || 'Sin información';
-  };
-
-  // Función para obtener información del usuario que solicita el canje
-  const getPrizeRequestUserInfo = (userId: string) => {
-    // Buscar en admin_users
-    const adminUser = users.find(u => u.id === userId);
-    if (adminUser) {
-      return {
-        name: `${adminUser.firstName} ${adminUser.lastName}`,
-        company: adminUser.company,
-        email: adminUser.email,
-        type: 'Administrador',
-        createdBy: adminUser.createdBy
-      };
-    }
-    
-    // Buscar en creators_data
-    const creator = creators.find(c => c.id === userId);
-    if (creator) {
-      return {
-        name: `${creator.firstName} ${creator.lastName}`,
-        company: creator.company || 'N/A',
-        email: creator.email,
-        type: 'Creador',
-        createdBy: creator.createdBy || 'N/A'
-      };
-    }
-    
-    return {
-      name: userId,
-      company: 'N/A',
-      email: 'N/A',
-      type: 'Desconocido',
-      createdBy: 'N/A'
-    };
-  };
-
-  const loadEvents = async () => {
-    try {
-      const allEvents = await storage.getEvents();
-      
-      // Cargar usuarios para mostrar información completa
-      const allUsers = await storage.getUsers();
-      setUsers(allUsers);
-      
-      // Cargar creadores para mostrar información completa
-      const allCreators = await creatorsStorage.getCreators();
-      setCreators(allCreators);
-      
-      // Para SUPER_ADMIN mostrar todas las solicitudes, para otros usuarios solo las suyas
-      let requestsToShow;
-      let allRequestsForStats;
-      
-      if (role?.name === 'SUPER_ADMIN') {
-        allRequestsForStats = await storage.getEventRequests();
-        requestsToShow = allRequestsForStats;
-        
-        const approvedRequests = allRequestsForStats.filter(r => r.status === 'approved');
-        
-        setSuperAdminStats({
-          total: allRequestsForStats.length,
-          approved: approvedRequests.length,
-          rejected: allRequestsForStats.filter(r => r.status === 'rejected').length,
-          pending: allRequestsForStats.filter(r => r.status === 'pending').length
-        });
-      } else {
-        requestsToShow = await storage.getEventRequestsByUser();
-        allRequestsForStats = requestsToShow;
-        
-        setAdminStats({
-          total: requestsToShow.length,
-          pending: requestsToShow.filter(r => r.status === 'pending').length,
-          approved: requestsToShow.filter(r => r.status === 'approved').length,
-          rejected: requestsToShow.filter(r => r.status === 'rejected').length
-        });
-      }
-      
-      setEvents(allEvents);
-      // Sort requests by creation date (newest first)
-      const sortedRequests = requestsToShow.sort((a, b) => 
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      setRequests(sortedRequests);
-      
-      // Update event status based on user's requests only
-      const updatedEvents = allEvents.map(event => ({
-        ...event,
-        request_status: requestsToShow.find(r => r.event_id === event.id)?.status
-      }));
-      
-      setEvents(updatedEvents);
-    } catch (error) {
-      console.error('Error loading events:', error);
-    }
-  };
-
   const handleRequestAccess = async (eventId: string) => {
     try {
       setIsLoading(true);
-      await storage.createEventRequest(eventId);
-      await loadEvents();
+      
+      // Obtener el ID del usuario actual del sessionStorage
+      const userData = sessionStorage.getItem('user');
+      if (!userData) {
+        throw new Error('Usuario no autenticado');
+      }
+      
+      const user = JSON.parse(userData);
+      const userId = parseInt(user.id);
+      
+      console.log('Solicitando acceso para evento:', eventId, 'con usuario:', userId);
+      
+      // Crear la solicitud de evento usando el endpoint
+      const response = await createEventRequestAPI({
+        bolt_event_id: parseInt(eventId),
+        creator_id: userId,
+        request_details: 'Solicitud de acceso a evento'
+      });
+      
+      console.log('Respuesta de la solicitud:', response);
+      
+      await refreshEvents();
+      
+      // Mostrar mensaje de éxito
+      alert('Solicitud enviada correctamente');
     } catch (error) {
       console.error('Error requesting access:', error);
+      alert('Error al solicitar acceso al evento');
     } finally {
       setIsLoading(false);
     }
@@ -350,14 +332,9 @@ export function Requests() {
   const handleProcessRequest = async (requestId: string, status: 'approved' | 'rejected') => {
     try {
       setIsLoading(true);
-      await storage.updateEventRequest(requestId, status);
       
-      // Generate commission automatically when request is approved
-      if (status === 'approved') {
-        await generateCommissionForRequest(requestId);
-      }
-      
-      await loadEvents();
+      // Actualizar el estado de la solicitud usando el endpoint
+      await updateEventRequestStatusAPI(parseInt(requestId), status, true);
     } catch (error) {
       console.error('Error processing request:', error);
       alert('Error al procesar la solicitud');
@@ -366,64 +343,7 @@ export function Requests() {
     }
   };
 
-  const generateCommissionForRequest = async (requestId: string) => {
-    try {
-      // Find the request and event
-      const request = requests.find(r => r.id === requestId);
-      if (!request) {
-        console.warn('Request not found for commission generation');
-        return;
-      }
-
-      const event = events.find(e => e.id === request.event_id) as CustomEvent | undefined;
-      if (!event) {
-        console.warn('Event not found for commission generation');
-        return;
-      }
-
-      // Validate event has guests
-      if (!event.guest_count || event.guest_count <= 0) {
-        console.warn('No commission generated: event has no guests');
-        return;
-      }
-
-      // Get event owner info
-      const eventOwner = getEventOwnerInfo(event.created_by);
-      if (!eventOwner.createdBy) {
-        console.warn('No commission generated: user has no creator assigned');
-        return;
-      }
-
-      // Get creator info to get commission percentage
-      const creators = await creatorsStorage.getCreators();
-      const creator = creators.find(c => c.id === eventOwner.createdBy);
-      if (!creator) {
-        console.warn('No commission generated: creator not found');
-        return;
-      }
-
-      // Check if creator is active
-      if (creator.status !== 'active') {
-        console.warn('No commission generated: creator is not active');
-        return;
-      }
-
-      // Generate commission
-      await commissionsStorage.generateCommissionFromRequest(
-        requestId,
-        event.id,
-        request.requested_by,
-        creator.id,
-        event.guest_count,
-        creator.commissionPercentage
-      );
-
-      console.log(`Commission generated for creator ${creator.firstName} ${creator.lastName}: ${creator.commissionPercentage}% of ${event.guest_count} guests`);
-    } catch (error) {
-      console.error('Error generating commission:', error);
-      // Don't throw error to avoid breaking the approval process
-    }
-  };
+  // La generación de comisiones ahora se maneja en el backend
 
   // Función helper para sanitizar nombres de archivo
   const sanitizeFileName = (name: string) => {
@@ -439,21 +359,22 @@ export function Requests() {
     try {
       setIsLoading(true);
       
-      // Get all guests for this event
-      const guests = await storage.getEventGuests(eventId);
+      // Obtener todos los invitados para este evento usando el endpoint
+      const response = await getEventGuestsByEventIdAPI(parseInt(eventId));
+      const guests = response?.data || [];
       
-      // Get event details for the PDF
+      // Obtener detalles del evento para el PDF
       const event = events.find(e => e.id === eventId) as CustomEvent | undefined;
       
-      // Generate PDF with QR codes
+      // Generar PDF con códigos QR
       const pdfBlob = await generateGuestQRPDF(guests, event?.name);
       
-      // Create download link
+      // Crear enlace de descarga
       const url = URL.createObjectURL(pdfBlob);
       const link = document.createElement('a');
       link.href = url;
       
-      // Generate descriptive filename
+      // Generar nombre descriptivo del archivo
       if (event) {
         const eventDate = new Date(event.date).toLocaleDateString('es-ES', {
           day: '2-digit',
@@ -481,18 +402,7 @@ export function Requests() {
     }
   };
 
-  const handleDeleteEvent = async (eventId: string) => {
-    try {
-      setIsLoading(true);
-      await storage.deleteEvent(eventId);
-      await loadEvents();
-      setShowDeleteConfirm(null);
-    } catch (error) {
-      console.error('Error deleting event:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Esta función ya no es necesaria porque usamos los endpoints directamente
 
   // Archivar solicitud en lugar de eliminar
   const handleArchiveRequest = async (requestId: string) => {
@@ -500,7 +410,7 @@ export function Requests() {
       setIsLoading(true);
       const newArchivedRequests = [...archivedRequests, requestId];
       saveArchivedRequests(newArchivedRequests);
-      await loadEvents();
+      await refreshEvents();
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error archiving request:', error);
@@ -516,7 +426,7 @@ export function Requests() {
       setIsLoading(true);
       const newArchivedRequests = archivedRequests.filter(id => id !== requestId);
       saveArchivedRequests(newArchivedRequests);
-      await loadEvents();
+      await refreshEvents();
     } catch (error) {
       console.error('Error unarchiving request:', error);
       alert('Error al desarchivar la solicitud');
@@ -526,11 +436,14 @@ export function Requests() {
   };
 
   // Filtrar solicitudes por fecha
-  const filterRequestsByDate = (requests: EventRequest[]) => {
+  const filterRequestsByDate = (events: CustomEvent[]) => {
     const now = new Date();
     
-    return requests.filter(request => {
-      const requestDate = new Date(request.created_at);
+    return events.filter(event => {
+      // Solo considerar eventos que tienen solicitudes
+      if (!event.request) return false;
+      
+      const requestDate = new Date(event.request.created_at);
       
       switch (dateFilter) {
         case 'week':
@@ -549,29 +462,110 @@ export function Requests() {
       }
     });
   };
-
-  // Obtener solicitudes filtradas según pestaña activa
+  
+  // Obtener solicitudes filtradas según pestaña activa y filtros de fecha
   const getFilteredRequests = () => {
-    let filteredRequests;
+    // Primero filtrar eventos que tienen solicitudes
+    const eventsWithRequests = events.filter(event => event.request !== null);
+    
+    // Luego aplicar filtro de archivado/activo
+    let filteredEvents;
     
     if (activeTab === 'active') {
-      filteredRequests = requests.filter(request => !archivedRequests.includes(request.id));
+      filteredEvents = eventsWithRequests.filter(event => 
+        event.request && !archivedRequests.includes(event.request.id.toString())
+      );
     } else {
-      filteredRequests = requests.filter(request => archivedRequests.includes(request.id));
+      filteredEvents = eventsWithRequests.filter(event => 
+        event.request && archivedRequests.includes(event.request.id.toString())
+      );
     }
     
-    return filterRequestsByDate(filteredRequests);
+    // Finalmente aplicar filtros de fecha
+    return filterRequestsByDate(filteredEvents);
   };
 
-  const handleDeleteRequest = async (eventId: string) => {
+  // Renderizar botones de acción para cada evento
+  const renderEventActions = (event: CustomEvent) => {
+    // Verificar si existe una solicitud para este evento
+    const request = event.request;
+    const isPastEvent = new Date(event.date) < new Date();
+
+    if (!request) {
+      // No hay solicitud, mostrar botón para solicitar
+      return (
+        <button
+          onClick={() => handleRequestAccess(event.id)}
+          disabled={isLoading || isPastEvent}
+          className={`inline-flex items-center justify-center px-3 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white ${
+            isPastEvent
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
+          }`}
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <QrCode className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+          )}
+          Solicitar Links y QR
+        </button>
+      );
+    } else if (request) {
+      // Hay una solicitud, mostrar su estado
+      switch (request.status) {
+        case 'pending':
+          return (
+            <>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                <Clock className="h-4 w-4 mr-1" />
+                Pendiente
+              </span>
+            </>
+          );
+        case 'approved':
+          return (
+            <button
+              onClick={() => handleGenerateQRCodes(event.id)}
+              disabled={isLoading || isPastEvent}
+              className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                isPastEvent
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
+              }`}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Descargar QR y Enlaces
+            </button>
+          );
+        case 'rejected':
+          return (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              <XCircle className="h-4 w-4 mr-1" />
+              Rechazado
+            </span>
+          );
+        default:
+          return null;
+      }
+    }
+    
+    return null;
+  };
+
+  const handleDeleteRequest = async (requestId: number) => {
     try {
       setIsLoading(true);
       
-      // Find and delete the request for this event
-      await storage.deleteEventRequestsByEventId(eventId);
+      // Eliminar la solicitud usando el endpoint
+      await deleteEventRequestAPI(requestId);
       
-      // Reload all data to ensure consistency across the system
-      await loadEvents();
+      // Recargar datos
+      await refreshEvents();
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting request:', error);
@@ -586,6 +580,89 @@ export function Requests() {
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Solicitudes</h1>
+          
+          {/* Estadísticas de eventos */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
+              <div className="p-3 sm:p-4">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Calendar className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <div className="ml-3 w-0 flex-1">
+                    <dl>
+                      <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
+                        Total de Eventos
+                      </dt>
+                      <dd className="text-lg sm:text-xl font-semibold text-gray-900">
+                        {eventsStats.totalEvents}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
+              <div className="p-3 sm:p-4">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Users className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <div className="ml-3 w-0 flex-1">
+                    <dl>
+                      <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
+                        Total de Invitados
+                      </dt>
+                      <dd className="text-lg sm:text-xl font-semibold text-gray-900">
+                        {eventsStats.totalGuests}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
+              <div className="p-3 sm:p-4">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <CalendarCheck className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <div className="ml-3 w-0 flex-1">
+                    <dl>
+                      <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
+                        Eventos Este Mes
+                      </dt>
+                      <dd className="text-lg sm:text-xl font-semibold text-gray-900">
+                        {eventsStats.monthEvents}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
+              <div className="p-3 sm:p-4">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <UserCheck className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <div className="ml-3 w-0 flex-1">
+                    <dl>
+                      <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
+                        Invitados Este Mes
+                      </dt>
+                      <dd className="text-lg sm:text-xl font-semibold text-gray-900">
+                        {eventsStats.monthGuests}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
           
           {/* Pestañas principales: Eventos / Canjes */}
           <div className="border-b border-gray-200 mb-8">
@@ -616,87 +693,88 @@ export function Requests() {
           {/* Contenido de Eventos (funcionalidad existente) */}
           {mainTab === 'eventos' && (
             <>
+              {/* Estadísticas de eventos */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
-              <div className="p-3 sm:p-4">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <InboxIcon className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <div className="ml-3 w-0 flex-1">
-                    <dl>
-                      <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
-                        Total de Solicitudes
-                      </dt>
-                      <dd className="text-lg sm:text-xl font-semibold text-gray-900">
-                        {superAdminStats.total}
-                      </dd>
-                    </dl>
+                <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
+                  <div className="p-3 sm:p-4">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <Calendar className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <div className="ml-3 w-0 flex-1">
+                        <dl>
+                          <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
+                            Total de Eventos
+                          </dt>
+                          <dd className="text-lg sm:text-xl font-semibold text-gray-900">
+                            {eventsStats.totalEvents}
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
-              <div className="p-3 sm:p-4">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <Clock className="h-5 w-5 text-yellow-400" />
-                  </div>
-                  <div className="ml-3 w-0 flex-1">
-                    <dl>
-                      <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
-                        Solicitudes Pendientes
-                      </dt>
-                      <dd className="text-lg sm:text-xl font-semibold text-gray-900">
-                        {superAdminStats.pending}
-                      </dd>
-                    </dl>
+                <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
+                  <div className="p-3 sm:p-4">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <Users className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <div className="ml-3 w-0 flex-1">
+                        <dl>
+                          <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
+                            Total de Invitados
+                          </dt>
+                          <dd className="text-lg sm:text-xl font-semibold text-gray-900">
+                            {eventsStats.totalGuests}
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
-              <div className="p-3 sm:p-4">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <CheckCircle className="h-5 w-5 text-green-400" />
-                  </div>
-                  <div className="ml-3 w-0 flex-1">
-                    <dl>
-                      <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
-                        Solicitudes Aprobadas
-                      </dt>
-                      <dd className="text-lg sm:text-xl font-semibold text-gray-900">
-                        {superAdminStats.approved}
-                      </dd>
-                    </dl>
+                <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
+                  <div className="p-3 sm:p-4">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <CalendarCheck className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <div className="ml-3 w-0 flex-1">
+                        <dl>
+                          <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
+                            Eventos Este Mes
+                          </dt>
+                          <dd className="text-lg sm:text-xl font-semibold text-gray-900">
+                            {eventsStats.monthEvents}
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
-              <div className="p-3 sm:p-4">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <XCircle className="h-5 w-5 text-red-400" />
-                  </div>
-                  <div className="ml-3 w-0 flex-1">
-                    <dl>
-                      <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
-                        Solicitudes Rechazadas
-                      </dt>
-                      <dd className="text-lg sm:text-xl font-semibold text-gray-900">
-                        {superAdminStats.rejected}
-                      </dd>
-                    </dl>
+                <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
+                  <div className="p-3 sm:p-4">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <UserCheck className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <div className="ml-3 w-0 flex-1">
+                        <dl>
+                          <dt className="text-xs sm:text-sm font-medium text-gray-500 truncate">
+                            Invitados Este Mes
+                          </dt>
+                          <dd className="text-lg sm:text-xl font-semibold text-gray-900">
+                            {eventsStats.monthGuests}
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
           
           <div className="bg-white shadow overflow-hidden sm:rounded-lg">
             <div className="px-4 py-5 sm:px-6">
@@ -724,7 +802,7 @@ export function Requests() {
                   >
                     <div className="flex items-center">
                       <InboxIcon className="h-4 w-4 mr-2" />
-                      Activas ({requests.filter(r => !archivedRequests.includes(r.id)).length})
+                      Activas ({events.filter(e => e.request && !archivedRequests.includes(e.request.id.toString())).length})
                     </div>
                   </button>
                   <button
@@ -752,7 +830,7 @@ export function Requests() {
                 
                 <select
                   value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value as any)}
+                  onChange={(e) => setDateFilter(e.target.value as 'all' | 'week' | 'month' | 'year' | 'specific')}
                   className="text-sm border border-gray-300 rounded-md px-3 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="all">Todas las fechas</option>
@@ -815,6 +893,122 @@ export function Requests() {
             </div>
             
             <div className="border-t border-gray-200">
+              {/* Sección de eventos desde el contexto */}
+              <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 className="text-lg font-medium leading-6 text-gray-900">Eventos Disponibles</h3>
+                <p className="mt-1 text-sm text-gray-500">Eventos que puedes gestionar como solicitudes</p>
+              </div>
+              
+              {events.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">
+                    No hay eventos disponibles
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    No se encontraron eventos en el sistema.
+                  </p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-200">
+                  {events.slice(0, 5).map((event) => {
+                    const isPastEvent = new Date(event.date) < new Date();
+                    const daysRemaining = (() => {
+                      const eventDate = new Date(event.date);
+                      const today = new Date();
+                      const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+                      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                      const diffTime = eventDateOnly.getTime() - todayOnly.getTime();
+                      return Math.round(diffTime / (1000 * 60 * 60 * 24));
+                    })();
+                    
+                    return (
+                      <li key={event.id} className="px-3 py-4 sm:px-6">
+                        <div className={`bg-gray-50 rounded-lg p-4 ${isPastEvent ? 'opacity-60' : ''}`}>
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
+                            <div className="flex-1">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
+                                <h4 className="text-base sm:text-lg font-medium text-gray-900">{event.name}</h4>
+                                <div className="flex items-center space-x-2">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {(() => {
+                                      if (isPastEvent) {
+                                        return (
+                                          <>
+                                            <Calendar className="w-3 h-3 mr-1" />
+                                            Evento finalizado
+                                          </>
+                                        );
+                                      } else if (daysRemaining === 0) {
+                                        return (
+                                          <>
+                                            <Calendar className="w-3 h-3 mr-1" />
+                                            ¡HOY!
+                                          </>
+                                        );
+                                      } else {
+                                        return (
+                                          <>
+                                            <Calendar className="w-3 h-3 mr-1" />
+                                            {daysRemaining} días restantes
+                                          </>
+                                        );
+                                      }
+                                    })()}
+                                  </span>
+                                  {event.is_finalized && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                      <Check className="w-3 h-3 mr-1" />
+                                      Finalizado
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="mt-2 text-xs sm:text-sm text-gray-600">
+                                <span className="font-medium">Fecha:</span> {new Date(event.date).toLocaleDateString('es-ES')}
+                                <span className="mx-2">•</span>
+                                <span className="font-medium">Ubicación:</span> {event.location || 'No especificada'}
+                                <span className="mx-2">•</span>
+                                <span className="font-medium">Invitados:</span> {event.guest_count}
+                              </div>
+                              
+                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                                <span className={`inline-flex items-center px-2 py-1 rounded-md ${
+                                  event.request?.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                                  event.request?.status === 'rejected' ? 'bg-red-100 text-red-800' : 
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {event.request?.status === 'approved' ? (
+                                    <><CheckCircle className="h-3 w-3 mr-1" /> Aprobado</>
+                                  ) : event.request?.status === 'rejected' ? (
+                                    <><XCircle className="h-3 w-3 mr-1" /> Rechazado</>
+                                  ) : (
+                                    <><Clock className="h-3 w-3 mr-1" /> Pendiente</>
+                                  )}
+                                </span>
+                                <span className={`inline-flex items-center px-2 py-1 rounded-md ${
+                                  event.qr_access_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  <QrCode className="h-3 w-3 mr-1" />
+                                  QR Access {event.qr_access_active ? 'Activo' : 'Inactivo'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              
+              {/* Sección de solicitudes existentes */}
+              <div className="px-4 py-5 sm:px-6 border-t border-b border-gray-200 mt-6">
+                <h3 className="text-lg font-medium leading-6 text-gray-900">Solicitudes de Eventos</h3>
+                <p className="mt-1 text-sm text-gray-500">Solicitudes de acceso a eventos</p>
+              </div>
+              
               {getFilteredRequests().length === 0 ? (
                 <div className="text-center py-12">
                   <InboxIcon className="mx-auto h-12 w-12 text-gray-400" />
@@ -829,38 +1023,36 @@ export function Requests() {
                 </div>
               ) : (
                 <ul className="divide-y divide-gray-200">
-                  {getFilteredRequests().map((request) => {
-                    const event = events.find(e => e.id === request.event_id);
-                    if (!event) return null; // Skip requests for non-existent events
+                  {getFilteredRequests().map((event) => {
+                    // Asegurarnos de que el evento tiene una solicitud
+                    if (!event.request) return null;
+                    
+                    const request = event.request;
+                    const isPastEvent = new Date(event.date) < new Date();
                     
                     return (
                       <li key={request.id} className="px-3 py-4 sm:px-6">
-                        <div className={`bg-gray-50 rounded-lg p-4 ${
-                          new Date(event.date) < new Date() ? 'opacity-60' : ''
-                        }`}>
+                        <div className={`bg-gray-50 rounded-lg p-4 ${isPastEvent ? 'opacity-60' : ''}`}>
                           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
                             <div className="flex-1">
                               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
                                 <h4 className="text-base sm:text-lg font-medium text-gray-900">{event.name}</h4>
                                 <span className="text-xs sm:text-sm font-medium text-indigo-600">
                                   Solicitado por: <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-md font-bold">
-                                    {getEventOwnerInfo(event.created_by).company}
+                                    {request.creator?.company || 'N/A'}
                                   </span>
                                 </span>
                               </div>
                               
                               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm text-gray-600">
                                 <div>
-                                  <span className="font-medium">País:</span> {getEventOwnerInfo(event.created_by).country || 'N/A'}
+                                  <span className="font-medium">País:</span> {request.creator?.country || 'N/A'}
                                 </div>
                                 <div>
-                                  <span className="font-medium">Teléfono:</span> {getEventOwnerInfo(event.created_by).phone || 'N/A'}
+                                  <span className="font-medium">Teléfono:</span> {request.creator?.phone || 'N/A'}
                                 </div>
                                 <div className="sm:col-span-2">
-                                  <span className="font-medium">Email:</span> {getEventOwnerInfo(event.created_by).email}
-                                </div>
-                                <div className="sm:col-span-2 text-purple-600">
-                                  <span className="font-medium">Creado por:</span> {getUserCreatorInfo(getEventOwnerInfo(event.created_by).createdBy)}
+                                  <span className="font-medium">Email:</span> {request.creator?.email || 'N/A'}
                                 </div>
                               </div>
                               
@@ -876,7 +1068,7 @@ export function Requests() {
                                 </span>
                               </div>
                               
-                              {new Date(event.date) < new Date() && (
+                              {isPastEvent && (
                                 <div className="mt-2 text-xs sm:text-sm text-red-600 font-medium bg-red-50 px-2 py-1 rounded-md">
                                   ⚠️ Esta solicitud ya no está disponible. El evento ha pasado.
                                 </div>
@@ -886,10 +1078,10 @@ export function Requests() {
                             <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
                               {request.status === 'pending' ? (
                                 <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                                  {new Date(event.date) >= new Date() ? (
+                                  {!isPastEvent ? (
                                     <>
                                       <button
-                                        onClick={() => handleProcessRequest(request.id, 'approved')}
+                                        onClick={() => handleProcessRequest(request.id.toString(), 'approved')}
                                         disabled={isLoading}
                                         className="inline-flex items-center justify-center px-3 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                                       >
@@ -897,7 +1089,7 @@ export function Requests() {
                                         Aprobar
                                       </button>
                                       <button
-                                        onClick={() => handleProcessRequest(request.id, 'rejected')}
+                                        onClick={() => handleProcessRequest(request.id.toString(), 'rejected')}
                                         disabled={isLoading}
                                         className="inline-flex items-center justify-center px-3 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                                       >
@@ -926,7 +1118,7 @@ export function Requests() {
                               
                               {activeTab === 'active' ? (
                                 <button
-                                  onClick={() => handleArchiveRequest(request.id)}
+                                  onClick={() => handleArchiveRequest(request.id.toString())}
                                   disabled={isLoading}
                                   className="inline-flex items-center justify-center px-3 py-2 border border-orange-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-orange-700 bg-white hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
                                 >
@@ -935,7 +1127,7 @@ export function Requests() {
                                 </button>
                               ) : (
                                 <button
-                                  onClick={() => handleUnarchiveRequest(request.id)}
+                                  onClick={() => handleUnarchiveRequest(request.id.toString())}
                                   disabled={isLoading}
                                   className="inline-flex items-center justify-center px-3 py-2 border border-green-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                                 >
@@ -943,6 +1135,18 @@ export function Requests() {
                                   {isLoading ? 'Desarchivando...' : 'Desarchivar'}
                                 </button>
                               )}
+                              
+                              <button
+                                onClick={() => {
+                                  setShowDeleteConfirm(request.id);
+                                  setDeleteType('request');
+                                }}
+                                disabled={isLoading}
+                                className="inline-flex items-center justify-center px-3 py-2 border border-red-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                              >
+                                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                Eliminar
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1084,17 +1288,17 @@ export function Requests() {
                                   <div className="text-xs sm:text-sm text-gray-600">
                                     <span className="font-medium">🏢 Empresa:</span> 
                                     <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-md font-bold ml-1">
-                                      {getPrizeRequestUserInfo(request.userId).company}
+                                      {request.company || 'N/A'}
                                     </span>
                                   </div>
                                   <div className="text-xs sm:text-sm text-gray-600">
-                                    <span className="font-medium">👤 Solicitante:</span> {getPrizeRequestUserInfo(request.userId).name}
+                                    <span className="font-medium">👤 Solicitante:</span> {request.userName || 'N/A'}
                                   </div>
                                   <div className="text-xs sm:text-sm text-purple-600">
-                                    <span className="font-medium">👨‍💼 Creado por:</span> {getUserCreatorInfo(getPrizeRequestUserInfo(request.userId).createdBy)}
+                                    <span className="font-medium">👨‍💼 Creado por:</span> {request.creatorName || 'N/A'}
                                   </div>
                                   <div className="text-xs sm:text-sm text-gray-500">
-                                    <span className="font-medium">📧 Email:</span> {getPrizeRequestUserInfo(request.userId).email}
+                                    <span className="font-medium">📧 Email:</span> {request.email || 'N/A'}
                                   </div>
                                 </div>
                                 
@@ -1104,7 +1308,7 @@ export function Requests() {
                                     <span className="ml-1">{new Date(request.requestDate).toLocaleDateString('es-ES')}</span>
                                   </span>
                                   <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800">
-                                    {getPrizeRequestUserInfo(request.userId).type}
+                                    {request.userType || 'Usuario'}
                                   </span>
                                 </div>
                               </div>
@@ -1174,7 +1378,7 @@ export function Requests() {
                       Total de Solicitudes
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {adminStats.total}
+                      {statistics.total}
                     </dd>
                   </dl>
                 </div>
@@ -1194,7 +1398,7 @@ export function Requests() {
                       Pendientes
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {adminStats.pending}
+                      {statistics.pending}
                     </dd>
                   </dl>
                 </div>
@@ -1214,7 +1418,7 @@ export function Requests() {
                       Aprobadas
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {adminStats.approved}
+                      {statistics.approved}
                     </dd>
                   </dl>
                 </div>
@@ -1234,7 +1438,7 @@ export function Requests() {
                       Rechazadas
                     </dt>
                     <dd className="text-lg font-semibold text-gray-900">
-                      {adminStats.rejected}
+                      {statistics.rejected}
                     </dd>
                   </dl>
                 </div>
@@ -1257,70 +1461,33 @@ export function Requests() {
                     <p className="mt-1 text-sm text-gray-500">
                       Fecha: {new Date(event.date).toLocaleDateString('es-ES')} • {event.guest_count} invitados
                     </p>
-                    {new Date(event.date) < new Date() && (
+                    {new Date(event.date) < new Date() ? (
                       <div className="mt-2 text-sm text-red-600 font-medium">
                         Esta solicitud ya no está disponible. El evento ha pasado.
                       </div>
+                    ) : (
+                      <>
+                        {event.request && (
+                            <button
+                              onClick={() => {
+                                setShowDeleteConfirm(event?.request?.id);
+                                setDeleteType('request');
+                              }}
+                              disabled={isLoading}
+                              className="inline-flex mt-3 items-center justify-center px-3 py-2 border border-red-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Eliminar Solicitud
+                            </button>
+                          )}
+                      </>
                     )}
                   </div>
                   
-                  {!event.request_status ? (
-                    <button
-                      disabled={new Date(event.date) < new Date()}
-                      onClick={() => handleRequestAccess(event.id)}
-                      className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                        new Date(event.date) < new Date()
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
-                      }`}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <QrCode className="h-4 w-4 mr-2" />
-                      )}
-                      {new Date(event.date) < new Date() ? 'Evento Pasado' : 'Solicitar Links y QR'}
-                    </button>
-                  ) : event.request_status === 'pending' ? (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                      <Clock className="h-4 w-4 mr-1" />
-                      Pendiente
-                    </span>
-                  ) : event.request_status === 'approved' ? (
-                    <button
-                      disabled={new Date(event.date) < new Date()}
-                      onClick={() => handleGenerateQRCodes(event.id)}
-                      className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                        new Date(event.date) < new Date()
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500'
-                      }`}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Download className="h-4 w-4 mr-2" />
-                      )}
-                      {new Date(event.date) < new Date() ? 'Evento Pasado' : 'Descargar QR y Enlaces'}
-                    </button>
-                  ) : (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Rechazado
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center space-x-2 mt-4">
-                  <button
-                    onClick={() => {
-                      setDeleteType('request');
-                      setShowDeleteConfirm(event.id);
-                    }}
-                    className="inline-flex items-center px-3 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Eliminar Solicitud
-                  </button>
+                  <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">                    
+                    {/* Renderizar botones de acción según el estado de la solicitud */}
+                    {renderEventActions(event)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1352,11 +1519,7 @@ export function Requests() {
               <button
                 type="button"
                 onClick={() => {
-                  if (deleteType === 'request') {
                     handleDeleteRequest(showDeleteConfirm);
-                  } else {
-                    handleDeleteEvent(showDeleteConfirm);
-                  }
                 }}
                 disabled={isLoading}
                 className="inline-flex w-full justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"

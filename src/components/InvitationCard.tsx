@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Calendar, Clock, MapPin, Phone, Mail, Facebook, Instagram, Sparkles, Heart, Check, Utensils, Music, Gift, Timer, Accessibility, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Importar todas las opciones de fondos disponibles
@@ -40,7 +40,7 @@ interface InvitationCardProps {
   onUpdateGuest: (guest: Partial<Guest>) => void;
 }
 
-export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdateGuest }: InvitationCardProps) {
+function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdateGuest }: InvitationCardProps) {
   
   // Función para obtener el fondo correcto según tipo de evento y opción seleccionada
   const getBackgroundImage = (eventType: string, backgroundOption: number = 1) => {
@@ -60,35 +60,35 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
     }
   };
 
-  const [timeLeft, setTimeLeft] = React.useState('');
-  const [showHealthForm, setShowHealthForm] = React.useState(!guest.health_form_submitted);
-  const [showMobilityForm, setShowMobilityForm] = React.useState(!guest.mobility_form_submitted);
-  const [dietaryRestrictions, setDietaryRestrictions] = React.useState(guest.dietary_restrictions || '');
-  const [mobilityRestrictions, setMobilityRestrictions] = React.useState(guest.mobility_restrictions || '');
-  const [imageBrightness, setImageBrightness] = React.useState<'light' | 'dark' | 'medium'>('medium');
-  const [showContent, setShowContent] = React.useState(false);
+  const [timeLeft, setTimeLeft] = useState('');
+  const [showHealthForm, setShowHealthForm] = useState(!guest.health_form_submitted);
+  const [showMobilityForm, setShowMobilityForm] = useState(!guest.mobility_form_submitted);
+  const [dietaryRestrictions, setDietaryRestrictions] = useState(guest.dietary_restrictions || '');
+  const [mobilityRestrictions, setMobilityRestrictions] = useState(guest.mobility_restrictions || '');
+  const [imageBrightness, setImageBrightness] = useState<'light' | 'dark' | 'medium'>('medium');
+  const [showContent, setShowContent] = useState(false);
   
   // Estados para el carrusel
-  const [currentSlide, setCurrentSlide] = React.useState(0);
-  const [isTransitioning, setIsTransitioning] = React.useState(false);
-  const [isPaused, setIsPaused] = React.useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   // Obtener el tema seleccionado o usar el tema por defecto
   const template = getTemplateById(eventCard.event_type || 'wedding') || getTemplateById('wedding')!;
   const themeColors = eventCard.theme_colors || template.colors;
   
   // Obtener la imagen de fondo seleccionada
-  const selectedBackground = getBackgroundImage(eventCard.event_type || 'wedding', eventCard.background_option || 1);
+  const selectedBackground = getBackgroundImage(eventCard.event_type || 'wedding', typeof eventCard.background_option === 'string' ? parseInt(eventCard.background_option) : (eventCard.background_option || 1));
   
   // Determinar el modelo de layout (por defecto 'cover' para compatibilidad)
-  const layoutModel = eventCard.layout_model || 'cover';
+  const layoutModel = eventCard.card_model || 'cover';
 
   // Función para renderizar recomendaciones categorizadas
   const renderRecommendations = (styleProps: any = {}) => {
     // Si tiene el nuevo sistema de recomendaciones, usarlo
-    if (eventCard.recommendation_items && eventCard.recommendation_items.length > 0) {
+    if (eventCard.event_recommendations && eventCard.event_recommendations.length > 0) {
       // Agrupar por categoría
-      const groupedRecommendations = eventCard.recommendation_items.reduce((acc, item) => {
+      const groupedRecommendations = eventCard.event_recommendations.reduce((acc, item) => {
         if (!acc[item.category_id]) {
           acc[item.category_id] = {
             category: {
@@ -101,7 +101,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
         }
         acc[item.category_id].items.push(item);
         return acc;
-      }, {} as Record<string, { category: { id: string; name: string; icon: string }; items: typeof eventCard.recommendation_items }>);
+      }, {} as Record<string, { category: { id: string; name: string; icon: string }; items: typeof eventCard.event_recommendations }>);
 
       return (
         <div className="bg-cover bg-center bg-no-repeat rounded-lg p-3 border border-indigo-100/50" style={styleProps}>
@@ -185,7 +185,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   };
 
   // Auto-play cada 3 segundos
-  React.useEffect(() => {
+  useEffect(() => {
     if (totalSlides <= 1 || isPaused) return;
     
     const interval = setInterval(() => {
@@ -196,7 +196,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   }, [currentSlide, totalSlides, isPaused, isTransitioning]);
 
   // Función para detectar luminosidad de la imagen
-  const detectImageBrightness = React.useCallback((imageUrl: string) => {
+  const detectImageBrightness = useCallback((imageUrl: string) => {
     if (!imageUrl) return;
     
     const img = new Image();
@@ -244,7 +244,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
     img.src = imageUrl;
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const calculateTimeLeft = () => {
       const eventDate = new Date(event.date);
       const now = new Date();
@@ -265,14 +265,14 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   }, [event.date]);
 
   // Detectar luminosidad cuando cambie la imagen de fondo
-  React.useEffect(() => {
-    if (layoutModel === 'fixed-background' && eventCard.cover_image) {
-      detectImageBrightness(eventCard.cover_image);
+  useEffect(() => {
+    if (layoutModel === 'fixed-background' && eventCard.main_image) {
+      detectImageBrightness(eventCard.main_image);
     }
-  }, [layoutModel, eventCard.cover_image, detectImageBrightness]);
+  }, [layoutModel, eventCard.main_image, detectImageBrightness]);
 
   // Animación de entrada retardada para modelo de fondo fijo
-  React.useEffect(() => {
+  useEffect(() => {
     if (layoutModel === 'fixed-background') {
       setShowContent(false);
       const timer = setTimeout(() => {
@@ -286,10 +286,10 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   }, [layoutModel]);
 
   // Renderizar modelo portada
-  if (eventCard.layout_model === 'portada') {
+  if (eventCard.card_model === 'portada') {
     return (
       <ThemeStyles 
-        eventType={eventCard.event_type} 
+        eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
         themeColors={themeColors}
       >
         <div 
@@ -546,7 +546,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             <div className="flex justify-center pt-6 md:pt-10 pb-4 md:pb-6 px-4 md:px-8">
               <div className="relative overflow-hidden rounded-lg md:rounded-xl shadow-2xl w-[90%] max-w-[500px] h-48 md:h-72">
                 <img
-                  src={eventCard.cover_image}
+                  src={eventCard.main_image}
                   alt="Portada del evento"
                   className="w-full h-full object-cover"
                 />
@@ -627,7 +627,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
               {/* Separador decorativo específico por tipo de evento */}
               <SectionSeparator 
-                eventType={eventCard.event_type} 
+                eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
                 themeColors={{
                   primary: themeColors.primary,
                   secondary: themeColors.secondary,
@@ -685,7 +685,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
               {/* Separador decorativo específico por tipo de evento */}
               <SectionSeparator 
-                eventType={eventCard.event_type} 
+                eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
                 themeColors={{
                   primary: themeColors.primary,
                   secondary: themeColors.secondary,
@@ -740,7 +740,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
                 {/* Separador decorativo */}
                 <SectionSeparator 
-                  eventType={eventCard.event_type} 
+                  eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
                   themeColors={{
                     primary: themeColors.primary,
                     secondary: themeColors.secondary,
@@ -793,12 +793,12 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
               </div>
 
               {/* Google Maps */}
-              {eventCard.maps_iframe && (
+              {eventCard.event_location && (
                 <div className="rounded-xl overflow-hidden shadow-lg transform hover:scale-102 transition-transform duration-300 mx-auto max-w-2xl mt-6">
                   <div
                     className="h-48"
                     dangerouslySetInnerHTML={{
-                      __html: eventCard.maps_iframe.replace(
+                      __html: eventCard.event_location.replace(
                         'frameborder="0"',
                         'frameborder="0" style="border:0; width:100%; height:100%;"'
                       )
@@ -809,7 +809,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             </div>
 
             {/* Cronograma Section - Usando la misma estructura que circular/galería */}
-            {eventCard.show_cronograma && eventCard.cronograma_items?.length > 0 && (
+            {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
               <div className="px-4 md:px-6 pb-4 md:pb-6">
                 <div className="rounded-lg p-4 border" style={(eventCard.event_type === 'wedding' || eventCard.event_type === 'quinceanera' || eventCard.event_type === 'corporate' || eventCard.event_type === 'conference' || eventCard.event_type === 'birthday') ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
@@ -825,7 +825,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                     Cronograma del Evento
                   </h3>
                   <div className="space-y-1.5">
-                    {eventCard.cronograma_items.map((item) => (
+                    {(eventCard.event_schedule || []).map((item) => (
                       <div key={item.id} className="flex items-center space-x-2 p-2 rounded-md" style={{
                         backgroundColor: 'rgba(255, 255, 255, 0.1)',
                         backdropFilter: 'blur(1px)'
@@ -853,7 +853,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             )}
 
             {/* Recommendations - Usando la misma estructura que circular/galería */}
-            {(eventCard.recommendation_items?.length > 0 || eventCard.recommendations) && (
+            {(eventCard.event_recommendations?.length > 0 || eventCard.recommendations) && (
               <div className="px-4 md:px-6 pb-4 md:pb-6">
                 <div className="bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-indigo-100/50" style={(eventCard.event_type === 'wedding' || eventCard.event_type === 'quinceanera' || eventCard.event_type === 'corporate' || eventCard.event_type === 'conference' || eventCard.event_type === 'birthday') ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
@@ -870,10 +870,10 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
 
             {/* Forms Section - Usando la misma estructura que circular/galería */}
-            {(eventCard.show_health_form || eventCard.show_mobility_form) && (
+            {(eventCard.include_health_form || eventCard.include_mobility_form) && (
               <div className="px-4 md:px-6 pb-4 md:pb-6">
                 <div className="space-y-4">
-                  {eventCard.show_health_form && (
+                  {eventCard.include_health_form && (
                     <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                       backgroundColor: 'rgba(255, 255, 255, 0.02)',
                       backdropFilter: 'blur(2px)',
@@ -943,7 +943,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                     </div>
                   )}
 
-                  {eventCard.show_mobility_form && (
+                  {eventCard.include_mobility_form && (
                     <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showMobilityForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                       backgroundColor: 'rgba(255, 255, 255, 0.02)',
                       backdropFilter: 'blur(2px)',
@@ -1094,10 +1094,10 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   }
 
   // Renderizar modelo circular
-  if (eventCard.layout_model === 'circular') {
+  if (eventCard.card_model === 'circular') {
     return (
       <ThemeStyles 
-        eventType={eventCard.event_type} 
+        eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
         themeColors={themeColors}
       >
         <div 
@@ -1254,7 +1254,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
           
           {/* Theme-specific Decorative Elements */}
           <ThemeDecorations 
-            eventType={eventCard.event_type} 
+            eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
             themeColors={{
               primary: themeColors.primary,
               secondary: themeColors.secondary,
@@ -1303,11 +1303,11 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             </div>
 
             {/* Imagen circular centrada */}
-            {eventCard.cover_image && (
+            {eventCard.main_image && (
               <div className="flex justify-center relative z-10">
                 <div className="w-52 h-52 rounded-full overflow-hidden shadow-2xl border-4 border-white">
                   <img 
-                    src={eventCard.cover_image} 
+                    src={eventCard.main_image} 
                     alt="Imagen del evento" 
                     className="w-full h-full" 
                     style={{ width: '100%', height: '100%', objectFit: 'fill' }}
@@ -1453,7 +1453,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
             {/* Subtle Section Separator */}
             <SectionSeparator 
-              eventType={eventCard.event_type} 
+              eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
               themeColors={{
                 primary: themeColors.primary,
                 secondary: themeColors.secondary,
@@ -1509,7 +1509,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
             {/* Subtle Section Separator */}
             <SectionSeparator 
-              eventType={eventCard.event_type} 
+              eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
               themeColors={{
                 primary: themeColors.primary,
                 secondary: themeColors.secondary,
@@ -1563,7 +1563,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
               {/* Subtle Section Separator */}
               <SectionSeparator 
-                eventType={eventCard.event_type} 
+                eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
                 themeColors={{
                   primary: themeColors.primary,
                   secondary: themeColors.secondary,
@@ -1619,7 +1619,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
               <div
                 className="h-48"
                 dangerouslySetInnerHTML={{
-                  __html: eventCard.maps_iframe.replace(
+                  __html: eventCard.event_location.replace(
                     'frameborder="0"',
                     'style="border:0; width: 100%; height: 100%;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"'
                   )
@@ -1628,7 +1628,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             </div>
 
             {/* Cronograma Section */}
-            {eventCard.show_cronograma && eventCard.cronograma_items?.length > 0 && (
+            {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
               <div className="rounded-lg p-4 border" style={(eventCard.event_type === 'wedding' || eventCard.event_type === 'quinceanera' || eventCard.event_type === 'corporate' || eventCard.event_type === 'conference' || eventCard.event_type === 'birthday') ? {
                 backgroundColor: 'rgba(255, 255, 255, 0.02)',
                 backdropFilter: 'blur(2px)',
@@ -1643,7 +1643,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                   Cronograma del Evento
                 </h3>
                 <div className="space-y-1.5">
-                  {eventCard.cronograma_items.map((item) => (
+                  {(eventCard.event_schedule || []).map((item) => (
                     <div key={item.id} className="flex items-center space-x-2 p-2 rounded-md" style={{
                       backgroundColor: 'rgba(255, 255, 255, 0.1)',
                       backdropFilter: 'blur(1px)'
@@ -1683,7 +1683,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
             {/* Forms Section */}
             <div className="space-y-4">
-              {eventCard.show_health_form && (
+              {eventCard.include_health_form && (
                 <div className={`bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-gray-200 shadow-sm transition-all duration-300 ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   backdropFilter: 'blur(2px)',
@@ -1753,7 +1753,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                 </div>
               )}
 
-              {eventCard.show_mobility_form && (
+              {eventCard.include_mobility_form && (
                 <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showMobilityForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   backdropFilter: 'blur(2px)',
@@ -1905,7 +1905,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   if (layoutModel === 'gallery') {
     return (
       <ThemeStyles 
-        eventType={eventCard.event_type} 
+        eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
         themeColors={{
           primary: themeColors.primary,
           secondary: themeColors.secondary,
@@ -2403,7 +2403,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
             {/* Subtle Section Separator */}
             <SectionSeparator 
-              eventType={eventCard.event_type} 
+              eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
               themeColors={{
                 primary: themeColors.primary,
                 secondary: themeColors.secondary,
@@ -2459,7 +2459,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
             {/* Subtle Section Separator */}
             <SectionSeparator 
-              eventType={eventCard.event_type} 
+              eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
               themeColors={{
                 primary: themeColors.primary,
                 secondary: themeColors.secondary,
@@ -2513,7 +2513,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
               {/* Subtle Section Separator */}
               <SectionSeparator 
-                eventType={eventCard.event_type} 
+                eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
                 themeColors={{
                   primary: themeColors.primary,
                   secondary: themeColors.secondary,
@@ -2569,7 +2569,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
               <div
                 className="h-48"
                 dangerouslySetInnerHTML={{
-                  __html: eventCard.maps_iframe.replace(
+                  __html: eventCard.event_location.replace(
                     'frameborder="0"',
                     'style="border:0; width: 100%; height: 100%;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"'
                   )
@@ -2578,7 +2578,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             </div>
 
             {/* Cronograma Section */}
-            {eventCard.show_cronograma && eventCard.cronograma_items?.length > 0 && (
+            {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
               <div className="rounded-lg p-4 border" style={(eventCard.event_type === 'wedding' || eventCard.event_type === 'quinceanera' || eventCard.event_type === 'corporate' || eventCard.event_type === 'conference' || eventCard.event_type === 'birthday') ? {
                 backgroundColor: 'rgba(255, 255, 255, 0.02)',
                 backdropFilter: 'blur(2px)',
@@ -2593,7 +2593,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                   Cronograma del Evento
                 </h3>
                 <div className="space-y-1.5">
-                  {eventCard.cronograma_items.map((item) => (
+                  {(eventCard.event_schedule || []).map((item) => (
                     <div key={item.id} className="flex items-center space-x-2 p-2 rounded-md" style={{
                       backgroundColor: 'rgba(255, 255, 255, 0.1)',
                       backdropFilter: 'blur(1px)'
@@ -2633,7 +2633,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
             {/* Forms Section */}
             <div className="space-y-4">
-              {eventCard.show_health_form && (
+              {eventCard.include_health_form && (
                 <div className={`bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-gray-200 shadow-sm transition-all duration-300 ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   backdropFilter: 'blur(2px)',
@@ -2703,7 +2703,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                 </div>
               )}
 
-              {eventCard.show_mobility_form && (
+              {eventCard.include_mobility_form && (
                 <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showMobilityForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   backdropFilter: 'blur(2px)',
@@ -2855,7 +2855,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   if (layoutModel === 'fixed-background') {
     return (
       <ThemeStyles 
-        eventType={eventCard.event_type} 
+        eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
         themeColors={themeColors}
       >
         <div className="relative h-screen overflow-hidden">
@@ -2863,7 +2863,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
           <div 
             className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
             style={{
-              backgroundImage: `url(${eventCard.cover_image})`,
+              backgroundImage: `url(${eventCard.main_image})`,
             }}
           >
             {/* Overlay dinámico basado en luminosidad de la imagen */}
@@ -3027,7 +3027,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                 </div>
 
                 {/* Google Maps iframe */}
-                {eventCard.maps_iframe && (
+                {eventCard.event_location && (
                   <div 
                     className="rounded-2xl overflow-hidden backdrop-blur-md border border-white/25"
                     style={{ 
@@ -3043,14 +3043,14 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                       </div>
                       <div 
                         className="rounded-xl overflow-hidden"
-                        dangerouslySetInnerHTML={{ __html: eventCard.maps_iframe }}
+                        dangerouslySetInnerHTML={{ __html: eventCard.event_location }}
                       />
                     </div>
                   </div>
                 )}
 
                 {/* Recomendaciones - Debajo del mapa */}
-                {((eventCard.recommendation_items && eventCard.recommendation_items.length > 0) || eventCard.recommendations) && (
+                {((eventCard.event_recommendations && eventCard.event_recommendations.length > 0) || eventCard.recommendations) && (
                   <div 
                     className="rounded-2xl backdrop-blur-md border border-white/25 p-4"
                     style={{ 
@@ -3066,7 +3066,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                 )}
 
                 {/* Cronograma - Debajo de recomendaciones */}
-                {eventCard.show_cronograma && eventCard.cronograma_items && eventCard.cronograma_items.length > 0 && (
+                {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
                   <div 
                     className="rounded-2xl backdrop-blur-md border border-white/25 p-4"
                     style={{ 
@@ -3089,7 +3089,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                         />
                         
                         <div className="space-y-2">
-                          {eventCard.cronograma_items.map((item) => (
+                          {(eventCard.event_schedule || []).map((item) => (
                             <div key={item.id} className="relative flex items-start space-x-3">
                               {/* Punto del timeline */}
                               <div 
@@ -3124,7 +3124,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                 )}
 
                 {/* Formularios de salud y movilidad */}
-                {eventCard.show_health_form && (
+                {eventCard.include_health_form && (
                   <div 
                     className="rounded-2xl backdrop-blur-md border border-white/25 transition-all duration-300"
                     style={{ 
@@ -3178,7 +3178,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                   </div>
                 )}
 
-                {eventCard.show_mobility_form && (
+                {eventCard.include_mobility_form && (
                   <div 
                     className="rounded-2xl backdrop-blur-md border border-white/25 transition-all duration-300"
                     style={{ 
@@ -3233,7 +3233,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                 )}
 
                 {/* Recomendaciones */}
-                {((eventCard.recommendation_items && eventCard.recommendation_items.length > 0) || eventCard.recommendations) && (
+                {((eventCard.event_recommendations && eventCard.event_recommendations.length > 0) || eventCard.recommendations) && (
                   <div 
                     className="rounded-2xl backdrop-blur-md border border-white/25 p-4"
                     style={{ 
@@ -3322,13 +3322,13 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
   // Renderizar modelo de portada clásica (código existente)
   return (
     <ThemeStyles 
-      eventType={eventCard.event_type} 
+              eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"}
       themeColors={themeColors}
     >
       <div className="max-w-4xl mx-auto shadow-2xl overflow-hidden border border-gray-100 relative rounded-lg">
         {/* Theme-specific Decorative Elements */}
         <ThemeDecorations 
-          eventType={eventCard.event_type} 
+          eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
           themeColors={{
             primary: themeColors.primary,
             secondary: themeColors.secondary,
@@ -3371,7 +3371,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
         {/* Cover Image */}
         <div className="relative h-64 rounded-t-lg overflow-hidden">
           <img
-            src={eventCard.cover_image}
+            src={eventCard.main_image}
             alt="Portada del evento"
             className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700 rounded-t-lg"
           />
@@ -3459,7 +3459,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
           {/* Subtle Section Separator */}
           <SectionSeparator 
-            eventType={eventCard.event_type} 
+            eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
             themeColors={{
               primary: themeColors.primary,
               secondary: themeColors.secondary,
@@ -3502,7 +3502,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
           {/* Subtle Section Separator */}
           <SectionSeparator 
-            eventType={eventCard.event_type} 
+            eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
             themeColors={{
               primary: themeColors.primary,
               secondary: themeColors.secondary,
@@ -3548,7 +3548,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             </div>
 
             {/* Cronograma Section */}
-            {eventCard.show_cronograma && eventCard.cronograma_items?.length > 0 && (
+            {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
               <div 
                 className="rounded-xl p-6 border shadow-sm space-y-4"
                 style={{
@@ -3563,7 +3563,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                   </h3>
                 </div>
                 <div className="space-y-4">
-                  {eventCard.cronograma_items
+                  {(eventCard.event_schedule || [])
                     .sort((a, b) => a.time.localeCompare(b.time))
                     .map((item) => (
                     <div 
@@ -3594,7 +3594,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
             {/* Subtle Section Separator */}
             <SectionSeparator 
-              eventType={eventCard.event_type} 
+              eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
               themeColors={{
                 primary: themeColors.primary,
                 secondary: themeColors.secondary,
@@ -3676,10 +3676,10 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
 
             {/* Imagen 1 - Estilo polaroid izquierda */}
-            {(eventCard.gallery_images?.[0] || eventCard.cover_image) && (
+              {(eventCard.gallery_images?.[0] || eventCard.main_image) && (
               <div className="absolute w-32 h-40 top-6 left-1 -rotate-6 md:w-56 md:h-64 md:top-16 md:left-8 md:-rotate-12 bg-white rounded-lg shadow-2xl transform z-10 p-3">
                 <div className="w-full h-32 md:h-52 rounded overflow-hidden">
-                  <img src={eventCard.gallery_images?.[0] || eventCard.cover_image} alt="Imagen 1" className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700" />
+                  <img src={eventCard.gallery_images?.[0] || eventCard.main_image} alt="Imagen 1" className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700" />
                 </div>
                 <div className="h-8 flex items-center justify-center">
                   <div className="w-8 h-1 bg-gray-200 rounded"></div>
@@ -3766,7 +3766,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             </div>
 
             {/* Formularios de salud y movilidad */}
-            {eventCard.show_health_form && showHealthForm && (
+            {eventCard.include_health_form && showHealthForm && (
               <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-100/50">
                 <h3 className="text-xl font-serif text-gray-900 mb-4 flex items-center">
                   <Utensils className="w-6 h-6 mr-2 text-green-600" />
@@ -3802,7 +3802,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
               </div>
             )}
 
-            {eventCard.show_mobility_form && showMobilityForm && (
+            {eventCard.include_mobility_form && showMobilityForm && (
               <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-6 border border-blue-100/50">
                 <h3 className="text-xl font-serif text-gray-900 mb-4 flex items-center">
                   <Accessibility className="w-6 h-6 mr-2 text-blue-600" />
@@ -3847,7 +3847,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
               <div
                 className="h-48"
                 dangerouslySetInnerHTML={{
-                  __html: eventCard.maps_iframe.replace(
+                  __html: eventCard.event_location.replace(
                     'frameborder="0"',
                     'style="border:0; width: 100%; height: 100%;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"'
                   )
@@ -3856,7 +3856,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
             </div>
 
             {/* Cronograma */}
-            {eventCard.show_cronograma && eventCard.cronograma_items.length > 0 && (
+            {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
               <div className="rounded-xl p-6 border" style={eventCard.event_type === 'quinceanera' ? {
                 backgroundColor: 'rgba(255, 255, 255, 0.02)',
                 backdropFilter: 'blur(2px)',
@@ -3870,7 +3870,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
                   Cronograma del Evento
                 </h3>
                 <div className="space-y-4">
-                  {eventCard.cronograma_items.map((item) => (
+                  {(eventCard.event_schedule || []).map((item) => (
                     <div key={item.id} className="flex items-center space-x-4 p-4 rounded-lg shadow-sm" style={eventCard.event_type === 'quinceanera' ? {
                       backgroundColor: 'rgba(255, 255, 255, 0.05)',
                       backdropFilter: 'blur(1px)'
@@ -3983,7 +3983,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
 
           {/* Forms Section */}
           <div className="space-y-6">
-            {eventCard.show_health_form && (
+            {eventCard.include_health_form && (
               <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showHealthForm ? 'opacity-75' : ''}`}>
                 <div className="flex items-center space-x-2 mb-4">
                   <Utensils className="w-5 h-5 text-indigo-600" />
@@ -4034,7 +4034,7 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
               </div>
             )}
 
-            {eventCard.show_mobility_form && (
+            {eventCard.include_mobility_form && (
               <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showMobilityForm ? 'opacity-75' : ''}`}>
                 <div className="flex items-center space-x-2 mb-4">
                   <Accessibility className="w-5 h-5 text-indigo-600" />
@@ -4158,3 +4158,5 @@ export function InvitationCard({ event, guest, eventCard, onConfirmAttendance, o
     </ThemeStyles>
   );
 }
+
+export { InvitationCard };

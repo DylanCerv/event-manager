@@ -1,64 +1,64 @@
-import React from 'react';
+import React, { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { Upload, Map, FileText, AlertCircle, Clock, Plus, Trash2, Palette, ImageIcon, Tag, Utensils, Phone } from 'lucide-react';
 import type { EventCard, CronogramaItem, RecommendationItem } from '../types/event';
 import { EVENT_TEMPLATES, getTemplateById } from '../lib/event-templates';
 import { RECOMMENDATION_CATEGORIES, CUSTOM_CATEGORY_ICONS, getCategoryById } from '../lib/recommendation-categories';
+import { createInteractiveCard } from '../endpoints/interactiveCard';
 
 interface FormErrors {
-  cover_image?: string;
+  main_image?: string;
   event_name?: string;
-  maps_iframe?: string;
-  recommendations?: string;
+  event_location?: string;
+  event_recommendations?: string;
 }
 
 interface EventCardFormProps {
-  onSubmit: (data: Omit<EventCard, 'id' | 'created_at'>) => void;
   isLoading?: boolean;
   initialData?: Partial<EventCard>;
   eventId: string;
+  onSuccess?: (savedCard: EventCard) => void;
 }
 
-export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: EventCardFormProps) {
-  // Debug: verificar qué contiene initialData
-  console.log('🔍 EventCardForm initialData:', initialData);
-  console.log('🔍 recommendation_items:', initialData?.recommendation_items);
-  
-  const [formData, setFormData] = React.useState<Partial<EventCard>>({
+export function EventCardForm({ isLoading: externalIsLoading, initialData, eventId, onSuccess }: EventCardFormProps) {
+  const [isLoading, setIsLoading] = useState<boolean>(externalIsLoading || false);
+  const [formData, setFormData] = useState<Partial<EventCard>>({
     event_id: eventId,
-    cover_image: initialData?.cover_image || '',
+    bolt_event_id: initialData?.bolt_event_id || Number(eventId),
+    main_image: initialData?.main_image || '',
     event_name: initialData?.event_name || '',
-    maps_iframe: initialData?.maps_iframe || '',
+    event_location: initialData?.event_location || '',
     recommendations: initialData?.recommendations || '',
+    event_recommendations: initialData?.event_recommendations || [],
     event_type: initialData?.event_type || 'wedding',
-    layout_model: initialData?.layout_model || 'circular',
+    card_model: initialData?.card_model || 'circular',
     gallery_images: initialData?.gallery_images || [],
     theme_colors: initialData?.theme_colors || EVENT_TEMPLATES[0].colors,
-    show_cronograma: initialData?.show_cronograma || false,
-    cronograma_items: initialData?.cronograma_items || [],
-    show_health_form: initialData?.show_health_form || false,
-    show_mobility_form: initialData?.show_mobility_form || false,
+    show_cronograma: initialData?.event_schedule && (initialData?.event_schedule?.length > 0 || false),
+    event_schedule: initialData?.event_schedule || [],
+    include_health_form: initialData?.include_health_form || false,
+    include_mobility_form: initialData?.include_mobility_form || false,
     show_contact_footer: initialData?.show_contact_footer || false,
     contact_message: initialData?.contact_message || '',
     contact_whatsapp: initialData?.contact_whatsapp || '',
     contact_email: initialData?.contact_email || '',
     facebook_url: initialData?.facebook_url || '',
     instagram_url: initialData?.instagram_url || '',
-    background_option: initialData?.background_option || 1,
-    recommendation_items: initialData?.recommendation_items || [],
+    background_option: initialData?.background_option ? Number(initialData.background_option) : 1,
   });
 
   // Estados para el nuevo sistema de recomendaciones
-  const [newRecommendation, setNewRecommendation] = React.useState({
+  const [newRecommendation, setNewRecommendation] = useState({
     category_id: RECOMMENDATION_CATEGORIES[0].id,
     category_name: RECOMMENDATION_CATEGORIES[0].name,
     category_icon: RECOMMENDATION_CATEGORIES[0].icon,
     text: '',
     is_custom_category: false
   });
-  const [showCustomCategory, setShowCustomCategory] = React.useState(false);
-  const [customCategoryName, setCustomCategoryName] = React.useState('');
-  const [customCategoryIcon, setCustomCategoryIcon] = React.useState(CUSTOM_CATEGORY_ICONS[0]);
+  const [showCustomCategory, setShowCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+  const [customCategoryIcon, setCustomCategoryIcon] = useState(CUSTOM_CATEGORY_ICONS[0]);
 
+  // Obtener el template seleccionado para usar sus propiedades
   const selectedTemplate = getTemplateById(formData.event_type || 'wedding');
 
   const handleTemplateChange = (templateId: string) => {
@@ -75,8 +75,8 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
   const addCronogramaItem = () => {
     setFormData(prev => ({
       ...prev,
-      cronograma_items: [
-        ...(prev.cronograma_items || []),
+      event_schedule: [
+        ...(prev.event_schedule || []),
         { id: crypto.randomUUID(), time: '', description: '' }
       ]
     }));
@@ -85,49 +85,51 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
   const removeCronogramaItem = (id: string) => {
     setFormData(prev => ({
       ...prev,
-      cronograma_items: prev.cronograma_items?.filter(item => item.id !== id) || []
+      event_schedule: prev.event_schedule?.filter(item => item.id !== id) || []
     }));
   };
 
   const updateCronogramaItem = (id: string, field: keyof CronogramaItem, value: string) => {
     setFormData(prev => ({
       ...prev,
-      cronograma_items: prev.cronograma_items?.map(item =>
+      event_schedule: prev.event_schedule?.map(item =>
         item.id === id ? { ...item, [field]: value } : item
       ) || []
     }));
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (initialData) {
-      setFormData({
-        event_id: eventId,
-        cover_image: initialData.cover_image || '',
-        event_name: initialData.event_name || '',
-        maps_iframe: initialData.maps_iframe || '',
-        recommendations: initialData.recommendations || '',
-        event_type: initialData.event_type || 'wedding',
-        layout_model: initialData.layout_model || 'circular',
-        gallery_images: initialData.gallery_images || [],
-        theme_colors: initialData.theme_colors || EVENT_TEMPLATES[0].colors,
-        show_cronograma: initialData.show_cronograma || false,
-        cronograma_items: initialData.cronograma_items || [],
-        show_health_form: initialData.show_health_form || false,
-        show_mobility_form: initialData.show_mobility_form || false,
-        show_contact_footer: initialData.show_contact_footer || false,
-        contact_message: initialData.contact_message || '',
-        contact_whatsapp: initialData.contact_whatsapp || '',
-        contact_email: initialData.contact_email || '',
-        facebook_url: initialData.facebook_url || '',
-        instagram_url: initialData.instagram_url || '',
-        background_option: initialData.background_option || 1,
-        recommendation_items: initialData.recommendation_items || [],
-      });
+        setFormData({
+          event_id: eventId,
+          bolt_event_id: initialData.bolt_event_id || Number(eventId),
+          main_image: initialData.main_image || '',
+          event_name: initialData.event_name || '',
+          event_location: initialData.event_location || '',
+          event_type: initialData.event_type || 'wedding',
+          card_model: initialData.card_model || 'circular',
+          gallery_images: initialData.gallery_images || [],
+          theme_colors: initialData.theme_colors || EVENT_TEMPLATES[0].colors,
+          show_cronograma: initialData.event_schedule && (initialData?.event_schedule?.length > 0 || false),
+          event_schedule: initialData.event_schedule || [],
+          include_health_form: initialData.include_health_form || false,
+          include_mobility_form: initialData.include_mobility_form || false,
+          show_contact_footer: initialData.show_contact_footer || false,
+          contact_message: initialData.contact_message || '',
+          contact_whatsapp: initialData.contact_whatsapp || '',
+          contact_email: initialData.contact_email || '',
+          facebook_url: initialData.facebook_url || '',
+          instagram_url: initialData.instagram_url || '',
+          background_option: initialData.background_option ? Number(initialData.background_option) : 1,
+          event_recommendations: initialData.event_recommendations || [],
+          recommendations: initialData.recommendations || '',
+        });
     }
   }, [initialData, eventId]);
 
-  const [errors, setErrors] = React.useState<FormErrors>({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
+  // Función para obtener el fondo temático según el tipo de evento
   // Función para obtener el fondo temático según el tipo de evento
   const getGalleryBackground = (eventType?: string) => {
     switch (eventType) {
@@ -194,7 +196,7 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
 
     setFormData(prev => ({
       ...prev,
-      recommendation_items: [...(prev.recommendation_items || []), recommendation]
+      event_recommendations: [...(prev.event_recommendations || []), recommendation]
     }));
 
     // Reset form
@@ -213,82 +215,183 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
   const removeRecommendation = (id: string) => {
     setFormData(prev => ({
       ...prev,
-      recommendation_items: prev.recommendation_items?.filter(item => item.id !== id) || []
+      event_recommendations: prev.event_recommendations?.filter(item => item.id !== id) || []
     }));
   };
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const validateForm = (): boolean => {
+  const validateForm = () => {
     const newErrors: FormErrors = {};
-    
+
     // Validar imagen según el layout
-    if (formData.layout_model === 'gallery') {
+    if (formData.card_model === 'gallery') {
       // Para galería, validar que al menos tenga una imagen en gallery_images
-      if (!formData.gallery_images?.some(img => img)) {
-        newErrors.cover_image = 'Al menos una imagen es requerida para la galería';
-      }
+      if (!formData.gallery_images?.some(img => img)) newErrors.main_image = 'Al menos una imagen es requerida para la galería';
     } else {
-      // Para circular y portada, validar cover_image
-      if (!formData.cover_image) {
-        newErrors.cover_image = formData.layout_model === 'portada' 
+      // Para circular y portada, validar main_image
+      if (!formData.main_image) {
+        newErrors.main_image = formData.card_model === 'portada' 
           ? 'La imagen de portada es requerida'
           : 'La foto de portada es requerida';
       }
     }
     
-    if (!formData.event_name) {
-      newErrors.event_name = 'El nombre del evento es requerido';
-    }
-    if (!formData.maps_iframe) {
-      newErrors.maps_iframe = 'El iframe de Google Maps es requerido';
-    }
-    // Validar recomendaciones (nuevo sistema o sistema anterior)
-    if (!formData.recommendations && (!formData.recommendation_items || formData.recommendation_items.length === 0)) {
-      newErrors.recommendations = 'Al menos una recomendación es requerida';
+    if (!formData.event_name) newErrors.event_name = 'El nombre del evento es requerido';
+    if (!formData.event_location) newErrors.event_location = 'El iframe de Google Maps es requerido';
+    if (!formData.recommendations && (!formData.event_recommendations || formData.event_recommendations.length === 0)) {
+      newErrors.event_recommendations = 'Al menos una recomendación es requerida';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
-      const submitData = { ...formData, event_id: eventId };
-      
-      // Si es modo galería y no hay cover_image, usar la primera imagen de la galería
-      if (formData.layout_model === 'gallery' && !formData.cover_image && formData.gallery_images?.[0]) {
-        submitData.cover_image = formData.gallery_images[0];
-      }
+    
+    if (!validateForm()) return;
 
-      // Generar campo recommendations para compatibilidad si hay recommendation_items
-      if (formData.recommendation_items && formData.recommendation_items.length > 0 && !formData.recommendations) {
-        const groupedRecommendations = formData.recommendation_items.reduce((acc, item) => {
-          if (!acc[item.category_name]) {
-            acc[item.category_name] = [];
+    try {
+      setIsLoading(true);
+      const formDataObj = new FormData();
+      
+      formDataObj.append('bolt_event_id', String(eventId));
+      formDataObj.append('event_type', formData.event_type || '');
+      formDataObj.append('card_model', formData.card_model || '');
+      formDataObj.append('background_option', String(formData.background_option || 1));
+      
+      if (formData.card_model === 'gallery') {
+        if (formData.gallery_images?.[0]) {
+          // Convertir base64 a File para main_image
+          const mainImageFile = base64ToFile(formData.gallery_images[0], 'main_image.jpg');
+          if (mainImageFile) {
+            formDataObj.append('main_image', mainImageFile);
+          } else if (formData.gallery_images[0].startsWith('http')) {
+            // Si es una URL, la enviamos como string
+            formDataObj.append('main_image_url', formData.gallery_images[0]);
           }
-          acc[item.category_name].push(item.text);
-          return acc;
-        }, {} as Record<string, string[]>);
-
-        const recommendationsText = Object.entries(groupedRecommendations)
-          .map(([category, items]) => `${category}:\n${items.map(item => `• ${item}`).join('\n')}`)
-          .join('\n\n');
-
-        submitData.recommendations = recommendationsText;
+        }
+        if (formData.gallery_images && formData.gallery_images.length > 1) {
+          formData.gallery_images.slice(1).forEach((image, index) => {
+            if (image) {
+              // Convertir base64 a File para imágenes de galería
+              const galleryFile = base64ToFile(image, `gallery_image_${index}.jpg`);
+              if (galleryFile) {
+                formDataObj.append(`gallery_images[${index}]`, galleryFile);
+              } else if (image.startsWith('http')) {
+                // Si es una URL, la enviamos como string
+                formDataObj.append(`gallery_images_urls[${index}]`, image);
+              }
+            }
+          });
+        }
+      } else if (formData.main_image) {
+        // Convertir base64 a File para main_image
+        const coverImageFile = base64ToFile(formData.main_image, 'main_image.jpg');
+        if (coverImageFile) {
+          formDataObj.append('main_image', coverImageFile);
+        } else if (formData.main_image.startsWith('http')) {
+          // Si es una URL, la enviamos como string
+          formDataObj.append('main_image_url', formData.main_image);
+        }
       }
       
-      onSubmit(submitData as Omit<EventCard, 'id' | 'created_at'>);
+      formDataObj.append('event_name', formData.event_name || '');
+      formDataObj.append('event_location', formData.event_location || '');
+      formDataObj.append('event_recommendations', JSON.stringify(formData.event_recommendations || []));
+      formDataObj.append('event_schedule', JSON.stringify(formData.event_schedule || []));
+      
+      formDataObj.append('include_health_form', String(formData.include_health_form || false));
+      formDataObj.append('include_mobility_form', String(formData.include_mobility_form || false));
+      
+      formDataObj.append('show_contact_footer', String(formData.show_contact_footer || false));
+      if (formData.contact_message) formDataObj.append('contact_message', formData.contact_message || '');
+      if (formData.contact_whatsapp) formDataObj.append('contact_whatsapp', formData.contact_whatsapp || '');
+      if (formData.contact_email) formDataObj.append('contact_email', formData.contact_email || '');
+      if (formData.facebook_url) formDataObj.append('facebook_url', formData.facebook_url || '');
+      if (formData.instagram_url) formDataObj.append('instagram_url', formData.instagram_url || '');
+
+      // Función auxiliar para convertir base64 a File
+      function base64ToFile(base64String: string, fileName: string): File | null {
+        // Verificar si es una URL o una cadena base64
+        if (base64String.startsWith('http://') || base64String.startsWith('https://')) {
+          console.log('Imagen ya es una URL, no se necesita convertir:', base64String);
+          return null; // No necesitamos convertir URLs
+        }
+        
+        try {
+          // Asegurarse de que sea una cadena base64 válida
+          if (!base64String.includes(',')) {
+            console.error('Formato base64 inválido:', base64String.substring(0, 50) + '...');
+            return null;
+          }
+          
+          const arr = base64String.split(',');
+          const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+          
+          try {
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            
+            while (n--) {
+              u8arr[n] = bstr.charCodeAt(n);
+            }
+            
+            return new File([u8arr], fileName, { type: mime });
+          } catch (error) {
+            console.error('Error al decodificar base64:', error);
+            return null;
+          }
+        } catch (error) {
+          console.error('Error al procesar la imagen:', error);
+          return null;
+        }
+      }
+
+      console.log('formData', formData);
+      const savedCard = await createInteractiveCard(formDataObj);
+      
+      // Si la tarjeta se guardó correctamente y existe un callback de éxito, lo llamamos
+      if (savedCard && onSuccess) {
+        // Preparamos los datos para el callback
+        const completeCard: EventCard = {
+          ...formData as any,
+          id: savedCard.id,
+          bolt_event_id: Number(eventId),
+          event_type: formData.event_type || 'wedding',
+          card_model: formData.card_model || 'circular',
+          background_option: formData.background_option || 1,
+          main_image: formData.main_image || '',
+          event_name: formData.event_name || '',
+          event_location: formData.event_location || '',
+          event_recommendations: formData.event_recommendations || [],
+          event_schedule: formData.event_schedule || [],
+          include_health_form: formData.include_health_form || false,
+          include_mobility_form: formData.include_mobility_form || false,
+          show_contact_footer: formData.show_contact_footer || false,
+          created_at: savedCard.created_at || new Date().toISOString(),
+          updated_at: savedCard.updated_at || new Date().toISOString()
+        };
+        
+        // Llamamos al callback con la tarjeta guardada
+        onSuccess(completeCard);
+      }
+    } catch (error) {
+      console.error('Error saving event card:', error);
+      alert('Error al guardar la tarjeta del evento. Por favor, inténtalo de nuevo.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
         setErrors({
           ...errors,
-          cover_image: 'El archivo no debe superar los 10MB'
+          main_image: 'El archivo no debe superar los 10MB'
         });
         return;
       }
@@ -296,7 +399,7 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
         setErrors({
           ...errors,
-          cover_image: 'Solo se permiten archivos JPG, PNG o WEBP'
+          main_image: 'Solo se permiten archivos JPG, PNG o WEBP'
         });
         return;
       }
@@ -305,11 +408,11 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
       reader.onload = (e) => {
         setFormData({
           ...formData,
-          cover_image: e.target?.result as string
+          main_image: e.target?.result as string
         });
         setErrors({
           ...errors,
-          cover_image: undefined
+          main_image: undefined
         });
       };
       reader.readAsDataURL(file);
@@ -382,9 +485,9 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <button
             type="button"
-            onClick={() => setFormData({ ...formData, layout_model: 'circular' })}
+            onClick={() => setFormData({ ...formData, card_model: 'circular' })}
             className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 ${
-              formData.layout_model === 'circular'
+              formData.card_model === 'circular'
                 ? 'border-blue-500 bg-white ring-4 ring-blue-200 shadow-lg'
                 : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
             }`}
@@ -398,9 +501,9 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
           
           <button
             type="button"
-            onClick={() => setFormData({ ...formData, layout_model: 'gallery' })}
+            onClick={() => setFormData({ ...formData, card_model: 'gallery' })}
             className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 ${
-              formData.layout_model === 'gallery'
+              formData.card_model === 'gallery'
                 ? 'border-blue-500 bg-white ring-4 ring-blue-200 shadow-lg'
                 : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
             }`}
@@ -414,9 +517,9 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
 
           <button
             type="button"
-            onClick={() => setFormData({ ...formData, layout_model: 'portada' })}
+            onClick={() => setFormData({ ...formData, card_model: 'portada' })}
             className={`p-4 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 ${
-              formData.layout_model === 'portada'
+              formData.card_model === 'portada'
                 ? 'border-blue-500 bg-white ring-4 ring-blue-200 shadow-lg'
                 : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
             }`}
@@ -505,7 +608,7 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
       </div>
 
       {/* Sección de imágenes según el layout seleccionado */}
-      {formData.layout_model === 'gallery' ? (
+      {formData.card_model === 'gallery' ? (
         /* Modo Galería - 3 campos de imagen */
         <div className="space-y-4 bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-xl border border-green-100">
           <label className="block text-lg font-semibold text-gray-800">
@@ -518,94 +621,102 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
             Sube hasta 3 imágenes para crear una galería decorativa
           </p>
           
-          {[0, 1, 2].map((index) => (
-            <div key={index} className="space-y-2">
-              <label className="block text-xs font-medium text-gray-600">
-                Imagen {index + 1} {index === 0 ? '(Principal)' : '(Opcional)'}
-              </label>
-              <div className="flex justify-center px-4 pt-3 pb-3 border-2 border-gray-300 border-dashed rounded-md">
-                <div className="space-y-2 text-center w-full">
-                  {formData.gallery_images?.[index] ? (
-                    <div className="space-y-2">
-                      <img
-                        src={formData.gallery_images[index]}
-                        alt={`Imagen ${index + 1}`}
-                        className="mx-auto h-20 w-20 object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const input = document.createElement('input');
-                          input.type = 'file';
-                          input.accept = 'image/jpeg,image/png,image/webp';
-                          input.onchange = (e) => {
-                            const file = (e.target as HTMLInputElement).files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (e) => {
-                                if (e.target?.result) {
-                                  const newGalleryImages = [...(formData.gallery_images || [])];
-                                  newGalleryImages[index] = e.target.result as string;
-                                  setFormData({
-                                    ...formData,
-                                    gallery_images: newGalleryImages
-                                  });
-                                }
-                              };
-                              reader.onerror = () => {
-                                console.error('Error reading file');
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          };
-                          input.click();
-                        }}
-                        className="text-xs text-indigo-600 hover:text-indigo-500 font-medium"
-                      >
-                        Cambiar
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <Upload className="mx-auto h-8 w-8 text-gray-400" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const input = document.createElement('input');
-                          input.type = 'file';
-                          input.accept = 'image/jpeg,image/png,image/webp';
-                          input.onchange = (e) => {
-                            const file = (e.target as HTMLInputElement).files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (e) => {
-                                if (e.target?.result) {
-                                  const newGalleryImages = [...(formData.gallery_images || [])];
-                                  newGalleryImages[index] = e.target.result as string;
-                                  setFormData({
-                                    ...formData,
-                                    gallery_images: newGalleryImages
-                                  });
-                                }
-                              };
-                              reader.onerror = () => {
-                                console.error('Error reading file');
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          };
-                          input.click();
-                        }}
-                        className="text-xs text-indigo-600 hover:text-indigo-500 font-medium"
-                      >
-                        Cargar imagen
-                      </button>
-                    </div>
-                  )}
+          {[0, 1, 2].map((index) => {
+            // Asegurar que gallery_images tenga al menos 3 elementos
+            const galleryImages = [...(formData.gallery_images || [])];
+            while (galleryImages.length < 3) {
+              galleryImages.push('');
+            }
+            
+            return (
+              <div key={index} className="space-y-2">
+                <label className="block text-xs font-medium text-gray-600">
+                  Imagen {index + 1} {index === 0 ? '(Principal)' : '(Opcional)'}
+                </label>
+                <div className="flex justify-center px-4 pt-3 pb-3 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="space-y-2 text-center w-full">
+                    {galleryImages[index] ? (
+                      <div className="space-y-2">
+                        <img
+                          src={galleryImages[index]}
+                          alt={`Imagen ${index + 1}`}
+                          className="mx-auto h-20 w-20 object-cover rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/jpeg,image/png,image/webp';
+                            input.onchange = (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (e) => {
+                                  if (e.target?.result) {
+                                    const newGalleryImages = [...galleryImages];
+                                    newGalleryImages[index] = e.target.result as string;
+                                    setFormData({
+                                      ...formData,
+                                      gallery_images: newGalleryImages
+                                    });
+                                  }
+                                };
+                                reader.onerror = () => {
+                                  console.error('Error reading file');
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            };
+                            input.click();
+                          }}
+                          className="text-xs text-indigo-600 hover:text-indigo-500 font-medium"
+                        >
+                          Cambiar
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Upload className="mx-auto h-8 w-8 text-gray-400" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/jpeg,image/png,image/webp';
+                            input.onchange = (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (e) => {
+                                  if (e.target?.result) {
+                                    const newGalleryImages = [...galleryImages];
+                                    newGalleryImages[index] = e.target.result as string;
+                                    setFormData({
+                                      ...formData,
+                                      gallery_images: newGalleryImages
+                                    });
+                                  }
+                                };
+                                reader.onerror = () => {
+                                  console.error('Error reading file');
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            };
+                            input.click();
+                          }}
+                          className="text-xs text-indigo-600 hover:text-indigo-500 font-medium"
+                        >
+                          Cargar imagen
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           
         </div>
       ) : (
@@ -614,32 +725,32 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
           <label className="block text-lg font-semibold text-gray-800">
             <div className="flex items-center space-x-2">
               <ImageIcon className="h-6 w-6 text-green-600" />
-              <span>{formData.layout_model === 'portada' ? 'Imagen de Portada' : 'Imagen Principal'}</span>
+              <span>{formData.card_model === 'portada' ? 'Imagen de Portada' : 'Imagen Principal'}</span>
             </div>
           </label>
           <p className="text-sm text-gray-600">
-            {formData.layout_model === 'portada' 
+            {formData.card_model === 'portada' 
               ? 'Sube la imagen que aparecerá como portada rectangular'
               : 'Sube la imagen principal que aparecerá en formato circular'
             }
           </p>
           <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
             <div className="space-y-4 text-center w-full">
-              {formData.cover_image ? (
+              {formData.main_image ? (
                 <div className="space-y-4">
                   {/* Preview según el modelo */}
                   <div className="mx-auto" style={{ width: '288px' }}>
                     <div className="bg-white rounded-lg shadow-md overflow-hidden p-6">
                       <div className="text-center">
-                        {formData.layout_model === 'portada' ? (
+                        {formData.card_model === 'portada' ? (
                           <img
-                            src={formData.cover_image}
+                            src={formData.main_image}
                             alt="Vista previa portada"
                             className="w-48 h-32 rounded-lg object-cover border-2 border-white shadow-lg mx-auto"
                           />
                         ) : (
                           <img
-                            src={formData.cover_image}
+                            src={formData.main_image}
                             alt="Vista previa circular"
                             className="w-32 h-32 rounded-full object-cover border-2 border-white shadow-lg mx-auto"
                           />
@@ -650,7 +761,7 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
                   
                   {/* Información de la imagen */}
                   <div className="text-xs text-gray-500 space-y-1">
-                    {formData.layout_model === 'portada' ? (
+                    {formData.card_model === 'portada' ? (
                       <>
                         <div>📐 Imagen rectangular: 384x256px</div>
                         <div>🎨 Layout: Imagen Portada</div>
@@ -698,10 +809,10 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
           <p className="mt-2 text-xs text-gray-400">
             📷 Recomendado: usa imágenes cuadradas (1:1), tamaño ideal 400 x 400 px.
           </p>
-          {errors.cover_image && (
+          {errors.main_image && (
             <p className="text-sm text-red-600 flex items-center mt-1">
               <AlertCircle className="h-4 w-4 mr-1" />
-              {errors.cover_image}
+              {errors.main_image}
             </p>
           )}
         </div>
@@ -743,16 +854,16 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
           Pega el código iframe de Google Maps para mostrar la ubicación
         </p>
         <textarea
-          value={formData.maps_iframe}
-          onChange={(e) => setFormData({ ...formData, maps_iframe: e.target.value })}
+          value={formData.event_location}
+          onChange={(e) => setFormData({ ...formData, event_location: e.target.value })}
           rows={4}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm"
           placeholder="Pega aquí el código iframe de Google Maps"
         />
-        {errors.maps_iframe && (
+        {errors.event_location && (
           <p className="text-sm text-red-600 flex items-center">
             <AlertCircle className="h-4 w-4 mr-1" />
-            {errors.maps_iframe}
+            {errors.event_location}
           </p>
         )}
       </div>
@@ -772,6 +883,12 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
         {/* Formulario para agregar nueva recomendación */}
         <div className="bg-white p-4 rounded-lg border border-gray-200 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {errors.event_recommendations && (
+              <p className="text-sm text-red-600 flex items-center">
+                <AlertCircle className="h-4 w-4 mr-1" />
+                {errors.event_recommendations}
+              </p>
+            )}
             {/* Selector de categoría */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -852,10 +969,10 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
         </div>
 
         {/* Lista de recomendaciones agregadas */}
-        {formData.recommendation_items && formData.recommendation_items.length > 0 && (
+        {formData.event_recommendations && formData.event_recommendations.length > 0 && (
           <div className="space-y-3">
             <h4 className="text-sm font-medium text-gray-700">Recomendaciones agregadas:</h4>
-            {formData.recommendation_items.map((item) => (
+            {formData.event_recommendations.map((item) => (
               <div
                 key={item.id}
                 className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200"
@@ -916,7 +1033,8 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
 
         {formData.show_cronograma && (
           <div className="space-y-4">
-            {formData.cronograma_items?.map((item) => (
+            {/* Asegurar que siempre hay al menos un elemento en el cronograma */}
+            {(formData.event_schedule && formData.event_schedule.length > 0) ? formData.event_schedule.map((item) => (
               <div key={item.id} className="flex items-start space-x-4 bg-gray-50 p-4 rounded-lg">
                 <div className="flex-1">
                   <div className="grid grid-cols-2 gap-4">
@@ -955,7 +1073,9 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
                   <Trash2 className="h-5 w-5" />
                 </button>
               </div>
-            ))}
+            )) : (
+              <p className="text-sm text-gray-500 italic">No hay actividades en el cronograma.</p>
+            )}
             <button
               type="button"
               onClick={addCronogramaItem}
@@ -983,8 +1103,8 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
             <label className="flex items-center">
               <input
                 type="checkbox"
-                checked={formData.show_health_form}
-                onChange={(e) => setFormData({ ...formData, show_health_form: e.target.checked })}
+                checked={formData.include_health_form}
+                onChange={(e) => setFormData({ ...formData, include_health_form: e.target.checked })}
                 className="rounded border-gray-300 text-violet-600 shadow-sm focus:border-violet-300 focus:ring focus:ring-violet-200 focus:ring-opacity-50"
               />
               <span className="ml-3 text-sm text-gray-700">Incluir formulario de salud</span>
@@ -994,8 +1114,8 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
             <label className="flex items-center">
               <input
                 type="checkbox"
-                checked={formData.show_mobility_form}
-                onChange={(e) => setFormData({ ...formData, show_mobility_form: e.target.checked })}
+                checked={formData.include_mobility_form}
+                onChange={(e) => setFormData({ ...formData, include_mobility_form: e.target.checked })}
                 className="rounded border-gray-300 text-violet-600 shadow-sm focus:border-violet-300 focus:ring focus:ring-violet-200 focus:ring-opacity-50"
               />
               <span className="ml-3 text-sm text-gray-700">Incluir formulario de movilidad</span>
@@ -1104,10 +1224,10 @@ export function EventCardForm({ onSubmit, isLoading, initialData, eventId }: Eve
       <div>
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || externalIsLoading}
           className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
         >
-          {isLoading ? 'Guardando...' : 'Guardar Configuración'}
+          {isLoading || externalIsLoading ? 'Guardando...' : 'Guardar Configuración'}
         </button>
       </div>
     </form>

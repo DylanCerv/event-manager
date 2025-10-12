@@ -1,39 +1,39 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Users, QrCode, MessageSquare, PartyPopper, Check, X, Mail, Monitor, Smartphone } from 'lucide-react';
 // import { useAuth } from '../contexts/AuthContext';
-import { storage } from '../lib/storage';
+import { getInteractiveCardByEventId, deleteInteractiveCard } from '../endpoints/interactiveCard';
 import { GuestList } from '../components/GuestList';
 import { EventCardForm } from '../components/EventCardForm';
 import { EventCardPreview } from '../components/EventCardPreview';
 import { QRAccessManager } from '../components/QRAccessManager';
 import { EventFinalization } from '../components/EventFinalization';
 import { NotificationForm } from '../components/NotificationForm';
-import { InvitationCard } from '../components/InvitationCard';
 import { sendMassiveEmails, type EmailRecipient } from '../lib/email';
 import type { Event, Guest, EventCard } from '../types/event';
 import { updateEventGuestAPI, getEventGuestsByEventIdAPI } from '../endpoints/eventGuest';
 import { useEvents } from '../contexts/EventContext';
+import { InvitationCard } from '../components/InvitationCard';
 
 export function EventManagement() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getEventById } = useEvents();
-  const [event, setEvent] = React.useState<Event | null>(null);
-  const [guests, setGuests] = React.useState<Guest[]>([]);
-  const [eventCard, setEventCard] = React.useState<EventCard | null>(null);
-  const [activeTab, setActiveTab] = React.useState<'guests' | 'cards' | 'qr-access' | 'finalization'>('guests');
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [selectedGuestIds, setSelectedGuestIds] = React.useState<string[]>([]);
-  const [showNotificationForm, setShowNotificationForm] = React.useState(false);
-  const [showCardForm, setShowCardForm] = React.useState(false);
-  const [editingCard, setEditingCard] = React.useState<EventCard | null>(null);
-  const [showSuccessMessage, setShowSuccessMessage] = React.useState(false);
-  const [showFullView, setShowFullView] = React.useState(false);
-  const [viewMode, setViewMode] = React.useState<'desktop' | 'mobile'>('desktop');
+  const [event, setEvent] = useState<Event | null>(null);
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [eventCard, setEventCard] = useState<EventCard | null>(null);
+  const [activeTab, setActiveTab] = useState<'guests' | 'cards' | 'qr-access' | 'finalization'>('guests');
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedGuestIds, setSelectedGuestIds] = useState<string[]>([]);
+  const [showNotificationForm, setShowNotificationForm] = useState(false);
+  const [showCardForm, setShowCardForm] = useState(false);
+  const [editingCard, setEditingCard] = useState<EventCard | null>(null);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showFullView, setShowFullView] = useState(false);
+  const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
   // Event status is now part of the event object from context
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (id) {
       loadEvent();
     }
@@ -60,10 +60,11 @@ export function EventManagement() {
       await fetchGuests(foundEvent.id);
       
       try {
-        const card = await storage.getEventCard(foundEvent.id);
+        const card = await getInteractiveCardByEventId(foundEvent.id);
         setEventCard(card);
       } catch (error) {
         console.error('Error fetching event card:', error);
+        // Si no existe la tarjeta, simplemente continuamos sin mostrar error al usuario
       }
     } catch (error) {
       console.error('Error loading event:', error);
@@ -265,50 +266,31 @@ export function EventManagement() {
     }
   };
 
-  const handleSaveEventCard = async (cardData: Omit<EventCard, 'id' | 'created_at'>) => {
-    if (!event) return;
-    
-    try {
-      setIsLoading(true);
-      const savedCard = await storage.saveEventCard({
-        ...cardData,
-        event_id: event.id,
-      });
-      setEventCard(savedCard);
-      setShowCardForm(false);
-      setEditingCard(null);
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-    } catch (error) {
-      console.error('Error saving event card:', error);
-      alert('Error al guardar la tarjeta interactiva');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleEditCard = () => {
     console.log('🔍 EventManagement - eventCard antes de editar:', eventCard);
-    console.log('🔍 EventManagement - recommendation_items:', eventCard?.recommendation_items);
+    console.log('🔍 EventManagement - recommendation_items:', eventCard?.event_recommendations);
     setEditingCard(eventCard);
     setShowCardForm(true);
   };
 
   const handleDeleteEventCard = async () => {
-    if (!event) return;
+    if (!event || !eventCard) return;
     
     if (!window.confirm('¿Estás seguro de que deseas eliminar esta tarjeta? Esta acción no se puede deshacer.')) {
       return;
     }
     
     try {
-      await storage.deleteEventCard(event.id);
+      setIsLoading(true);
+      await deleteInteractiveCard(eventCard.id);
       setEventCard(null);
       setShowSuccessMessage(true);
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
       console.error('Error deleting event card:', error);
       alert('Error al eliminar la tarjeta interactiva');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -539,9 +521,24 @@ export function EventManagement() {
                     <div className="max-w-2xl mx-auto">
                       <EventCardForm
                         eventId={event.id}
-                        onSubmit={handleSaveEventCard}
                         isLoading={isLoading}
                         initialData={editingCard || undefined}
+                        onSuccess={(savedCard) => {
+                          // Asegurar que el card tenga la estructura correcta
+                          const formattedCard: EventCard = {
+                            ...savedCard,
+                            bolt_event_id: Number(event.id),
+                            card_model: savedCard.card_model || 'circular',
+                            event_schedule: savedCard.event_schedule || [],
+                            include_health_form: savedCard.include_health_form || false,
+                            include_mobility_form: savedCard.include_mobility_form || false,
+                          };
+                          
+                          setEventCard(formattedCard);
+                          setShowCardForm(false);
+                          setShowSuccessMessage(true);
+                          setTimeout(() => setShowSuccessMessage(false), 3000);
+                        }}
                       />
                     </div>
                   ) : eventCard ? (

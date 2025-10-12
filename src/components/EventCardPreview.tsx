@@ -14,7 +14,7 @@ export function EventCardPreview({ card, onEdit, onDelete, onFullView }: EventCa
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
       <div className="relative h-48">
         <img
-          src={card.cover_image}
+          src={card.main_image}
           alt="Portada del evento"
           className="w-full h-full object-cover"
         />
@@ -22,12 +22,12 @@ export function EventCardPreview({ card, onEdit, onDelete, onFullView }: EventCa
         <div className="absolute bottom-0 left-0 right-0 p-4">
           <h3 className="text-xl font-medium text-white">{card.event_name}</h3>
           <div className="flex space-x-2 mt-2">
-            {card.show_health_form && (
+            {card.include_health_form && (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                 Formulario de Salud
               </span>
             )}
-            {card.show_mobility_form && (
+            {card.include_mobility_form && (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                 Formulario de Movilidad
               </span>

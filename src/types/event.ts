@@ -15,18 +15,30 @@ export interface Event {
 }
 
 export interface EventCard {
-  id: string;
-  event_id: string;
-  cover_image: string;
-  gallery_images?: string[]; // Para el modo galería - hasta 3 imágenes
+  id: number | string;
+  bolt_event_id: number;
+  event_id?: string; // Campo interno para compatibilidad
+  event_type: string;
+  card_model: string;
+  background_option: string | number;
+  main_image: string;
+  gallery_images?: string[];
   event_name: string;
-  maps_iframe: string;
-  recommendations: string; // Mantener para compatibilidad
-  recommendation_items?: RecommendationItem[]; // Nuevo sistema
+  event_location: string;
+  event_recommendations: RecommendationItem[];
+  event_schedule: CronogramaItem[];
+  include_health_form: boolean;
+  include_mobility_form: boolean;
+  show_contact_footer: boolean;
+  contact_message?: string;
+  contact_whatsapp?: string;
+  contact_email?: string;
+  facebook_url?: string;
+  instagram_url?: string;
   created_at: string;
-  // Nuevos campos para el sistema de plantillas
-  event_type?: 'wedding' | 'quinceanera' | 'birthday' | 'corporate' | 'conference';
-  layout_model?: 'cover' | 'fixed-background' | 'circular' | 'gallery' | 'portada';
+  updated_at: string;
+  
+  // Campos para compatibilidad con el código existente
   theme_colors?: {
     primary: string;
     secondary: string;
@@ -34,17 +46,8 @@ export interface EventCard {
     background: string;
     text: string;
   };
-  show_cronograma: boolean;
-  cronograma_items: CronogramaItem[];
-  show_health_form?: boolean;
-  show_mobility_form?: boolean;
-  show_contact_footer?: boolean;
-  contact_message?: string;
-  contact_whatsapp?: string;
-  contact_email?: string;
-  facebook_url?: string;
-  instagram_url?: string;
-  background_option?: 1 | 2 | 3; // Opción de fondo seleccionada (1=sin número, 2=con "2", 3=con "3")
+  show_cronograma?: boolean;
+  recommendations?: string;
 }
 
 export interface CronogramaItem {

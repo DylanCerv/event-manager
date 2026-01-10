@@ -7,7 +7,7 @@ interface UserContextType {
     users: ApiUser[];
     loading: boolean;
     error: string | null;
-    fetchUsers: () => Promise<void>;
+    fetchUsers: () => Promise<ApiUser[]>;
     filterByRoleId: (role: Role) => ApiUser[];
     getByRoleName: (roleName: string) => ApiUser[];
     getUserById: (id: number | string) => ApiUser | undefined;
@@ -22,16 +22,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchUsers = async () => {
+    const fetchUsers = async (): Promise<ApiUser[]> => {
         setLoading(true);
         setError(null);
         try {
             const response = await getUsersAPI({includePassword: true});
             // @ts-ignore
-            const listUsers: any[] = response?.data?.data || [];
+            const listUsers: any[] = response?.data || [];
             setUsers(listUsers);
+            return listUsers as ApiUser[];
         } catch (err: any) {
             setError(err?.message || 'Failed to load users');
+            return [];
         } finally {
             setLoading(false);
         }

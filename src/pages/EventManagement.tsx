@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Calendar, Users, QrCode, MessageSquare, PartyPopper, Check, X, Mail, Monitor, Smartphone } from 'lucide-react';
 // import { useAuth } from '../contexts/AuthContext';
@@ -18,7 +18,7 @@ import { InvitationCard } from '../components/InvitationCard';
 export function EventManagement() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getEventById } = useEvents();
+  const { getEventById, refreshEvents } = useEvents();
   const [event, setEvent] = useState<Event | null>(null);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [eventCard, setEventCard] = useState<EventCard | null>(null);
@@ -50,7 +50,11 @@ export function EventManagement() {
       setIsLoading(true);
       
       // Get event from context
-      const foundEvent = getEventById(id);
+      let foundEvent = getEventById(id);
+      if (!foundEvent) {
+        await refreshEvents();
+        foundEvent = getEventById(id);
+      }
       if (!foundEvent) {
         navigate('/events');
         return;
@@ -85,6 +89,7 @@ export function EventManagement() {
       // Fetch actual guests from API
       const response = await getEventGuestsByEventIdAPI(Number(eventId));
       const actualGuests = response?.data || [];
+      console.log('actualGuests', actualGuests);
       
       // Map API guests to our Guest interface
       const mappedGuests = actualGuests.map((apiGuest: any): Guest => ({
@@ -93,15 +98,17 @@ export function EventManagement() {
         name: apiGuest.name || '',
         guest_number: Number(apiGuest.guest_number) || 0,
         table_number: apiGuest.table_number ? Number(apiGuest.table_number) : undefined,
-        email: apiGuest.email,
-        phone: apiGuest.phone,
-        confirmed: apiGuest.confirmation_status === 'confirmed',
-        attended: apiGuest.attended || false,
-        attended_at: apiGuest.check_in_time,
+        email: apiGuest.email || undefined,
+        phone: apiGuest.phone || undefined,
+        qr_code: apiGuest.qr_code || '',
+        qr_code_status: apiGuest.qr_code_status,
+        video_status: apiGuest.video_status,
+        video_url: apiGuest.video_url || undefined,
+        status: apiGuest.status || undefined,
+        confirmation_status: (apiGuest.confirmation_status as Guest['confirmation_status']) || 'not confirmed',
+        created_at: apiGuest.created_at || new Date().toISOString(),
         health_info: apiGuest.health_information || '',
         mobility_restrictions: apiGuest.transportation_status || '',
-        qr_code: apiGuest.qr_code || '',
-        created_at: apiGuest.created_at || new Date().toISOString(),
         health_form_submitted: !!apiGuest.health_information,
         mobility_form_submitted: !!apiGuest.transportation_status,
         forms_completed: !!apiGuest.health_information && !!apiGuest.transportation_status,
@@ -113,10 +120,10 @@ export function EventManagement() {
       const placeholderGuests: Guest[] = [];
       
       // Starting from 100 (as shown in the UI example)
-      let guestNumber = 1;
+      let guestNumber = 0;
       
       // Create placeholder guests until we reach the total count
-      while (mappedGuests.length + placeholderGuests.length < totalGuestCount) {
+      while (mappedGuests.length + placeholderGuests.length <= totalGuestCount) {
         // Skip guest numbers that already exist
         while (existingGuestNumbers.has(guestNumber)) {
           guestNumber++;
@@ -127,9 +134,12 @@ export function EventManagement() {
           event_id: eventId,
           name: '',
           guest_number: guestNumber,
-          confirmed: false,
-          attended: false,
+          // confirmed: false,
+          // attended: false,
           qr_code: '',
+          qr_code_status: true,
+          video_status: true,
+          confirmation_status: 'not confirmed',
           health_info: '',
           mobility_restrictions: '',
           health_form_submitted: false,
@@ -154,25 +164,25 @@ export function EventManagement() {
 
   const handleUpdateGuest = async (guest: Guest) => {
     try {
-      console.log('guest:', guest);
       // Prepare common payload for both new and existing guests
-      const payload = {
+      const payload: Record<string, any> = {
         event_id: Number(guest.event_id),
-        name: guest.name || 'Invitado',
-        last_name: '',
-        age: guest.age_category === 'minor' ? 15 : 30,
-        email: guest.email,
-        phone: guest.phone,
-        confirmation_status: guest.confirmed ? 'confirmed' : undefined,
-        health_information: guest.health_info || '',
-        transportation_status: guest.mobility_restrictions || '',
         guest_number: String(guest.guest_number),
-        table_number: guest.table_number ? String(guest.table_number) : undefined,
-        attended: guest.attended,
-        qr_code: guest.qr_code,
-        qr_code_status: guest.qr_code ? true : false,
-        status: 'active',
       };
+
+      if (guest.name !== undefined) payload.name = guest.name;
+      if (guest.email !== undefined) payload.email = guest.email;
+      if (guest.phone !== undefined) payload.phone = guest.phone;
+      if (guest.table_number !== undefined) payload.table_number = String(guest.table_number);
+      if (guest.health_info !== undefined) payload.health_information = guest.health_info;
+      if (guest.mobility_restrictions !== undefined) payload.transportation_status = guest.mobility_restrictions;
+      if (guest.qr_code !== undefined) payload.qr_code = guest.qr_code;
+      if (guest.qr_code_status !== undefined) payload.qr_code_status = guest.qr_code_status;
+      if (guest.video_status !== undefined) payload.video_status = guest.video_status;
+      if (guest.video_url !== undefined) payload.video_url = guest.video_url;
+      if (guest.confirmation_status !== undefined) payload.confirmation_status = guest.confirmation_status;
+      if (guest.status !== undefined) payload.status = guest.status;
+      if (guest.age_category !== undefined) payload.age = guest.age_category === 'minor' ? 15 : 30;
       
       // Use updateEventGuestAPI with event ID and guest number
       // The backend will create a new guest if it doesn't exist
@@ -194,12 +204,16 @@ export function EventManagement() {
           table_number: apiGuest.table_number ? Number(apiGuest.table_number) : undefined,
           email: apiGuest.email,
           phone: apiGuest.phone,
-          confirmed: apiGuest.confirmation_status === 'confirmed',
-          attended: apiGuest.attended || false,
-          attended_at: apiGuest.check_in_time,
+          // confirmed: apiGuest.confirmation_status === 'confirmed',
+          // attended: apiGuest.attended || false,
+          // attended_at: apiGuest.check_in_time,
           health_info: apiGuest.health_information || '',
           mobility_restrictions: apiGuest.transportation_status || '',
           qr_code: apiGuest.qr_code || '',
+          qr_code_status: apiGuest.qr_code_status,
+          video_status: apiGuest.video_status,
+          video_url: apiGuest.video_url || undefined,
+          confirmation_status: (apiGuest.confirmation_status as Guest['confirmation_status']) || 'not confirmed',
           created_at: apiGuest.created_at || new Date().toISOString(),
           health_form_submitted: !!apiGuest.health_information,
           mobility_form_submitted: !!apiGuest.transportation_status,
@@ -653,9 +667,10 @@ export function EventManagement() {
                   event_id: event.id,
                   name: 'Invitado de Ejemplo',
                   guest_number: 100,
-                  confirmed: false,
-                  attended: false,
+                  // confirmed: false,
+                  // attended: false,
                   qr_code: 'preview',
+                  confirmation_status: 'not confirmed',
                   created_at: new Date().toISOString(),
                 }}
                 onConfirmAttendance={() => {}}

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Phone, Globe, Lock, Eye, EyeOff, Percent } from 'lucide-react';
-import type { Creator } from '../types/creator';
 import type { ApiUser } from '../types/auth';
 import { updateUserAPI } from '../endpoints/user';
 
@@ -8,9 +7,10 @@ interface EditCreatorModalProps {
   isOpen: boolean;
   onClose: () => void;
   creator: ApiUser | null;
+  onUpdated?: (apiUser: any) => void;
 }
 
-export default function EditCreatorModal({ isOpen, onClose, creator }: EditCreatorModalProps) {
+export default function EditCreatorModal({ isOpen, onClose, creator, onUpdated }: EditCreatorModalProps) {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -113,7 +113,10 @@ export default function EditCreatorModal({ isOpen, onClose, creator }: EditCreat
 
       const response = await updateUserAPI(Number(creator.id), payload);
       console.log(response);
-      if (response.status == 200) {
+      const updatedUser = response?.data ?? response?.user ?? response;
+      const isSuccess = response?.status == 200 || !!updatedUser?.id;
+      if (isSuccess) {
+        try { onUpdated?.(updatedUser); } catch {}
         handleClose();
       } else {
         setErrors({ submit: response?.message || 'Error al actualizar creador' });

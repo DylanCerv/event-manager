@@ -71,10 +71,12 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
       guest.name?.toLowerCase().includes(search.toLowerCase()) ||
       guest.guest_number?.toString().includes(search) ||
       guest.email?.toLowerCase().includes(search.toLowerCase()) ||
-      (guest.confirmed && 'confirmed'.includes(search.toLowerCase())) ||
-      (!guest.confirmed && 'not confirmed'.includes(search.toLowerCase()))
+      (guest.confirmation_status === 'confirmed' && 'confirmed'.includes(search.toLowerCase())) ||
+      (guest.confirmation_status === 'not confirmed' && 'not confirmed'.includes(search.toLowerCase()))
     ).sort((a, b) => (a.guest_number || 0) - (b.guest_number || 0));
   }, [mergedGuests, search]);
+
+  console.log('mergedGuests', mergedGuests);
 
   const toggleGuestSelection = (guestId: string) => {
     setSelectedGuests(prev => {
@@ -124,8 +126,8 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
     return {
       complete: mergedGuests.filter(isGuestComplete).length,
       incomplete: mergedGuests.filter(guest => !isGuestComplete(guest)).length,
-      confirmed: mergedGuests.filter(guest => guest.confirmed).length,
-      notConfirmed: mergedGuests.filter(guest => !guest.confirmed).length,
+      confirmed: mergedGuests.filter(guest => guest.confirmation_status === 'confirmed').length,
+      notConfirmed: mergedGuests.filter(guest => guest.confirmation_status === 'not confirmed').length,
     };
   }, [mergedGuests]);
 
@@ -306,18 +308,14 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                     </td>
                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                       <select
-                        value={guest.attended ? 'attended' : (guest.confirmed ? 'confirmed' : 'not_confirmed')}
+                        value={guest.confirmation_status === 'attended' ? 'attended' : (guest.confirmation_status === 'confirmed' ? 'confirmed' : 'not confirmed')}
                         onChange={(e) => {
-                          const value = e.target.value;
-                          const confirmed = value === 'confirmed' || value === 'attended';
-                          const attended = value === 'attended';
-
-                          // Actualizar ambos campos a la vez usando handleGuestChange
-                          // Para este caso especial, actualizamos múltiples campos a la vez
+                          const value = e.target.value as Guest['confirmation_status'];
+                          
+                          // Actualizar confirmation_status (es el campo real que guarda el backend)
                           const updatedGuest = {
                             ...guest,
-                            confirmed,
-                            attended
+                            confirmation_status: value
                           };
 
                           // Usar el mismo patrón de debounce
@@ -339,7 +337,7 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                         }}
                         className="block w-full border-0 p-0 text-gray-900 focus:ring-0 sm:text-sm"
                       >
-                        <option value="not_confirmed">No Confirmado</option>
+                        <option value="not confirmed">No Confirmado</option>
                         <option value="confirmed">Confirmado</option>
                         <option value="attended">Asistió</option>
                       </select>

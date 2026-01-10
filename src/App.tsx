@@ -26,7 +26,11 @@ import { ModeradorEventBook } from './pages/ModeradorEventBook';
 import CreatorDashboard from './pages/creator/CreatorDashboard';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, role } = useAuth();
+  const { user, role, isAuthInitialized } = useAuth();
+
+  if (!isAuthInitialized) {
+    return null;
+  }
 
   if (!user) {
     return <Navigate to="/" replace />;
@@ -95,6 +99,7 @@ function AppRoutes() {
       {role?.name !== 'CREATOR' && <Navigation />}
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />
         {/* Super Admin Routes */}
         <Route
           path="/super-admin"

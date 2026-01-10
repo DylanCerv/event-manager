@@ -1,6 +1,9 @@
 /** Event Requests API endpoints */
 
-const token = sessionStorage.getItem('auth_token');
+const getAuthHeaders = (): Record<string, string> => {
+    const token = sessionStorage.getItem('auth_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 /**
  * Get all event requests
@@ -13,7 +16,7 @@ export const getEventRequestsAPI = async (include: string = 'bolt_event,creator,
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
         });
         const data = await response.json();
@@ -38,7 +41,7 @@ export const getEventRequestByIdAPI = async (id: number, include?: string): Prom
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
         });
         const data = await response.json();
@@ -62,7 +65,7 @@ export const createEventRequestAPI = async (body: { bolt_event_id: number; creat
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
             body: JSON.stringify(body),
         });
@@ -87,7 +90,7 @@ export const updateEventRequestStatusAPI = async (id: number, status: 'pending' 
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
             body: JSON.stringify({ status, processed }),
         });
@@ -112,7 +115,7 @@ export const deleteEventRequestAPI = async (id: number): Promise<any> => {
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
         });
         const data = await response.json();

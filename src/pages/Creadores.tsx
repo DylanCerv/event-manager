@@ -33,8 +33,8 @@ export default function Creadores() {
   const [commissions, setCommissions] = useState<any[]>([]);
   const [events, setEvents] = useState<CustomEvent[]>([]);
   const [creatorStats, setCreatorStats] = useState({
-    total: filterByRoleId('CREATOR').length,
-    active: filterByRoleId('CREATOR').filter(c => c.status === 'active').length,
+    total: 0,
+    active: 0,
     topPerformer: null as { name: string; amount: number } | null,
     newThisMonth: 0
   });
@@ -61,6 +61,40 @@ export default function Creadores() {
     fetchUsers().catch(() => {});
     loadEvents();
   }, []);
+
+  const mapApiCreatorToCreator = (u: ApiUser): Creator => ({
+    id: String(u.id),
+    firstName: u.name || '',
+    lastName: (u.last_name as string) || '',
+    email: u.email || '',
+    username: (u.username as string) || '',
+    password: (u as any).password_plain || '',
+    phone: (u.phone as string) || '',
+    country: (u.country as string) || '',
+    status: (u.status as any) === 'suspended' ? 'suspended' : 'active',
+    commissionPercentage: Number((u as any).commission_percentage ?? (u as any).commissionPercentage ?? 15),
+    createdAt: (u.created_at as string) || new Date().toISOString(),
+    createdBy: String((u as any).creator_id ?? ''),
+  });
+
+  // Stats should come from backend (endpoint /users), not creatorsStorage
+  useEffect(() => {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const total = backendCreators.length;
+    const active = backendCreators.filter(c => c.status === 'active').length;
+    const newThisMonth = backendCreators.filter((c: any) => {
+      const createdAt = c.created_at ? new Date(c.created_at as string) : null;
+      return createdAt ? createdAt >= thirtyDaysAgo : false;
+    }).length;
+    setCreatorStats(prev => ({
+      ...prev,
+      total,
+      active,
+      newThisMonth,
+      // topPerformer is computed from commissions (local) elsewhere; keep as-is.
+    }));
+  }, [backendCreators]);
 
   const loadCreators = async () => {
     try {
@@ -215,7 +249,7 @@ export default function Creadores() {
       const finishedEvents = creatorEvents.filter(event => new Date(event.date) < now);
       
       // Calcular solicitudes de los usuarios del creador
-      let creatorRequests = allRequests.filter(request => creatorUserIds.includes(request.creator_id));
+      let creatorRequests = allRequests.filter(request => creatorUserIds.includes(String(request.creator_id)));
       
       // Aplicar filtro de fecha a solicitudes si está seleccionado
       if (dateRange) {
@@ -673,7 +707,7 @@ export default function Creadores() {
                           <div className="flex space-x-2">
                             <button
                               onClick={() => {
-                                // Opcional: si quieres métricas con API, adapta calculateCreatorMetrics
+                                calculateCreatorMetrics(mapApiCreatorToCreator(creator));
                               }}
                               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                               title="Ver detalles"
@@ -705,15 +739,7 @@ export default function Creadores() {
               )}
             </div>
 
-            {filteredCreators.length === 0 && !isLoading && (
-              <div className="text-center py-12">
-                <Users className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No se encontraron creadores</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  {searchTerm ? 'Intenta ajustar los términos de búsqueda.' : 'Comienza creando tu primer creador.'}
-                </p>
-              </div>
-            )}
+            {/* Empty state is handled above using backendCreators */}
           </>
         )}
 
@@ -1021,6 +1047,9 @@ export default function Creadores() {
           setSelectedCreator(null);
         }}
         creator={selectedCreator}
+        onUpdated={async () => {
+          await fetchUsers();
+        }}
       />
 
       {/* Modal de Métricas del Creador */}

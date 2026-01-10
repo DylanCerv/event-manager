@@ -31,7 +31,10 @@ export function EventCardForm({ isLoading: externalIsLoading, initialData, event
     event_recommendations: initialData?.event_recommendations || [],
     event_type: initialData?.event_type || 'wedding',
     card_model: initialData?.card_model || 'circular',
-    gallery_images: initialData?.gallery_images || [],
+    gallery_images: [
+      initialData?.main_image || '',
+      ...(initialData?.gallery_images || [])
+    ],
     theme_colors: initialData?.theme_colors || EVENT_TEMPLATES[0].colors,
     show_cronograma: initialData?.event_schedule && (initialData?.event_schedule?.length > 0 || false),
     event_schedule: initialData?.event_schedule || [],
@@ -108,7 +111,10 @@ export function EventCardForm({ isLoading: externalIsLoading, initialData, event
           event_location: initialData.event_location || '',
           event_type: initialData.event_type || 'wedding',
           card_model: initialData.card_model || 'circular',
-          gallery_images: initialData.gallery_images || [],
+          gallery_images: [
+            initialData.main_image || '',
+            ...(initialData.gallery_images || [])
+          ],
           theme_colors: initialData.theme_colors || EVENT_TEMPLATES[0].colors,
           show_cronograma: initialData.event_schedule && (initialData?.event_schedule?.length > 0 || false),
           event_schedule: initialData.event_schedule || [],
@@ -260,39 +266,93 @@ export function EventCardForm({ isLoading: externalIsLoading, initialData, event
       formDataObj.append('card_model', formData.card_model || '');
       formDataObj.append('background_option', String(formData.background_option || 1));
       
+      // Función auxiliar para convertir URL a File de manera asíncrona
+      const urlToFile = async (url: string, fileName: string): Promise<File | null> => {
+        try {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          return new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+        } catch (error) {
+          console.error('Error al convertir URL a File:', error);
+          return null;
+        }
+      };
+      
       if (formData.card_model === 'gallery') {
+        // La primera imagen (index 0) siempre va como main_image
         if (formData.gallery_images?.[0]) {
-          // Convertir base64 a File para main_image
-          const mainImageFile = base64ToFile(formData.gallery_images[0], 'main_image.jpg');
-          if (mainImageFile) {
-            formDataObj.append('main_image', mainImageFile);
-          } else if (formData.gallery_images[0].startsWith('http')) {
-            // Si es una URL, la enviamos como string
+          if (formData.gallery_images[0].startsWith('http')) {
+            // Si es una URL, primero la enviamos como string
             formDataObj.append('main_image_url', formData.gallery_images[0]);
+            
+            // Luego intentamos convertirla a File
+            try {
+              const mainFile = await urlToFile(formData.gallery_images[0], 'main_image.jpg');
+              if (mainFile) {
+                formDataObj.append('main_image', mainFile);
+              }
+            } catch (error) {
+              console.error('Error al procesar la imagen principal:', error);
+            }
+          } else {
+            // Si es base64, convertir a File
+            const mainImageFile = base64ToFile(formData.gallery_images[0], 'main_image.jpg');
+            if (mainImageFile) {
+              formDataObj.append('main_image', mainImageFile);
+            }
           }
         }
+        
+        // Las imágenes adicionales (desde index 1) van como gallery_images
         if (formData.gallery_images && formData.gallery_images.length > 1) {
-          formData.gallery_images.slice(1).forEach((image, index) => {
-            if (image) {
-              // Convertir base64 a File para imágenes de galería
+          // Empezamos desde el índice 1 (la segunda imagen)
+          const galleryImages = formData.gallery_images.slice(1).filter(img => img); // Filtrar imágenes vacías
+          
+          // Procesamos todas las imágenes de manera asíncrona
+          await Promise.all(galleryImages.map(async (image, index) => {
+            if (image.startsWith('http')) {
+              // Si es una URL existente, primero la enviamos como string
+              formDataObj.append(`gallery_images_urls[${index}]`, image);
+              
+              // Luego intentamos convertirla a File
+              try {
+                const galleryFile = await urlToFile(image, `gallery_image_${index}.jpg`);
+                if (galleryFile) {
+                  formDataObj.append(`gallery_images[${index}]`, galleryFile);
+                }
+              } catch (error) {
+                console.error(`Error al procesar la imagen de galería ${index}:`, error);
+              }
+            } else if (image) {
+              // Si es base64, convertir a File
               const galleryFile = base64ToFile(image, `gallery_image_${index}.jpg`);
               if (galleryFile) {
                 formDataObj.append(`gallery_images[${index}]`, galleryFile);
-              } else if (image.startsWith('http')) {
-                // Si es una URL, la enviamos como string
-                formDataObj.append(`gallery_images_urls[${index}]`, image);
               }
             }
-          });
+          }));
         }
       } else if (formData.main_image) {
         // Convertir base64 a File para main_image
-        const coverImageFile = base64ToFile(formData.main_image, 'main_image.jpg');
-        if (coverImageFile) {
-          formDataObj.append('main_image', coverImageFile);
-        } else if (formData.main_image.startsWith('http')) {
-          // Si es una URL, la enviamos como string
+        if (formData.main_image.startsWith('http')) {
+          // Si es una URL, primero la enviamos como string
           formDataObj.append('main_image_url', formData.main_image);
+          
+          // Luego intentamos convertirla a File
+          try {
+            const coverFile = await urlToFile(formData.main_image, 'main_image.jpg');
+            if (coverFile) {
+              formDataObj.append('main_image', coverFile);
+            }
+          } catch (error) {
+            console.error('Error al procesar la imagen de portada:', error);
+          }
+        } else {
+          // Si es base64, convertir a File
+          const coverImageFile = base64ToFile(formData.main_image, 'main_image.jpg');
+          if (coverImageFile) {
+            formDataObj.append('main_image', coverImageFile);
+          }
         }
       }
       

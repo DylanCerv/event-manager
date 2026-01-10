@@ -28,13 +28,13 @@ import {
   QrCode 
 } from 'lucide-react';
 import type { EventBook } from '../types/eventbook';
-import { isEventBookClosed, checkAndProcessExpiredEventBooks, downloadEventBookBackup, generateEventBookPDF } from '../lib/eventbook-backup';
+import { isEventBookClosed, checkAndProcessExpiredEventBooks, generateEventBookPDF } from '../lib/eventbook-backup';
 import type { Event } from '../types/event';
 import type { UserAccess } from '../types/roles';
 import { eventBookStorage } from '../lib/eventbook-storage';
-import { storage } from '../lib/storage';
 import { rolesStorage } from '../lib/roles-storage';
 import { EventBookQRCode } from '../components/EventBookQRCode';
+import { useEvents } from '../contexts/EventContext';
 
 type TabType = 'config' | 'activation' | 'share' | 'backup';
 
@@ -43,6 +43,7 @@ export function Eventbook() {
   const [availableEvents, setAvailableEvents] = React.useState<Event[]>([]);
   const [allEvents, setAllEvents] = React.useState<Event[]>([]);
   const [allUserAccesses, setAllUserAccesses] = React.useState<UserAccess[]>([]);
+  const { events } = useEvents();
   const [isLoading, setIsLoading] = React.useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = React.useState(false);
@@ -162,37 +163,30 @@ export function Eventbook() {
 
   const loadAvailableEvents = async () => {
     try {
-      // Obtener todos los eventos y solicitudes QR/links
-      const events = await storage.getEvents();
-      const requests = await storage.getEventRequests();
+      // Usar eventos del backend vía EventContext (incluyen request si existe)
       setAllEvents(events); // Guardar todos los eventos para referencia
       
       // Filtrar eventos que:
       // 1. No han pasado (fecha futura)
       // 2. No tienen ya un EventBook creado
       // 3. No están finalizados
-      // 4. Tienen solicitud QR/links aprobada
+      // 4. Tienen solicitud QR/links aprobada (desde backend: event.request?.status)
       const today = new Date();
       const filteredEvents = events.filter((event: Event) => {
         const eventDate = new Date(event.date);
         const hasEventBook = eventBooks.some(book => book.event_id === event.id);
         
         // Nueva condición: verificar que existe solicitud QR/links aprobada
-        const hasApprovedQRRequest = requests.some(request => 
-          request.event_id === event.id && request.status === 'approved'
-        );
+        const hasApprovedQRRequest = event.request?.status === 'approved';
         
         // Un evento está disponible si:
         // - Su fecha es futura
         // - No tiene EventBook
-        // - Su estado no es 'rejected'
-        // - Tiene estado 'approved' o no tiene estado (compatibilidad)
         // - Tiene solicitud QR/links aprobada
         return (
           eventDate > today && 
           !hasEventBook && 
-          event.request_status !== 'rejected' &&
-          (!event.request_status || event.request_status === 'approved') &&
+          !event.is_finalized &&
           hasApprovedQRRequest
         );
       });
@@ -201,23 +195,18 @@ export function Eventbook() {
       
       // Debug: Mostrar información sobre el filtrado
       console.log('Total eventos:', events.length);
-      console.log('Total solicitudes QR:', requests.length);
       console.log('Eventos filtrados:', filteredEvents.length);
       console.log('Eventos descartados:', events.filter(e => {
         const eventDate = new Date(e.date);
         const hasEventBook = eventBooks.some(book => book.event_id === e.id);
-        const hasApprovedQRRequest = requests.some(request => 
-          request.event_id === e.id && request.status === 'approved'
-        );
-        return !(eventDate > today && !hasEventBook && e.request_status !== 'rejected' && (!e.request_status || e.request_status === 'approved') && hasApprovedQRRequest);
+        const hasApprovedQRRequest = e.request?.status === 'approved';
+        return !(eventDate > today && !hasEventBook && !e.is_finalized && hasApprovedQRRequest);
       }).map(e => ({
         nombre: e.name,
         fecha: e.date,
         tieneEventBook: eventBooks.some(book => book.event_id === e.id),
-        estado: e.request_status,
-        tieneQRAprobado: requests.some(request => 
-          request.event_id === e.id && request.status === 'approved'
-        )
+        tieneQRAprobado: e.request?.status === 'approved',
+        isFinalized: e.is_finalized
       })));
     } catch (error) {
       console.error('Error loading available events:', error);

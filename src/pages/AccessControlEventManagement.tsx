@@ -155,9 +155,9 @@ export function AccessControlEventManagement() {
         !guest.phone || 
         !guest.table_number
       ).length,
-      confirmed: guests.filter(guest => guest.confirmed).length,
-      notConfirmed: guests.filter(guest => !guest.confirmed).length,
-      accessDenied: guests.filter(guest => guest.access_denied).length,
+      confirmed: guests.filter(guest => guest.status === 'confirmed').length,
+      notConfirmed: guests.filter(guest => guest.status !== 'confirmed').length,
+      accessDenied: guests.filter(guest => !guest.qr_code_status).length,
     };
   }, [guests]);
 
@@ -359,7 +359,7 @@ export function AccessControlEventManagement() {
                              </div>
                              <div className="ml-2 sm:ml-3">
                                <p className="text-xs sm:text-sm font-medium text-purple-600">Ingresaron</p>
-                               <p className="text-lg sm:text-2xl font-bold text-purple-900">{guests.filter(guest => guest.attended).length}</p>
+                               <p className="text-lg sm:text-2xl font-bold text-purple-900">{guests.filter(guest => guest.status === 'attended').length}</p>
                              </div>
                            </div>
                          </div>
@@ -371,7 +371,7 @@ export function AccessControlEventManagement() {
                              </div>
                              <div className="ml-2 sm:ml-3">
                                <p className="text-xs sm:text-sm font-medium text-amber-600">Faltan Ingresar</p>
-                               <p className="text-lg sm:text-2xl font-bold text-amber-900">{guests.length - guests.filter(guest => guest.attended).length}</p>
+                               <p className="text-lg sm:text-2xl font-bold text-amber-900">{guests.length - guests.filter(guest => guest.status === 'attended').length}</p>
                              </div>
                            </div>
                          </div>
@@ -465,18 +465,18 @@ export function AccessControlEventManagement() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    guest.attended ? 'bg-purple-100 text-purple-800' :
-                                    guest.confirmed ? 'bg-green-100 text-green-800' : 
+                                    guest.status === 'attended' ? 'bg-purple-100 text-purple-800' :
+                                    guest.status === 'confirmed' ? 'bg-green-100 text-green-800' : 
                                     'bg-gray-100 text-gray-800'
                                   }`}>
-                                    {guest.attended ? 'Asistió' : guest.confirmed ? 'Confirmado' : 'No Confirmado'}
+                                    {guest.status === 'attended' ? 'Asistió' : guest.status === 'confirmed' ? 'Confirmado' : 'No Confirmado'}
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    guest.access_denied ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                                    !guest.qr_code_status ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                                   }`}>
-                                    {guest.access_denied ? (
+                                    {!guest.qr_code_status ? (
                                       <>
                                         <X className="w-4 h-4 mr-1" />
                                         Denegado
@@ -488,6 +488,14 @@ export function AccessControlEventManagement() {
                                       </>
                                     )}
                                   </span>
+                                  {guest.qr_code_status !== undefined && (
+                                    <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                      guest.qr_code_status ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      <QrCode className="w-3 h-3 mr-1" />
+                                      {guest.qr_code_status ? 'QR Activo' : 'QR Inactivo'}
+                                    </span>
+                                  )}
                                 </td>
                               </tr>
                             ))}

@@ -80,6 +80,34 @@ export const updateEventGuestAPI = async (eventId: number, guestNumber: string |
 };
 
 /**
+ * Upload guest video (multipart/form-data)
+ */
+export const uploadEventGuestVideoAPI = async (eventId: number, guestNumber: string | number, file: File): Promise<any> => {
+    try {
+        const formData = new FormData();
+        formData.append('video', file);
+
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/event-guests/${eventId}/${guestNumber}/video`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: formData,
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || `Error al subir video del invitado ${guestNumber} del evento ${eventId}`);
+        }
+        return data;
+    } catch (error) {
+        console.error(`Error en uploadEventGuestVideoAPI (EventID: ${eventId}, GuestNumber: ${guestNumber}):`, error);
+        throw error;
+    }
+};
+
+/**
  * Delete an Event Guest
  */
 export const deleteEventGuestAPI = async (id: number): Promise<any> => {

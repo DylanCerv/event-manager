@@ -7,6 +7,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<ApiUser | null>(null);
   const [role, setRole] = useState<ApiRole | null>(null);
+  const [isAuthInitialized, setIsAuthInitialized] = useState(false);
 
   const updateUserPhoto = (photoUrl: string) => {
     if (user) {
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       setUser(formatResponse);
       setRole(formatResponse.role as ApiRole);
+      setIsAuthInitialized(true);
       // storage.setCurrentUser({ id: apiUser.id.toString(), role: roleName });
       return formatResponse;
     } catch (error) {
@@ -55,16 +57,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
-    const user = sessionStorage.getItem('user');
-    if (user) {
-      const userData = JSON.parse(user);
-      setUser(userData);
-      setRole(userData.role as ApiRole);
+    try {
+      const storedUser = sessionStorage.getItem('user');
+      if (storedUser) {
+        const userData = JSON.parse(storedUser);
+        setUser(userData);
+        setRole(userData.role as ApiRole);
+      }
+    } catch {
+      sessionStorage.removeItem('user');
+      sessionStorage.removeItem('auth_token');
+      setUser(null);
+      setRole(null);
+    } finally {
+      setIsAuthInitialized(true);
     }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, role, loginWithApi, logout, updateUserPhoto }}>
+    <AuthContext.Provider value={{ user, role, loginWithApi, logout, updateUserPhoto, isAuthInitialized }}>
       {children}
     </AuthContext.Provider>
   );

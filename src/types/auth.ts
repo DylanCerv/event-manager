@@ -16,6 +16,7 @@ export interface AuthContextType {
   logout: () => void;
   updateUserPhoto: (photoUrl: string) => void;
   role: ApiRole | null;
+  isAuthInitialized: boolean;
 }
 
 // API response types for authentication

@@ -137,7 +137,8 @@ export function CreateUserModal({ isOpen, onClose, onCreated }: CreateUserModalP
 
       const response = await createUserAPI(payload);
       if (response.status === 201) {
-        try { onCreated?.(response); } catch {}
+        const createdUser = response?.data ?? response?.user ?? response;
+        try { onCreated?.(createdUser); } catch {}
         onClose();
         resetForm();
       } else {

@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getBoltEventsAPI, createBoltEventAPI, updateBoltEventAPI, deleteBoltEventAPI } from '../endpoints/boltEvent';
+import { 
+    getBoltEventsAPI, 
+    createBoltEventAPI, 
+    updateBoltEventAPI, 
+    deleteBoltEventAPI,
+} from '../endpoints/boltEvent';
 import type { Event } from '../types/event';
 
 // Define the shape of our context
@@ -9,8 +14,8 @@ interface EventContextType {
     error: string | null;
     fetchEvents: () => Promise<void>;
     getEventById: (id: string) => Event | undefined;
-    createEvent: (eventData: any) => Promise<Event>;
-    updateEvent: (id: string, eventData: any) => Promise<Event>;
+    createEvent: (eventData: object) => Promise<Event>;
+    updateEvent: (id: string, eventData: object) => Promise<Event>;
     deleteEvent: (id: string) => Promise<void>;
     refreshEvents: () => Promise<void>;
 }
@@ -65,6 +70,10 @@ const mapApiEventToLocal = (apiEvent: any): Event => ({
     is_finalized: apiEvent.is_finalized,
     status: apiEvent.status,
     request: apiEvent.request || undefined,
+    // Nuevos campos para QR Access
+    pre_activation_message: apiEvent.pre_activation_message,
+    welcome_message: apiEvent.welcome_message,
+    rejection_message: apiEvent.rejection_message,
 });
 
 // Provider component

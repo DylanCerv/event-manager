@@ -335,6 +335,9 @@ export function Requests() {
       
       // Actualizar el estado de la solicitud usando el endpoint
       await updateEventRequestStatusAPI(parseInt(requestId), status, true);
+      
+      // Refrescar eventos para que el UI refleje el cambio en tiempo real
+      await refreshEvents();
     } catch (error) {
       console.error('Error processing request:', error);
       alert('Error al procesar la solicitud');
@@ -1039,7 +1042,7 @@ export function Requests() {
                                 <h4 className="text-base sm:text-lg font-medium text-gray-900">{event.name}</h4>
                                 <span className="text-xs sm:text-sm font-medium text-indigo-600">
                                   Solicitado por: <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-md font-bold">
-                                    {request.creator?.company || 'N/A'}
+                                    {request.creator?.company || (request.creator?.name + " " + request.creator?.last_name) || 'N/A'}
                                   </span>
                                 </span>
                               </div>
@@ -1136,17 +1139,20 @@ export function Requests() {
                                 </button>
                               )}
                               
-                              <button
-                                onClick={() => {
-                                  setShowDeleteConfirm(request.id);
-                                  setDeleteType('request');
-                                }}
-                                disabled={isLoading}
-                                className="inline-flex items-center justify-center px-3 py-2 border border-red-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                              >
-                                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                                Eliminar
-                              </button>
+                              {role?.name !== 'SUPER_ADMIN' && request.status !== 'approved' && request.status !== 'rejected' && (
+                                <button
+                                  onClick={() => {
+                                    // setShowDeleteConfirm(request.id);
+                                    // setDeleteType('request');
+                                    handleDeleteRequest(Number(request.id));
+                                  }}
+                                  disabled={isLoading}
+                                  className="inline-flex items-center justify-center px-3 py-2 border border-red-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                >
+                                  <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                  Eliminar
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1496,7 +1502,7 @@ export function Requests() {
       </div>
       
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
+      {showDeleteConfirm !== null && showDeleteConfirm !== undefined && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <div className="sm:flex sm:items-start">
@@ -1504,7 +1510,9 @@ export function Requests() {
                 <Trash2 className="h-6 w-6 text-red-600" />
               </div>
               <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
-                <h3 className="text-lg font-medium text-gray-900">Eliminar Evento</h3>
+                <h3 className="text-lg font-medium text-gray-900">
+                  {deleteType === 'request' ? 'Eliminar Solicitud' : 'Eliminar Evento'}
+                </h3>
                 <div className="mt-2">
                   <p className="text-sm text-gray-500">
                     {deleteType === 'request' 
@@ -1519,7 +1527,8 @@ export function Requests() {
               <button
                 type="button"
                 onClick={() => {
-                    handleDeleteRequest(showDeleteConfirm);
+                    // Actualmente solo se elimina solicitud (request). Si más adelante se agrega delete event, se puede ramificar aquí.
+                    handleDeleteRequest(Number(showDeleteConfirm));
                 }}
                 disabled={isLoading}
                 className="inline-flex w-full justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"

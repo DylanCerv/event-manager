@@ -3,6 +3,7 @@ import { X, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { creatorsStorage } from '../lib/creators-storage';
 import { updateUserAPI } from '../endpoints/user';
 import type { Creator } from '../types/creator';
+import { useUser } from '../contexts/UserContext';
 
 interface User {
   id: string;
@@ -47,9 +48,11 @@ interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   editingUser: User | null;
+  onUpdated?: (apiUser: any) => void;
 }
 
-export function EditUserModal({ isOpen, onClose, editingUser }: EditUserModalProps) {
+export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditUserModalProps) {
+  const { fetchUsers } = useUser();
   const [formData, setFormData] = React.useState<UserFormData>({
     firstName: '',
     lastName: '',
@@ -178,8 +181,13 @@ export function EditUserModal({ isOpen, onClose, editingUser }: EditUserModalPro
       }
 
       const response = await updateUserAPI(Number(editingUser.id), payload);
-      if (response.status == 200) {
+      const updatedUser = response?.data ?? response?.user ?? response;
+      const isSuccess = response?.status == 200 || !!updatedUser?.id;
+      if (isSuccess) {
         resetForm();
+        fetchUsers();
+        try { onUpdated?.(updatedUser); } catch {}
+        onClose();
       } else {
         alert(response?.message || 'Error al actualizar el usuario');
       }

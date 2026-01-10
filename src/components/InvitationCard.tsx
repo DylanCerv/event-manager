@@ -65,6 +65,14 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
   const [showMobilityForm, setShowMobilityForm] = useState(!guest.mobility_form_submitted);
   const [dietaryRestrictions, setDietaryRestrictions] = useState(guest.dietary_restrictions || '');
   const [mobilityRestrictions, setMobilityRestrictions] = useState(guest.mobility_restrictions || '');
+  
+  // Actualizar estados cuando cambia el invitado
+  useEffect(() => {
+    setShowHealthForm(!guest.health_form_submitted);
+    setShowMobilityForm(!guest.mobility_form_submitted);
+    setDietaryRestrictions(guest.dietary_restrictions || '');
+    setMobilityRestrictions(guest.mobility_restrictions || '');
+  }, [guest]);
   const [imageBrightness, setImageBrightness] = useState<'light' | 'dark' | 'medium'>('medium');
   const [showContent, setShowContent] = useState(false);
   
@@ -81,7 +89,13 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
   const selectedBackground = getBackgroundImage(eventCard.event_type || 'wedding', typeof eventCard.background_option === 'string' ? parseInt(eventCard.background_option) : (eventCard.background_option || 1));
   
   // Determinar el modelo de layout (por defecto 'cover' para compatibilidad)
-  const layoutModel = eventCard.card_model || 'cover';
+  // Usar estado para layoutModel para asegurar que se actualice correctamente
+  const [layoutModel, setLayoutModel] = useState(eventCard.card_model || 'cover');
+  
+  // Actualizar layoutModel cuando cambia eventCard.card_model
+  useEffect(() => {
+    setLayoutModel(eventCard.card_model || 'cover');
+  }, [eventCard.card_model]);
 
   // Función para renderizar recomendaciones categorizadas
   const renderRecommendations = (styleProps: any = {}) => {
@@ -284,6 +298,18 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
       setShowContent(true);
     }
   }, [layoutModel]);
+  
+  // Efecto para actualizar el componente cuando cambian las props
+  useEffect(() => {
+    // Reiniciar estados cuando cambia la tarjeta o el evento
+    if (layoutModel === 'fixed-background' && eventCard.main_image) {
+      detectImageBrightness(eventCard.main_image);
+    }
+    
+    // Forzar actualización del componente
+    setShowContent(false);
+    setTimeout(() => setShowContent(true), 100);
+  }, [eventCard, event, detectImageBrightness, layoutModel]);
 
   // Renderizar modelo portada
   if (eventCard.card_model === 'portada') {
@@ -610,7 +636,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                   />
                 </h1>
                 
-                {guest.confirmed && (
+                {guest.status === 'confirmed' && (
                   <div 
                     className="inline-flex items-center rounded-full px-6 py-3 border-2 shadow-sm theme-text"
                     style={{ 
@@ -750,7 +776,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
                 {/* Confirmation Button */}
                 <div className="flex justify-center pt-4">
-                  {guest.confirmed ? (
+                  {guest.status === 'confirmed' ? (
                     <div className="px-12 py-4 rounded-full text-base font-medium tracking-wide shadow-lg relative overflow-hidden ring-2 ring-offset-2 bg-green-100 border-green-300">
                       <span className="flex items-center justify-center text-green-700">
                         <Check className="w-5 h-5 mr-2" />
@@ -1436,7 +1462,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 />
               </h1>
               
-              {guest.confirmed && (
+              {guest.status === 'confirmed' && (
                 <div 
                   className="inline-flex items-center rounded-full px-6 py-3 border-2 shadow-sm theme-text"
                   style={{ 
@@ -1573,7 +1599,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
               {/* Confirmation Button */}
               <div className="flex justify-center pt-4">
-                {guest.confirmed ? (
+                {guest.status === 'confirmed' ? (
                   <div className="px-12 py-4 rounded-full text-base font-medium tracking-wide shadow-lg relative overflow-hidden ring-2 ring-offset-2 bg-green-100 border-green-300">
                     <span className="flex items-center justify-center text-green-700">
                       <Check className="w-5 h-5 mr-2" />
@@ -2386,7 +2412,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 />
               </h1>
               
-              {guest.confirmed && (
+              {guest.status === 'confirmed' && (
                 <div 
                   className="inline-flex items-center rounded-full px-6 py-3 border-2 shadow-sm theme-text"
                   style={{ 
@@ -2523,7 +2549,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
               {/* Confirmation Button */}
               <div className="flex justify-center pt-4">
-                {guest.confirmed ? (
+                {guest.status === 'confirmed' ? (
                   <div className="px-12 py-4 rounded-full text-base font-medium tracking-wide shadow-lg relative overflow-hidden ring-2 ring-offset-2 bg-green-100 border-green-300">
                     <span className="flex items-center justify-center text-green-700">
                       <Check className="w-5 h-5 mr-2" />
@@ -2916,7 +2942,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     {eventCard.event_name}
                   </h1>
                   
-                  {guest.confirmed && (
+                  {guest.status === 'confirmed' && (
                     <div 
                       className="inline-flex items-center rounded-full px-6 py-3 border-2 border-white/30 shadow-sm font-medium backdrop-blur-sm"
                       style={{ 
@@ -2989,7 +3015,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
                 {/* Botón de confirmación */}
                 <div className="flex justify-center pt-2">
-                  {guest.confirmed ? (
+                  {guest.status === 'confirmed' ? (
                     <div 
                       className="px-8 py-3 rounded-full text-base font-medium tracking-wide shadow-lg backdrop-blur-sm border border-green-300/30"
                       style={{ backgroundColor: '#10b981E6', color: 'white' }}
@@ -3378,7 +3404,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
           
           {/* Confirmation Badge on Cover (if confirmed) */}
-          {guest.confirmed && (
+          {guest.status === 'confirmed' && (
             <div className="absolute top-4 right-4">
               <div 
                 className="inline-flex items-center rounded-full px-4 py-2 border-2 border-white/30 shadow-lg text-white font-medium"
@@ -3442,7 +3468,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
               />
             </h1>
             
-            {guest.confirmed && (
+            {guest.status === 'confirmed' && (
               <div 
                 className="inline-flex items-center rounded-full px-6 py-3 border-2 shadow-sm theme-text"
                 style={{ 
@@ -3604,7 +3630,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
             {/* Confirmation Button */}
             <div className="flex justify-center pt-4">
-              {guest.confirmed ? (
+              {guest.status === 'confirmed' ? (
                 <div className="px-12 py-4 rounded-full text-base font-medium tracking-wide shadow-lg relative overflow-hidden ring-2 ring-offset-2 bg-green-100 border-green-300">
                   <span className="flex items-center justify-center text-green-700">
                     <Check className="w-5 h-5 mr-2" />
@@ -3744,7 +3770,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 <button
                   onClick={() => onConfirmAttendance(guest.id, true)}
                   className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
-                    guest.confirmed 
+                    guest.status === 'confirmed' 
                       ? 'bg-green-500 text-white shadow-lg transform scale-105' 
                       : 'bg-white text-green-600 border border-green-200 hover:bg-green-50'
                   }`}
@@ -3755,7 +3781,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 <button
                   onClick={() => onConfirmAttendance(guest.id, false)}
                   className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
-                    guest.confirmed === false 
+                    guest.status !== 'confirmed' 
                       ? 'bg-red-500 text-white shadow-lg transform scale-105' 
                       : 'bg-white text-red-600 border border-red-200 hover:bg-red-50'
                   }`}

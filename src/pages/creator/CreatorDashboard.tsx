@@ -7,11 +7,11 @@ import CreatorRequests from './CreatorRequests';
 import CreatorCommissions from './CreatorCommissions';
 
 export default function CreatorDashboard() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const location = useLocation();
 
-  if (!user || user.role !== 'CREATOR') {
-    return <Navigate to="/login" />;
+  if (!user || role?.name !== 'CREATOR') {
+    return <Navigate to="/" replace />;
   }
 
   const isHomePage = location.pathname === '/creator' || location.pathname === '/creator/' || location.pathname === '/creator/home';

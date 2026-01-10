@@ -10,6 +10,7 @@ import { EditUserModal } from '../components/EditUserModal';
 import { AwardPrizeModal } from '../components/AwardPrizeModal';
 import { HistoryModal } from '../components/HistoryModal';
 import type { Creator } from '../types/creator';
+import { deleteUserAPI } from '../endpoints/user';
 
 interface User {
   id: string;
@@ -32,7 +33,7 @@ interface User {
 }
 
 export function Usuarios() {
-  const { fetchUsers: fetchAllUsers, filterByRoleId, getUserById } = useUser();
+  const { fetchUsers: fetchAllUsers, getUserById } = useUser();
   const [activeTab, setActiveTab] = React.useState<'gestion' | 'puntos'>('gestion');
   const [users, setUsers] = React.useState<User[]>([]);
   const [creators, setCreators] = React.useState<Creator[]>([]);
@@ -85,7 +86,6 @@ export function Usuarios() {
   }, [users.length]); // Only recalculate when users array length changes, not content
 
   React.useEffect(() => {
-    console.log('Component mounted, loading data...');
     reloadAdminsFromAPI();
     loadCreators();
     loadUserPoints();
@@ -153,13 +153,10 @@ export function Usuarios() {
   const loadPrizes = () => {
     try {
       const storedPrizes = localStorage.getItem('prizes');
-      console.log('Stored prizes from localStorage:', storedPrizes);
       if (storedPrizes) {
         const parsedPrizes = JSON.parse(storedPrizes);
-        console.log('Parsed prizes:', parsedPrizes);
         setPrizes(parsedPrizes);
       } else {
-        console.log('No prizes found in localStorage, creating default prize');
         // Crear premio por defecto si no existe
         const defaultPrizes = [
           {
@@ -170,10 +167,8 @@ export function Usuarios() {
             eligibleUsers: 'Administradores'
           }
         ];
-        console.log('Creating default prizes:', defaultPrizes);
         setPrizes(defaultPrizes);
         localStorage.setItem('prizes', JSON.stringify(defaultPrizes));
-        console.log('Default prizes saved to localStorage');
       }
     } catch (error) {
       console.error('Error loading prizes:', error);
@@ -226,9 +221,11 @@ export function Usuarios() {
 
   const reloadAdminsFromAPI = async () => {
     try {
-      await fetchAllUsers();
-      const admins = filterByRoleId('ADMIN');
+      const loadedUsers = await fetchAllUsers();
+      const admins = (loadedUsers || []).filter((u: any) => String((u as any).role_id ?? u.role?.id) === '2');
+      console.log('admins', admins);
       const mapped = admins.map(mapApiUserToLocalUser);
+      console.log('mapped', mapped);
       setUsers(mapped);
     } catch (error) {
       console.error('Error loading admins from API:', error);
@@ -502,9 +499,16 @@ export function Usuarios() {
   };
 
   const handleDeleteUser = async (userId: string) => {
+    console.log('userId', userId);
     setIsLoading(true);
     
     try {
+      const deleteResponse = await deleteUserAPI(Number(userId));
+      const deleteOk = deleteResponse?.status === 200 || deleteResponse?.message || deleteResponse?.success;
+      if (!deleteOk) {
+        throw new Error(deleteResponse?.message || 'Error al eliminar el usuario');
+      }
+
       // 1. Eliminar eventos del usuario
       const events = await storage.getEvents();
       const userEvents = events.filter(event => event.created_by === userId);
@@ -567,11 +571,14 @@ export function Usuarios() {
       const updatedUsers = users.filter(user => user.id !== userId);
     // Persisting to local storage disabled for API-driven users
       setUsers(updatedUsers);
+      await fetchAllUsers();
       
       setShowDeleteConfirm(null);
-      setIsLoading(false);
     } catch (error) {
       console.error('Error deleting user and related data:', error);
+      alert('Error al eliminar el usuario');
+    }
+    finally {
       setIsLoading(false);
     }
   };
@@ -1043,8 +1050,10 @@ export function Usuarios() {
           onClose={() => setShowCreateModal(false)}
           onCreated={(apiUser) => {
             // Optimistic update local list to avoid full refetch
-            const mapped = mapApiUserToLocalUser(apiUser);
+            const userData = (apiUser as any)?.data ?? apiUser;
+            const mapped = mapApiUserToLocalUser(userData as ApiUser);
             setUsers((prev) => [mapped, ...prev]);
+            fetchAllUsers().catch(() => {});
           }}
         />
 
@@ -1056,6 +1065,13 @@ export function Usuarios() {
             setEditingUser(null);
           }}
           editingUser={editingUser}
+          onUpdated={(apiUser) => {
+            const userData = (apiUser as any)?.data ?? apiUser;
+            if (!userData?.id) return;
+            const mapped = mapApiUserToLocalUser(userData as ApiUser);
+            setUsers((prev) => prev.map((u) => (u.id === String(mapped.id) ? { ...u, ...mapped } : u)));
+            fetchAllUsers().catch(() => {});
+          }}
         />
 
         {/* Delete Confirmation Modal */}

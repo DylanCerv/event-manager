@@ -1,15 +1,35 @@
 /** Bolt Events API endpoints */
 
-
 const token = sessionStorage.getItem('auth_token');
 
 /**
- * Get all Bolt Events
+ * Interface for Bolt Event query parameters
  */
-export const getBoltEventsAPI = async ({ queryParams }: { queryParams?: { include_requests?: boolean } }): Promise<any> => {
+interface BoltEventQueryParams {
+    include_requests?: boolean;
+    creator_id?: number;
+    user_id?: number;
+    start_date?: string;
+    end_date?: string;
+}
+
+/**
+ * Get all Bolt Events with optional filters
+ * 
+ * @param queryParams Optional query parameters for filtering events
+ * @returns Promise with the API response containing bolt events
+ */
+export const getBoltEventsAPI = async ({ queryParams }: { queryParams?: BoltEventQueryParams }): Promise<any> => {
     try {
         const urlParams = new URLSearchParams();
+        
+        // Add all query parameters if provided
         if (queryParams?.include_requests) urlParams.append('include_requests', 'true');
+        if (queryParams?.creator_id) urlParams.append('creator_id', queryParams.creator_id.toString());
+        if (queryParams?.user_id) urlParams.append('user_id', queryParams.user_id.toString());
+        if (queryParams?.start_date) urlParams.append('start_date', queryParams.start_date);
+        if (queryParams?.end_date) urlParams.append('end_date', queryParams.end_date);
+        
         let url = `${import.meta.env.VITE_API_URL}/bolt-events?${urlParams.toString()}`;
         
         const response = await fetch(url, {
@@ -35,6 +55,8 @@ export const getBoltEventsAPI = async ({ queryParams }: { queryParams?: { includ
  * Create a new Bolt Event
  */
 export const createBoltEventAPI = async (body: object): Promise<any> => {
+    console.log('body', body);
+    console.log('token', token);
     try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/bolt-events`, {
             method: 'POST',
@@ -58,10 +80,19 @@ export const createBoltEventAPI = async (body: object): Promise<any> => {
 
 /**
  * Get a Bolt Event by ID
+ * 
+ * @param id The ID of the event to retrieve
+ * @param includeRequests Whether to include request data in the response
+ * @returns Promise with the API response containing the event
  */
-export const getBoltEventByIdAPI = async (id: number): Promise<any> => {
+export const getBoltEventByIdAPI = async (id: number, includeRequests: boolean = false): Promise<any> => {
     try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/bolt-events/${id}`, {
+        const urlParams = new URLSearchParams();
+        if (includeRequests) urlParams.append('include_requests', 'true');
+        
+        const url = `${import.meta.env.VITE_API_URL}/bolt-events/${id}?${urlParams.toString()}`;
+        
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -128,3 +159,4 @@ export const deleteBoltEventAPI = async (id: number): Promise<any> => {
         throw error;
     }
 };
+

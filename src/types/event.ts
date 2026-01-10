@@ -8,10 +8,15 @@ export interface Event {
   logo_url?: string;
   created_at: string;
   created_by: string;
-  status?: 'pending' | 'approved' | 'rejected';
+  status?: 'pending' | 'approved' | 'rejected' | 'scheduled' | 'cancelled' | 'completed';
   request?: EventRequest;
   qr_access_active: boolean;
   is_finalized: boolean;
+  // Campos para QR Access
+  pre_activation_message?: string;
+  welcome_message?: string;
+  rejection_message?: string;
+  description?: string;
 }
 
 export interface EventCard {
@@ -99,9 +104,9 @@ export interface Guest {
   table_number?: number;
   email?: string;
   phone?: string;
-  confirmed: boolean;
-  attended: boolean;
-  attended_at?: string; // Timestamp de cuándo marcó asistencia
+  // confirmed: boolean;
+  // attended: boolean;
+  // attended_at?: string; // Timestamp de cuándo marcó asistencia
   profile_photo?: string;
   health_info?: string;
   qr_code: string;
@@ -111,8 +116,12 @@ export interface Guest {
   health_form_submitted?: boolean;
   mobility_form_submitted?: boolean;
   forms_completed?: boolean;
-  access_denied?: boolean;
+  qr_code_status?: boolean;
+  video_status?: boolean;
+  video_url?: string;
   age_category?: 'minor' | 'adult'; // Categoría de edad explícita
+  status?: string;
+  confirmation_status: 'confirmed' | 'not confirmed' | 'attended';
 }
 
 export interface GuestAccessSettings {

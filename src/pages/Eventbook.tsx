@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
   X, 
   Plus, 
@@ -7,12 +6,10 @@ import {
   Settings, 
   Trash2, 
   ExternalLink, 
-  Lock, 
   Share2, 
   Power, 
   Users, 
   MessageSquare, 
-  Image, 
   Clock, 
   Palette, 
   Info, 
@@ -28,11 +25,9 @@ import {
   QrCode 
 } from 'lucide-react';
 import type { EventBook } from '../types/eventbook';
-import { isEventBookClosed, checkAndProcessExpiredEventBooks, generateEventBookPDF } from '../lib/eventbook-backup';
+import { isEventBookClosed, generateEventBookPDF } from '../lib/eventbook-backup';
 import type { Event } from '../types/event';
-import type { UserAccess } from '../types/roles';
 import { eventBookStorage } from '../lib/eventbook-storage';
-import { rolesStorage } from '../lib/roles-storage';
 import { EventBookQRCode } from '../components/EventBookQRCode';
 import { useEvents } from '../contexts/EventContext';
 
@@ -42,7 +37,6 @@ export function Eventbook() {
   const [eventBooks, setEventBooks] = React.useState<EventBook[]>([]);
   const [availableEvents, setAvailableEvents] = React.useState<Event[]>([]);
   const [allEvents, setAllEvents] = React.useState<Event[]>([]);
-  const [allUserAccesses, setAllUserAccesses] = React.useState<UserAccess[]>([]);
   const { events } = useEvents();
   const [isLoading, setIsLoading] = React.useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<string | null>(null);
@@ -58,54 +52,7 @@ export function Eventbook() {
 
   React.useEffect(() => {
     loadEventBooks();
-    checkExpiredEventBooks();
   }, []);
-
-  // Función para verificar EventBooks expirados
-  const checkExpiredEventBooks = async () => {
-    try {
-      const expiredEventBooks = await checkAndProcessExpiredEventBooks();
-      
-      if (expiredEventBooks.length > 0) {
-        // Mostrar notificación de EventBooks cerrados
-        const notification = document.createElement('div');
-        notification.className = 'fixed top-4 right-4 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded max-w-sm z-50';
-        notification.innerHTML = `
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-              </svg>
-            </div>
-            <div class="ml-3">
-              <p class="text-sm font-medium">
-                ${expiredEventBooks.length} EventBook${expiredEventBooks.length > 1 ? 's' : ''} cerrado${expiredEventBooks.length > 1 ? 's' : ''} automáticamente
-              </p>
-              <p class="text-xs mt-1">
-                Backup${expiredEventBooks.length > 1 ? 's' : ''} generado${expiredEventBooks.length > 1 ? 's' : ''} y disponible${expiredEventBooks.length > 1 ? 's' : ''} para descarga
-              </p>
-            </div>
-          </div>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Auto-remover notificación después de 8 segundos
-        setTimeout(() => {
-          if (document.body.contains(notification)) {
-            document.body.removeChild(notification);
-          }
-        }, 8000);
-        
-        // Recargar EventBooks para mostrar el estado actualizado
-        setTimeout(() => {
-          loadEventBooks();
-        }, 1000);
-      }
-    } catch (error) {
-      console.error('Error checking expired EventBooks:', error);
-    }
-  };
 
   // Cargar eventos disponibles solo después de que se carguen los EventBooks
   React.useEffect(() => {
@@ -117,45 +64,7 @@ export function Eventbook() {
   const loadEventBooks = async () => {
     try {
       const books = await eventBookStorage.getEventBooksByUser();
-      
-      // Obtener información de moderadores asignados
-      const userAccesses = await rolesStorage.getUserAccesses('all');
-      setAllUserAccesses(userAccesses);
-      
-      // Obtener estadísticas reales para cada EventBook
-      const booksWithStats = await Promise.all(
-        books.map(async (book) => {
-          try {
-            // Obtener posts del EventBook
-            const posts = await eventBookStorage.getAllPosts(book.id);
-            
-            // Obtener invitados del EventBook
-            const { guestStorage } = await import('../lib/guest-storage');
-            const guests = guestStorage.getAllGuests(book.id);
-            
-            // Contar fotos en los posts
-            const photoCount = posts.reduce((count, post) => {
-              return count + (post.mediaFiles?.filter(media => media.type === 'image').length || 0);
-            }, 0);
-            
-            // Actualizar estadísticas
-            return {
-              ...book,
-              stats: {
-                participants: guests.length,
-                posts: posts.length,
-                photos: photoCount,
-                reported: book.stats?.reported || 0
-              }
-            };
-          } catch (error) {
-            console.error(`Error loading stats for EventBook ${book.id}:`, error);
-            return book; // Devolver el libro sin cambios si hay error
-          }
-        })
-      );
-      
-      setEventBooks(booksWithStats);
+      setEventBooks(books);
     } catch (error) {
       console.error('Error loading EventBooks:', error);
     }
@@ -302,16 +211,6 @@ export function Eventbook() {
     }
   };
 
-  const handleEnterEventBook = (book: EventBook) => {
-    setSelectedEventBook(book);
-    // setActiveTab('wall'); // Removed activeTab state
-  };
-
-  const handleExitEventBook = () => {
-    setSelectedEventBook(null);
-    // setActiveTab('wall'); // Removed activeTab state
-  };
-
   const handleUpdateEventBook = async (updates: Partial<EventBook>) => {
     if (!selectedEventBook) return;
     try {
@@ -324,23 +223,6 @@ export function Eventbook() {
       setIsLoading(false);
     }
   };
-
-  const getEventBookStatus = (eventBook: EventBook, event?: Event) => {
-    const closeDate = eventBook.settings.visibility?.closeDate;
-    const now = new Date();
-    
-    if (closeDate && new Date(closeDate) < now) {
-    return {
-      label: 'Cerrado',
-      className: 'bg-red-100 text-red-800'
-    };
-  }
-  
-  return {
-    label: 'Activo',
-    className: 'bg-green-100 text-green-800'
-  };
-};
 
   // Función para obtener la fecha mínima de cierre (día del evento)
   const getMinCloseDate = (eventDate: string) => {
@@ -504,7 +386,7 @@ export function Eventbook() {
                       </div>
                       <div className="flex items-center">
                         <Users className="h-4 w-4 mr-2" />
-                        90 invitados
+                        {(allEvents.find(e => e.id === book.event_id)?.guest_count ?? 0)} invitados
                       </div>
                       {book.settings.visibility?.closeDate && (
                         <div className="flex items-center">
@@ -526,10 +408,7 @@ export function Eventbook() {
                         }`}>
                           {isEventBookClosed(book) ? '🔒 Cerrado' : book.isActive ? '🟢 Activo' : '⚫ Inactivo'}
                         </span>
-                        {allUserAccesses.some((userAccess: UserAccess) => 
-                          userAccess.accessType === 'moderador' && 
-                          userAccess.assignedEventBooks?.includes(book.id)
-                        ) ? (
+                        {(book.moderatorsCount || 0) > 0 ? (
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
                             ✅ Moderado
                           </span>
@@ -688,7 +567,7 @@ export function Eventbook() {
                           <input
                             type="checkbox"
                             checked={selectedEventBook.settings.functionality?.requirePostApproval || false}
-                            onChange={async (e) => {
+                            onChange={(e) => {
                               const newSettings = {
                                 ...selectedEventBook.settings,
                                 functionality: {
@@ -696,7 +575,6 @@ export function Eventbook() {
                                   requirePostApproval: e.target.checked
                                 }
                               };
-                              await handleUpdateEventBook({ settings: newSettings });
                               setSelectedEventBook(prev => prev ? { ...prev, settings: newSettings } : null);
                             }}
                             className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
@@ -729,7 +607,7 @@ export function Eventbook() {
                           <input
                             type="checkbox"
                             checked={selectedEventBook.settings.functionality?.[key as keyof typeof selectedEventBook.settings.functionality] || false}
-                            onChange={async (e) => {
+                            onChange={(e) => {
                               const newSettings = {
                                 ...selectedEventBook.settings,
                                 functionality: {
@@ -737,7 +615,6 @@ export function Eventbook() {
                                   [key]: e.target.checked
                                 }
                               };
-                              await handleUpdateEventBook({ settings: newSettings });
                               setSelectedEventBook(prev => prev ? { ...prev, settings: newSettings } : null);
                             }}
                               className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
@@ -768,7 +645,7 @@ export function Eventbook() {
                             value={selectedEventBook.settings.visibility?.closeDate || ''}
                             min={getMinCloseDate(allEvents.find(e => e.id === selectedEventBook.event_id)?.date || '')}
                             max={getMaxCloseDate(allEvents.find(e => e.id === selectedEventBook.event_id)?.date || '')}
-                            onChange={async (e) => {
+                            onChange={(e) => {
                               const newSettings = {
                                 ...selectedEventBook.settings,
                                 visibility: {
@@ -776,7 +653,6 @@ export function Eventbook() {
                                   closeDate: e.target.value
                                 }
                               };
-                              await handleUpdateEventBook({ settings: newSettings });
                               setSelectedEventBook(prev => prev ? { ...prev, settings: newSettings } : null);
                             }}
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
@@ -804,7 +680,7 @@ export function Eventbook() {
                         <input
                             type="text"
                             value={selectedEventBook.settings.customization?.organizerDisplayName || ''}
-                            onChange={async (e) => {
+                            onChange={(e) => {
                             const newSettings = {
                               ...selectedEventBook.settings,
                                 customization: {
@@ -812,7 +688,6 @@ export function Eventbook() {
                                   organizerDisplayName: e.target.value
                                 }
                               };
-                              await handleUpdateEventBook({ settings: newSettings });
                               setSelectedEventBook(prev => prev ? { ...prev, settings: newSettings } : null);
                             }}
                             placeholder="Ej: Organizador del Evento"
@@ -842,11 +717,11 @@ export function Eventbook() {
                               <input
                                 type="file"
                                 accept="image/*"
-                                onChange={async (e) => {
+                                onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (file) {
                                     const reader = new FileReader();
-                                    reader.onload = async (event) => {
+                                    reader.onload = (event) => {
                                       if (event.target?.result) {
                                         const newSettings = {
                                           ...selectedEventBook.settings,
@@ -855,7 +730,6 @@ export function Eventbook() {
                                             moderatorProfilePhoto: event.target.result as string
                                           }
                                         };
-                                        await handleUpdateEventBook({ settings: newSettings });
                                         setSelectedEventBook(prev => prev ? { ...prev, settings: newSettings } : null);
                                       }
                                     };
@@ -866,7 +740,7 @@ export function Eventbook() {
                               />
                               {selectedEventBook.settings.customization?.moderatorProfilePhoto && (
                                 <button
-                                  onClick={async () => {
+                                  onClick={() => {
                                     const newSettings = {
                                       ...selectedEventBook.settings,
                                       customization: {
@@ -874,7 +748,6 @@ export function Eventbook() {
                                         moderatorProfilePhoto: undefined
                                       }
                                     };
-                                    await handleUpdateEventBook({ settings: newSettings });
                                     setSelectedEventBook(prev => prev ? { ...prev, settings: newSettings } : null);
                                   }}
                                   className="mt-2 text-sm text-red-600 hover:text-red-800"
@@ -892,7 +765,7 @@ export function Eventbook() {
                         </label>
                         <select
                           value={selectedEventBook.settings.customization?.theme || 'light'}
-                            onChange={async (e) => {
+                            onChange={(e) => {
                             const newSettings = {
                               ...selectedEventBook.settings,
                               customization: {
@@ -900,7 +773,6 @@ export function Eventbook() {
                                 theme: e.target.value as 'light' | 'dark'
                               }
                             };
-                              await handleUpdateEventBook({ settings: newSettings });
                               setSelectedEventBook(prev => prev ? { ...prev, settings: newSettings } : null);
                           }}
                           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
@@ -916,7 +788,7 @@ export function Eventbook() {
                         </label>
                         <textarea
                           value={selectedEventBook.settings.customization?.welcomeMessage || ''}
-                            onChange={async (e) => {
+                            onChange={(e) => {
                             const newSettings = {
                               ...selectedEventBook.settings,
                               customization: {
@@ -924,7 +796,6 @@ export function Eventbook() {
                                 welcomeMessage: e.target.value
                               }
                             };
-                              await handleUpdateEventBook({ settings: newSettings });
                               setSelectedEventBook(prev => prev ? { ...prev, settings: newSettings } : null);
                           }}
                           rows={3}
@@ -939,6 +810,7 @@ export function Eventbook() {
                     <div className="flex justify-end pt-4">
                     <button
                       onClick={async () => {
+                        if (isLoading) return;
                           await handleUpdateEventBook({ settings: selectedEventBook.settings });
                         const successMessage = document.createElement('div');
                         successMessage.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
@@ -948,9 +820,10 @@ export function Eventbook() {
                           document.body.removeChild(successMessage);
                         }, 3000);
                       }}
+                        disabled={isLoading}
                         className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                     >
-                        Guardar cambios
+                        {isLoading ? 'Guardando...' : 'Guardar cambios'}
                     </button>
                     </div>
                       </>
@@ -1413,18 +1286,7 @@ export function Eventbook() {
                   </div>
                 </div>
 
-                <div>
-                  <label htmlFor="maxParticipants" className="block text-sm font-medium text-gray-700">
-                    Máximo de Participantes
-                  </label>
-                  <input
-                    type="number"
-                    id="maxParticipants"
-                    value={newEventBook.maxParticipants}
-                    onChange={(e) => setNewEventBook({ ...newEventBook, maxParticipants: parseInt(e.target.value) })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                  />
-                </div>
+                {/* Máximo de participantes oculto (se maneja interno) */}
 
                 <div className="flex justify-end space-x-3">
                   <button

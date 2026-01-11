@@ -28,8 +28,15 @@ export const generateEventBookBackup = async (eventBook: EventBook): Promise<Blo
   const zip = new JSZip();
   
   // Obtener todos los posts del EventBook
-  const posts = await eventBookStorage.getAllPosts(eventBook.id);
-  const guests = guestStorage.getAllGuests(eventBook.id);
+  let posts = await eventBookStorage.getAllPosts(eventBook.id);
+  // Preferir feed de moderación (incluye pendientes/reportados) cuando hay sesión
+  try {
+    const feed = await eventBookStorage.getModerationFeed(eventBook.id);
+    if (feed?.posts) posts = feed.posts;
+  } catch {
+    // best-effort
+  }
+  const guests = await guestStorage.getAllGuests(eventBook.id);
   
   // Crear estructura de datos del backup
   const backupData = {
@@ -98,33 +105,6 @@ export const generateEventBookBackup = async (eventBook: EventBook): Promise<Blo
   
   // Agregar archivo JSON principal con todos los datos
   zip.file('eventbook-data.json', JSON.stringify(backupData, null, 2));
-  
-  // Agregar archivo README con información del backup
-  const readmeContent = `
-EventBook Backup
-================
-
-EventBook: ${eventBook.name}
-Fecha del evento: ${eventBook.eventDate || 'No especificada'}
-Backup generado: ${new Date().toLocaleString()}
-
-Contenido del backup:
-- eventbook-data.json: Datos completos del EventBook
-- images/: Carpeta con todas las imágenes
-- Total de posts: ${posts.length}
-- Total de invitados: ${guests.length}
-
-Este backup contiene toda la información del EventBook incluyendo:
-- Configuración del EventBook
-- Posts de los invitados
-- Comentarios y reacciones
-- Imágenes (tanto embebidas como archivos separados)
-- Lista de invitados
-
-Para restaurar o visualizar estos datos, puedes usar el archivo JSON principal.
-`;
-  
-  zip.file('README.txt', readmeContent.trim());
   
   // Generar el archivo ZIP
   return await zip.generateAsync({ type: 'blob' });
@@ -217,6 +197,34 @@ export const isEventBookClosed = (eventBook: EventBook): boolean => {
   return eventBook.status === 'closed';
 };
 
+const getSnapshotFromStoredBackup = async (
+  eventBook: EventBook
+): Promise<{ posts: any[]; guests: any[] } | null> => {
+  const backupBlob = eventBook.backupData?.blob;
+  if (!backupBlob) return null;
+
+  try {
+    const base64 = backupBlob.includes(',') ? backupBlob.split(',')[1] : backupBlob;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const zip = await JSZip.loadAsync(bytes);
+    const dataFile = zip.file('eventbook-data.json');
+    if (!dataFile) return null;
+
+    const jsonStr = await dataFile.async('string');
+    const parsed = JSON.parse(jsonStr || '{}');
+    return {
+      posts: Array.isArray(parsed.posts) ? parsed.posts : [],
+      guests: Array.isArray(parsed.guests) ? parsed.guests : [],
+    };
+  } catch (error) {
+    console.error('Error reading stored EventBook backup:', error);
+    return null;
+  }
+};
+
 // Función para generar PDF del EventBook con layout visual
 export const generateEventBookPDF = async (eventBook: EventBook): Promise<void> => {
   try {
@@ -226,9 +234,27 @@ export const generateEventBookPDF = async (eventBook: EventBook): Promise<void> 
       throw new Error('No se pudo abrir ventana temporal para generar PDF');
     }
 
-    // Obtener datos del EventBook
-    const posts = await eventBookStorage.getAllPosts(eventBook.id);
-    const guests = await guestStorage.getAllGuests(eventBook.id);
+    // Obtener datos del EventBook:
+    // - Si está cerrado y existe backupData.blob, usarlo (NO depende de endpoints bloqueados)
+    // - Si no, usar endpoints como antes
+    let posts: any[] = [];
+    let guests: any[] = [];
+
+    const snapshot = isEventBookClosed(eventBook) ? await getSnapshotFromStoredBackup(eventBook) : null;
+    if (snapshot) {
+      posts = snapshot.posts;
+      guests = snapshot.guests;
+    } else {
+      posts = await eventBookStorage.getAllPosts(eventBook.id);
+      // Preferir feed de moderación (incluye pendientes/reportados) cuando hay sesión
+      try {
+        const feed = await eventBookStorage.getModerationFeed(eventBook.id);
+        if (feed?.posts) posts = feed.posts;
+      } catch {
+        // best-effort
+      }
+      guests = await guestStorage.getAllGuests(eventBook.id);
+    }
 
     // HTML del EventBook para PDF
     const htmlContent = `
@@ -314,7 +340,11 @@ export const generateEventBookPDF = async (eventBook: EventBook): Promise<void> 
                     </div>
                   </div>
                   <div class="post-content">${post.content}</div>
-                  ${post.mediaFiles && post.mediaFiles[0] ? `<img src="${post.mediaFiles[0].url}" alt="Imagen del post" class="post-image" />` : ''}
+                  ${
+                    post.mediaFiles && post.mediaFiles[0]
+                      ? `<img src="${post.mediaFiles[0].base64 || post.mediaFiles[0].url}" alt="Imagen del post" class="post-image" />`
+                      : ''
+                  }
                   
                   <div class="reactions">
                     <div class="reaction">❤️ ${post.reactions?.love || 0}</div>
@@ -327,7 +357,7 @@ export const generateEventBookPDF = async (eventBook: EventBook): Promise<void> 
                   
                   ${post.comments && post.comments.length > 0 ? `
                     <div class="comments">
-                      ${post.comments.map(comment => `
+                      ${post.comments.map((comment: any) => `
                         <div class="comment">
                           <div class="comment-author">Comentario</div>
                           <div class="comment-content">${comment.content}</div>

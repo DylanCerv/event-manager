@@ -1,374 +1,235 @@
 import type { EventBook, EventBookPost } from '../types/eventbook';
-import { storage } from './storage';
 
-// Función para generar slug
-const generateSlug = (name: string) => {
-  return name
-    .toLowerCase()
-    .replace(/[áéíóúñ]/g, c => ({ á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ñ: 'n' }[c] || c))
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+const API_BASE = import.meta.env.VITE_API_URL as string;
+
+const getAuthHeaders = (): Record<string, string> => {
+  const token = sessionStorage.getItem('auth_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Función para generar slug del usuario basado en el nombre de la empresa
-const generateUserSlug = (companyName: string) => {
-  return companyName
-    .toLowerCase()
-    .replace(/[áéíóúñ]/g, c => ({ á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ñ: 'n' }[c] || c))
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+const getCurrentRole = (): string | null => {
+  try {
+    const userRaw = sessionStorage.getItem('user');
+    if (!userRaw) return null;
+    const user = JSON.parse(userRaw);
+    return (user?.role?.name || null) as string | null;
+  } catch {
+    return null;
+  }
 };
 
-// Función para generar URL pública
-const generatePublicUrl = (userSlug: string, eventSlug: string) => {
-  // En desarrollo usamos localhost, en producción usaríamos el dominio real
-  return `${window.location.protocol}//${window.location.hostname}${window.location.port ? ':' + window.location.port : ''}/${userSlug}/${eventSlug}`;
+const dataUrlToFile = (dataUrl: string, filename: string): File => {
+  const [meta, base64] = dataUrl.split(',');
+  const mimeMatch = meta.match(/data:([^;]+);base64/i);
+  const mime = mimeMatch?.[1] || 'application/octet-stream';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mime });
 };
 
 class EventBookStorage {
-  constructor() {
-    this.migratePostsToStatusField();
-    this.migrateCloseDates();
-    this.migrateCreatedByField();
-  }
+  private async uploadFile(eventBookId: string, type: 'image' | 'video', file: File): Promise<string> {
+    const form = new FormData();
+    form.append('type', type);
+    form.append('file', file);
 
-  private getItem<T>(key: string): T[] {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : [];
-  }
-
-  private setItem<T>(key: string, value: T[]): void {
-    localStorage.setItem(key, JSON.stringify(value));
-  }
-
-  private getCurrentUser(): { id: string; role: string } | null {
-    const userData = sessionStorage.getItem('current_user');
-    return userData ? JSON.parse(userData) : null;
-  }
-
-  // Migración para agregar el campo status a posts existentes
-  private migratePostsToStatusField(): void {
-    try {
-      const posts = this.getItem<EventBookPost>('eventbook_posts');
-      let needsUpdate = false;
-      
-      const updatedPosts = posts.map(post => {
-        if (!post.status) {
-          needsUpdate = true;
-          // Si el post ya está moderado, se considera publicado
-          // Si no está moderado, se considera pendiente
-          return {
-            ...post,
-            status: post.isModerated ? 'published' : 'pending'
-          } as EventBookPost;
-        }
-        return post;
-      });
-      
-      if (needsUpdate) {
-        this.setItem('eventbook_posts', updatedPosts);
-        console.log('Posts migrated to include status field');
-      }
-    } catch (error) {
-      console.error('Error migrating posts:', error);
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/uploads`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      body: form,
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error uploading file');
     }
+    const relative = String(json.data.path || json.data.url || '');
+    if (!relative.startsWith('/')) return relative;
+    return new URL(API_BASE).origin + relative;
   }
 
-  // Migración para corregir fechas de cierre incorrectas
-  private async migrateCloseDates(): Promise<void> {
-    try {
-      const eventBooks = this.getItem<EventBook>('eventbooks');
-      let needsUpdate = false;
-      
-      const updatedEventBooks = eventBooks.map(eventBook => {
-        if (eventBook.eventDate && eventBook.settings?.visibility?.closeDate) {
-          const eventDate = new Date(eventBook.eventDate);
-          const currentCloseDate = new Date(eventBook.settings.visibility.closeDate);
-          
-          // Si la fecha de cierre es antes del evento, corregirla
-          if (currentCloseDate < eventDate) {
-            needsUpdate = true;
-            // Asegurar zona horaria consistente
-            eventDate.setHours(12, 0, 0, 0);
-            const correctCloseDate = new Date(eventDate.getTime() + (15 * 24 * 60 * 60 * 1000));
-            
-            return {
-              ...eventBook,
-              settings: {
-                ...eventBook.settings,
-                visibility: {
-                  ...eventBook.settings.visibility,
-                  closeDate: correctCloseDate.toISOString().split('T')[0]
-                }
-              }
-            };
-          }
+  private async normalizeMediaFiles(
+    eventBookId: string,
+    mediaFiles?: { type: 'image' | 'video'; url: string; thumbnail?: string }[]
+  ): Promise<{ type: 'image' | 'video'; url: string; thumbnail?: string }[]> {
+    if (!mediaFiles || mediaFiles.length === 0) return [];
+
+    return await Promise.all(
+      mediaFiles.map(async (m, idx) => {
+        let url = m.url;
+        let thumbnail = m.thumbnail;
+
+        if (url?.startsWith('data:')) {
+          const ext = m.type === 'video' ? 'mp4' : 'jpg';
+          const file = dataUrlToFile(url, `post_${idx}.${ext}`);
+          url = await this.uploadFile(eventBookId, m.type, file);
         }
-        return eventBook;
-      });
-      
-      if (needsUpdate) {
-        this.setItem('eventbooks', updatedEventBooks);
-        console.log('EventBooks migrated: close dates corrected to be 15 days after event date');
-      }
-    } catch (error) {
-      console.error('Error migrating close dates:', error);
-    }
-  }
-
-  // Migración para agregar campo created_by a EventBooks existentes
-  private async migrateCreatedByField(): Promise<void> {
-    try {
-      const eventBooks = this.getItem<EventBook>('eventbooks');
-      let needsUpdate = false;
-      
-      const updatedEventBooks = eventBooks.map(eventBook => {
-        if (!eventBook.created_by) {
-          needsUpdate = true;
-          // Para EventBooks existentes sin propietario, asignar al usuario actual
-          const currentUser = this.getCurrentUser();
-          if (currentUser) {
-            return {
-              ...eventBook,
-              created_by: currentUser.id
-            };
-          } else {
-            // Si no hay usuario logueado, usar un ID temporal
-            return {
-              ...eventBook,
-              created_by: 'unknown-user'
-            };
-          }
+        if (thumbnail?.startsWith('data:')) {
+          const file = dataUrlToFile(thumbnail, `thumb_${idx}.jpg`);
+          thumbnail = await this.uploadFile(eventBookId, 'image', file);
         }
-        return eventBook;
-      });
-      
-      if (needsUpdate) {
-        this.setItem('eventbooks', updatedEventBooks);
-        console.log('EventBooks migrated to include created_by field');
-      }
-    } catch (error) {
-      console.error('Error migrating created_by field:', error);
-    }
-  }
 
+        return { ...m, url, thumbnail };
+      })
+    );
+  }
   async getAllEventBooks(): Promise<EventBook[]> {
-    return this.getItem<EventBook>('eventbooks');
-  }
+    const role = (getCurrentRole() || '').toUpperCase();
+    const scope = role === 'MODERATOR' ? 'assigned' : undefined;
+    const url = scope ? `${API_BASE}/event-books?scope=${encodeURIComponent(scope)}` : `${API_BASE}/event-books`;
 
-  async getEventBooksByUser(userId?: string): Promise<EventBook[]> {
-    const allEventBooks = this.getItem<EventBook>('eventbooks');
-    
-    // Si no se proporciona userId, usar el usuario actual
-    const targetUserId = userId || this.getCurrentUser()?.id;
-    
-    if (!targetUserId) {
-      console.warn('No se pudo determinar el usuario para filtrar EventBooks');
-      return [];
-    }
-    
-    return allEventBooks.filter(eventBook => eventBook.created_by === targetUserId);
-  }
-
-  async createEventBook(data: Omit<EventBook, 'id' | 'createdAt' | 'stats' | 'slug' | 'publicUrl' | 'created_by'>): Promise<EventBook> {
-    const eventbooks = this.getItem<EventBook>('eventbooks');
-    const slug = generateSlug(data.name);
-    
-    // Obtener información del usuario logueado
-    const currentUser = this.getCurrentUser();
-    if (!currentUser) {
-      throw new Error('Usuario no autenticado');
-    }
-    
-    let userSlug = 'default-user';
-    
-    if (currentUser) {
-      const users = await storage.getUsers();
-      const userInfo = users.find(u => u.id === currentUser.id);
-      if (userInfo && userInfo.company) {
-        userSlug = generateUserSlug(userInfo.company);
-      }
-    }
-    
-    // Obtener la fecha del evento asociado
-    let eventDate = new Date().toISOString(); // Por defecto fecha actual
-    try {
-      const events = await storage.getEvents();
-      const associatedEvent = events.find(e => e.id === data.event_id);
-      if (associatedEvent?.date) {
-        eventDate = associatedEvent.date;
-      }
-    } catch (error) {
-      console.warn('No se pudo obtener la fecha del evento:', error);
-    }
-
-    const newEventBook: EventBook = {
-      ...data,
-      id: crypto.randomUUID(),
-      created_by: currentUser.id, // Agregar el ID del usuario propietario
-      createdAt: new Date().toISOString(),
-      eventDate, // Guardar la fecha del evento
-      coverImage: 'https://images.pexels.com/photos/2747449/pexels-photo-2747449.jpeg',
-      isActive: false,
-      moderationEnabled: true,
-      slug,
-      publicUrl: generatePublicUrl(userSlug, slug),
-      settings: {
-        functionality: {
-          allowPosts: true,
-          allowImageUploads: true,
-          allowVideoUploads: false,
-          allowComments: true,
-          allowLikes: true,
-          allowReactions: true,
-          requirePostApproval: false
-        },
-        identity: {
-          showRealNames: true,
-          allowAliases: false,
-          allowAnonymous: false
-        },
-        visibility: {
-          openDate: undefined,
-          closeDate: (() => {
-            // Calcular 15 días después de la fecha del evento
-            const eventDateObj = new Date(eventDate);
-            // Asegurar que usamos la misma zona horaria y evitar problemas de UTC
-            eventDateObj.setHours(12, 0, 0, 0); // Establecer mediodía para evitar problemas de zona horaria
-            const closeDate = new Date(eventDateObj.getTime() + (15 * 24 * 60 * 60 * 1000)); // 15 días después del evento
-            return closeDate.toISOString().split('T')[0];
-          })()
-        },
-        customization: {
-          organizerDisplayName: 'Organizador',
-          theme: 'light',
-          welcomeMessage: '¡Bienvenidos al muro del evento! Comparte tus momentos favoritos.'
-        },
-        isConfigured: true
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
       },
-      stats: {
-        participants: 0,
-        posts: 0,
-        photos: 0,
-        reported: 0
-      }
-    };
-    
-    eventbooks.push(newEventBook);
-    this.setItem('eventbooks', eventbooks);
-    return newEventBook;
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error loading EventBooks');
+    }
+    return json.data as EventBook[];
+  }
+
+  async getEventBooksByUser(_userId?: string): Promise<EventBook[]> {
+    const response = await fetch(`${API_BASE}/event-books`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error loading EventBooks');
+    }
+    return json.data as EventBook[];
+  }
+
+  async getEventBookById(id: string): Promise<EventBook> {
+    const response = await fetch(`${API_BASE}/event-books/${id}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error loading EventBook');
+    }
+    return json.data as EventBook;
+  }
+
+  async getPublicEventBook(ownerSlug: string, eventSlug: string): Promise<EventBook> {
+    const response = await fetch(`${API_BASE}/event-books/public/${encodeURIComponent(ownerSlug)}/${encodeURIComponent(eventSlug)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'EventBook not available');
+    }
+    return json.data as EventBook;
+  }
+
+  async createEventBook(
+    data: Omit<EventBook, 'id' | 'createdAt' | 'stats' | 'slug' | 'publicUrl' | 'created_by'>
+  ): Promise<EventBook> {
+    const response = await fetch(`${API_BASE}/event-books`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        bolt_event_id: Number(data.event_id),
+        name: data.name,
+        description: data.description,
+        cover_image: data.coverImage,
+        max_participants: data.maxParticipants,
+        settings: data.settings,
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error creating EventBook');
+    }
+    return json.data as EventBook;
   }
 
   async updateEventBook(id: string, updates: Partial<EventBook>): Promise<EventBook | null> {
-    const eventbooks = this.getItem<EventBook>('eventbooks');
-    const index = eventbooks.findIndex(book => book.id === id);
-    
-    if (index === -1) return null;
-    
-    // Si se actualiza el event_id, también actualizar la fecha del evento
-    if (updates.event_id) {
-      try {
-        const events = await storage.getEvents();
-        const associatedEvent = events.find(e => e.id === updates.event_id);
-        if (associatedEvent?.date) {
-          updates.eventDate = associatedEvent.date;
-        }
-      } catch (error) {
-        console.warn('No se pudo obtener la fecha del evento al actualizar:', error);
-      }
+    // If moderatorProfilePhoto is still base64, upload and replace with URL
+    let settingsPayload: any = updates.settings;
+    const maybePhoto = updates.settings?.customization?.moderatorProfilePhoto;
+    if (typeof maybePhoto === 'string' && maybePhoto.startsWith('data:')) {
+      const file = dataUrlToFile(maybePhoto, 'moderator_profile.jpg');
+      const url = await this.uploadFile(id, 'image', file);
+      settingsPayload = {
+        ...updates.settings,
+        customization: {
+          ...(updates.settings?.customization || {}),
+          moderatorProfilePhoto: url,
+        },
+      };
     }
-    
-    eventbooks[index] = { ...eventbooks[index], ...updates };
-    this.setItem('eventbooks', eventbooks);
-    
-    return eventbooks[index];
+
+    const response = await fetch(`${API_BASE}/event-books/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        ...(updates.name !== undefined ? { name: updates.name } : {}),
+        ...(updates.description !== undefined ? { description: updates.description } : {}),
+        ...(updates.coverImage !== undefined ? { cover_image: updates.coverImage } : {}),
+        ...(updates.maxParticipants !== undefined ? { max_participants: updates.maxParticipants } : {}),
+        ...(updates.isActive !== undefined ? { is_active: updates.isActive } : {}),
+        ...(updates.moderationEnabled !== undefined ? { moderation_enabled: updates.moderationEnabled } : {}),
+        ...(updates.settings !== undefined ? { settings: settingsPayload } : {}),
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error updating EventBook');
+    }
+    return json.data as EventBook;
   }
 
   async deleteEventBook(id: string): Promise<void> {
-    const eventbooks = this.getItem<EventBook>('eventbooks');
-    const filtered = eventbooks.filter(eb => eb.id !== id);
-    this.setItem('eventbooks', filtered);
-    
-    // Also delete associated posts
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    const remainingPosts = posts.filter(post => post.eventBookId !== id);
-    this.setItem('eventbook_posts', remainingPosts);
-    
-    // Also delete associated reports
-    const reports = this.getItem<any>('post_reports');
-    const postIds = posts.filter(p => p.eventBookId === id).map(p => p.id);
-    const remainingReports = reports.filter((report: any) => !postIds.includes(report.postId));
-    this.setItem('post_reports', remainingReports);
-  }
-
-  // Función para archivar posts de un EventBook (eliminar datos públicos pero mantener EventBook)
-  async archiveEventBookPosts(eventBookId: string): Promise<void> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    const remainingPosts = posts.filter(post => post.eventBookId !== eventBookId);
-    this.setItem('eventbook_posts', remainingPosts);
-    
-    // También eliminar reportes asociados
-    const reports = this.getItem<any>('post_reports');
-    const postIds = posts.filter(p => p.eventBookId === eventBookId).map(p => p.id);
-    const remainingReports = reports.filter((report: any) => !postIds.includes(report.postId));
-    this.setItem('post_reports', remainingReports);
-  }
-
-  // Función para limpiar duplicados basados en event_id
-  async cleanupDuplicates(): Promise<{ removed: number; kept: number }> {
-    const eventbooks = this.getItem<EventBook>('eventbooks');
-    const seen = new Set<string>();
-    const uniqueEventbooks: EventBook[] = [];
-    let removedCount = 0;
-
-    for (const book of eventbooks) {
-      if (!seen.has(book.event_id)) {
-        seen.add(book.event_id);
-        uniqueEventbooks.push(book);
-      } else {
-        removedCount++;
-        console.log(`Eliminando EventBook duplicado: ${book.name} (ID: ${book.id})`);
-        
-        // También eliminar posts asociados al EventBook duplicado
-        const posts = this.getItem<EventBookPost>('eventbook_posts');
-        const remainingPosts = posts.filter(post => post.eventBookId !== book.id);
-        this.setItem('eventbook_posts', remainingPosts);
-      }
+    const response = await fetch(`${API_BASE}/event-books/${id}`, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((json as any)?.message || 'Error deleting EventBook');
     }
-
-    this.setItem('eventbooks', uniqueEventbooks);
-    
-    return {
-      removed: removedCount,
-      kept: uniqueEventbooks.length
-    };
   }
 
-  // Función para debugging - ver todos los EventBooks con sus event_id
-  async debugEventBooks(): Promise<void> {
-    const eventbooks = this.getItem<EventBook>('eventbooks');
-    console.log('=== DEBUG: EventBooks en localStorage ===');
-    console.log(`Total: ${eventbooks.length}`);
-    
-    const eventIdCount: Record<string, number> = {};
-    
-    eventbooks.forEach((book, index) => {
-      console.log(`${index + 1}. ${book.name} (ID: ${book.id}) - Event ID: ${book.event_id}`);
-      eventIdCount[book.event_id] = (eventIdCount[book.event_id] || 0) + 1;
-    });
-
-    console.log('\n=== Duplicados por Event ID ===');
-    Object.entries(eventIdCount).forEach(([eventId, count]) => {
-      if (count > 1) {
-        console.log(`Event ID ${eventId}: ${count} EventBooks (DUPLICADO)`);
-      }
-    });
+  // Backwards-compat no-op (kept for call sites)
+  async archiveEventBookPosts(_eventBookId: string): Promise<void> {
+    return;
   }
 
   // CRUD para Posts
   async getAllPosts(eventBookId: string): Promise<EventBookPost[]> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    return posts.filter(post => post.eventBookId === eventBookId);
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/posts`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error loading posts');
+    }
+    return json.data as EventBookPost[];
   }
 
   async createPost(
@@ -377,373 +238,211 @@ class EventBookStorage {
     content: string, 
     mediaFiles?: { type: 'image' | 'video'; url: string; thumbnail?: string }[],
     feeling?: { id: string; emoji: string; name: string; category: 'emotion' },
-    authorRole?: 'guest' | 'moderator' | 'admin'
+    authorRole?: 'guest' | 'moderator' | 'admin',
+    postMeta?: { moderatorPost?: boolean; isHighlighted?: boolean; isAnnouncement?: boolean }
   ): Promise<{ post: EventBookPost; requiresApproval: boolean }> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    
-    // Obtener configuración del EventBook
-    const eventBooks = this.getItem<EventBook>('eventbooks');
-    const eventBook = eventBooks.find(eb => eb.id === eventBookId);
-    
-    // Determinar si requiere aprobación
-    const requiresApproval = Boolean(eventBook?.settings?.functionality?.requirePostApproval) && 
-                            authorRole === 'guest';
-    
-    // Determinar status inicial del post
-    const initialStatus: 'pending' | 'published' = requiresApproval ? 'pending' : 'published';
-    
-    const newPost: EventBookPost = {
-      id: crypto.randomUUID(),
-      eventBookId,
-      guestId,
-      content,
-      feeling,
-      mediaFiles: mediaFiles || [],
-      reactions: {},
-      comments: [],
-      createdAt: new Date().toISOString(),
-      isModerated: !requiresApproval, // Si no requiere aprobación, se considera moderado
-      status: initialStatus
+    const normalizedMedia = await this.normalizeMediaFiles(eventBookId, mediaFiles);
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/posts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        participant_id: guestId,
+        content,
+        feeling,
+        media_files: normalizedMedia,
+        author_role: authorRole,
+        ...(postMeta?.moderatorPost !== undefined ? { moderator_post: postMeta.moderatorPost } : {}),
+        ...(postMeta?.isHighlighted !== undefined ? { is_highlighted: postMeta.isHighlighted } : {}),
+        ...(postMeta?.isAnnouncement !== undefined ? { is_announcement: postMeta.isAnnouncement } : {}),
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error creating post');
+    }
+    return {
+      post: json.data.post as EventBookPost,
+      requiresApproval: Boolean(json.data.requiresApproval),
     };
-
-    posts.push(newPost);
-    this.setItem('eventbook_posts', posts);
-    
-    return { post: newPost, requiresApproval };
   }
 
   async addReaction(postId: string, guestId: string, reactionType: string): Promise<EventBookPost | null> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    const postIndex = posts.findIndex(p => p.id === postId);
-    
-    if (postIndex === -1) return null;
-
-    const post = posts[postIndex];
-    
-    // Si ya reaccionó con el mismo tipo, quitarla
-    if (post.reactions[guestId] === reactionType) {
-      delete post.reactions[guestId];
-    } else {
-      // Agregar o cambiar reacción
-      post.reactions[guestId] = reactionType;
-    }
-
-    posts[postIndex] = post;
-    this.setItem('eventbook_posts', posts);
-    
-    return post;
+    const response = await fetch(`${API_BASE}/event-books/posts/${postId}/reactions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        participant_id: guestId,
+        reaction_type: reactionType,
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok) return null;
+    return json.data as EventBookPost;
   }
 
   async addComment(postId: string, guestId: string, content: string): Promise<EventBookPost | null> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    const postIndex = posts.findIndex(p => p.id === postId);
-    
-    if (postIndex === -1) return null;
-
-    const post = posts[postIndex];
-    const newComment = {
-      id: crypto.randomUUID(),
-      guestId,
-      content,
-      reactions: {},
-      replies: [],
-      createdAt: new Date().toISOString()
-    };
-
-    post.comments.push(newComment);
-    posts[postIndex] = post;
-    this.setItem('eventbook_posts', posts);
-    
-    return post;
+    const response = await fetch(`${API_BASE}/event-books/posts/${postId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        participant_id: guestId,
+        content,
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok) return null;
+    return json.data as EventBookPost;
   }
 
   // Responder a un comentario
   async addCommentReply(postId: string, commentId: string, guestId: string, content: string, replyingToName: string): Promise<EventBookPost | null> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    const postIndex = posts.findIndex(p => p.id === postId);
-    
-    if (postIndex === -1) return null;
-    
-    const commentIndex = posts[postIndex].comments.findIndex(c => c.id === commentId);
-    if (commentIndex === -1) return null;
-    
-    // Asegurar que el array replies existe (para comentarios creados antes de esta funcionalidad)
-    if (!posts[postIndex].comments[commentIndex].replies) {
-      posts[postIndex].comments[commentIndex].replies = [];
-    }
-    
-    // Migrar respuestas existentes que no tengan la nueva estructura
-    posts[postIndex].comments[commentIndex].replies = posts[postIndex].comments[commentIndex].replies.map(reply => {
-      if (!reply.replyingToId) {
-        return {
-          ...reply,
-          replyingToId: commentId,
-          replies: reply.replies || []
-        };
-      }
-      return reply;
+    const response = await fetch(`${API_BASE}/event-books/posts/${postId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        participant_id: guestId,
+        content,
+        parent_comment_id: commentId,
+        replying_to_comment_id: commentId,
+        replying_to_name: replyingToName,
+      }),
     });
-    
-    const newReply = {
-      id: crypto.randomUUID(),
-      guestId,
-      content,
-      replyingTo: replyingToName,
-      replyingToId: commentId, // ID del comentario al que responde
-      reactions: {},
-      replies: [], // Inicializar array para respuestas anidadas
-      createdAt: new Date().toISOString()
-    };
-    
-    posts[postIndex].comments[commentIndex].replies.push(newReply);
-    this.setItem('eventbook_posts', posts);
-    
-    return posts[postIndex];
+    const json = await response.json();
+    if (!response.ok) return null;
+    return json.data as EventBookPost;
   }
 
   // Responder a una respuesta (respuestas anidadas)
   async addNestedReply(postId: string, parentReplyId: string, guestId: string, content: string, replyingToName: string): Promise<EventBookPost | null> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    const postIndex = posts.findIndex(p => p.id === postId);
-    
-    if (postIndex === -1) return null;
-
-    // Función recursiva para encontrar y agregar respuesta anidada
-    const findAndAddReply = (replies: any[], targetId: string): boolean => {
-      for (let i = 0; i < replies.length; i++) {
-        if (replies[i].id === targetId) {
-          // Encontramos el objetivo, agregar respuesta aquí
-          if (!replies[i].replies) {
-            replies[i].replies = [];
-          }
-          
-          const newReply = {
-            id: crypto.randomUUID(),
-            guestId,
-            content,
-            replyingTo: replyingToName,
-            replyingToId: targetId,
-            reactions: {},
-            replies: [],
-            createdAt: new Date().toISOString()
-          };
-          
-          replies[i].replies.push(newReply);
-          return true;
-        }
-        
-        // Buscar recursivamente en las respuestas anidadas
-        if (replies[i].replies && replies[i].replies.length > 0) {
-          if (findAndAddReply(replies[i].replies, targetId)) {
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-
-    // Buscar en todos los comentarios
-    let found = false;
-    for (const comment of posts[postIndex].comments) {
-      if (comment.replies && findAndAddReply(comment.replies, parentReplyId)) {
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) return null;
-
-    this.setItem('eventbook_posts', posts);
-    return posts[postIndex];
+    const response = await fetch(`${API_BASE}/event-books/posts/${postId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        participant_id: guestId,
+        content,
+        parent_comment_id: parentReplyId,
+        replying_to_comment_id: parentReplyId,
+        replying_to_name: replyingToName,
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok) return null;
+    return json.data as EventBookPost;
   }
 
   async reportPost(postId: string, guestId: string, reason: string): Promise<boolean> {
-    const reports = this.getItem<any>('post_reports');
-    
-    const newReport = {
-      id: crypto.randomUUID(),
-      postId,
-      reportedBy: guestId,
-      reason,
-      createdAt: new Date().toISOString(),
-      status: 'pending' // pending, reviewed, resolved
-    };
-
-    reports.push(newReport);
-    this.setItem('post_reports', reports);
-    
-    return true;
+    const response = await fetch(`${API_BASE}/event-books/posts/${postId}/reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        participant_id: guestId,
+        reason,
+      }),
+    });
+    return response.ok;
   }
 
   // Agregar reacción a un comentario
-  async addCommentReaction(postId: string, commentId: string, guestId: string, reactionType: string): Promise<EventBookPost | null> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    const postIndex = posts.findIndex(p => p.id === postId);
-    
-    if (postIndex === -1) return null;
-    
-    const commentIndex = posts[postIndex].comments.findIndex(c => c.id === commentId);
-    if (commentIndex === -1) return null;
-    
-    // Inicializar reactions si no existe (para comentarios existentes)
-    if (!posts[postIndex].comments[commentIndex].reactions) {
-      posts[postIndex].comments[commentIndex].reactions = {};
-    }
-    
-    // Si el usuario ya reaccionó con el mismo tipo, quitar la reacción
-    if (posts[postIndex].comments[commentIndex].reactions[guestId] === reactionType) {
-      delete posts[postIndex].comments[commentIndex].reactions[guestId];
-    } else {
-      // Agregar o cambiar la reacción
-      posts[postIndex].comments[commentIndex].reactions[guestId] = reactionType;
-    }
-    
-    this.setItem('eventbook_posts', posts);
-    return posts[postIndex];
+  async addCommentReaction(_postId: string, commentId: string, guestId: string, reactionType: string): Promise<EventBookPost | null> {
+    const response = await fetch(`${API_BASE}/event-books/comments/${commentId}/reactions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        participant_id: guestId,
+        reaction_type: reactionType,
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok) return null;
+    return json.data as EventBookPost;
   }
 
   // Agregar reacción a una respuesta (función recursiva)
   async addReplyReaction(postId: string, replyId: string, guestId: string, reactionType: string): Promise<EventBookPost | null> {
-    const posts = this.getItem<EventBookPost>('eventbook_posts');
-    const postIndex = posts.findIndex(p => p.id === postId);
-    
-    if (postIndex === -1) return null;
-
-    // Función recursiva para encontrar y agregar reacción a respuesta
-    const findAndAddReaction = (replies: any[], targetId: string): boolean => {
-      for (let i = 0; i < replies.length; i++) {
-        if (replies[i].id === targetId) {
-          // Inicializar reactions si no existe
-          if (!replies[i].reactions) {
-            replies[i].reactions = {};
-          }
-          
-          // Si el usuario ya reaccionó con el mismo tipo, quitar la reacción
-          if (replies[i].reactions[guestId] === reactionType) {
-            delete replies[i].reactions[guestId];
-          } else {
-            // Agregar o cambiar la reacción
-            replies[i].reactions[guestId] = reactionType;
-          }
-          return true;
-        }
-        
-        // Buscar recursivamente en las respuestas anidadas
-        if (replies[i].replies && replies[i].replies.length > 0) {
-          if (findAndAddReaction(replies[i].replies, targetId)) {
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-
-    // Buscar en todos los comentarios
-    let found = false;
-    for (const comment of posts[postIndex].comments) {
-      if (comment.replies && findAndAddReaction(comment.replies, replyId)) {
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) return null;
-
-    this.setItem('eventbook_posts', posts);
-    return posts[postIndex];
+    return this.addCommentReaction(postId, replyId, guestId, reactionType);
   }
 
-  // Método para obtener estadísticas del EventBook
   async getEventBookStats(eventBookId: string) {
-    const posts = await this.getAllPosts(eventBookId);
-    const { guestStorage } = await import('./guest-storage');
-    const guests = guestStorage.getAllGuests(eventBookId);
-    const reports = this.getItem<any>('post_reports');
-    const postIds = posts.map(p => p.id);
-    const reportedPosts = reports.filter((report: any) => postIds.includes(report.postId));
-    
-    return {
-      participants: guests.length,
-      posts: posts.length,
-      photos: posts.filter(post => post.mediaFiles && post.mediaFiles.length > 0).length,
-      reported: reportedPosts.length
-    };
+    const book = await this.getEventBookById(eventBookId);
+    return book.stats;
   }
 
   // Métodos para manejo de bloqueo de participantes
-  async blockParticipant(eventBookId: string, userId: string, blockType: 'total' | 'partial', reason?: string, blockedBy?: string) {
-    const eventBooks = await this.getAllEventBooks();
-    const eventBookIndex = eventBooks.findIndex(eb => eb.id === eventBookId);
-    
-    if (eventBookIndex === -1) {
-      throw new Error('EventBook no encontrado');
+  async blockParticipant(eventBookId: string, userId: string, blockType: 'total' | 'partial', reason?: string, _blockedBy?: string) {
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/participants/${userId}/block`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        blocked_type: blockType,
+        blocked_reason: reason,
+      }),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((json as any)?.message || 'Error blocking participant');
     }
-
-    const eventBook = eventBooks[eventBookIndex];
-    
-    // Inicializar array si no existe
-    if (!eventBook.blockedParticipants) {
-      eventBook.blockedParticipants = [];
-    }
-
-    // Verificar si ya está bloqueado
-    const existingBlockIndex = eventBook.blockedParticipants.findIndex(bp => bp.userId === userId);
-    
-    const blockData = {
+    return {
       userId,
       blocked: true,
       blockedType: blockType,
       blockedReason: reason,
       blockedAt: new Date().toISOString(),
-      blockedBy: blockedBy || 'system'
+      blockedBy: _blockedBy || 'system',
     };
-
-    if (existingBlockIndex >= 0) {
-      // Actualizar bloqueo existente
-      eventBook.blockedParticipants[existingBlockIndex] = blockData;
-    } else {
-      // Agregar nuevo bloqueo
-      eventBook.blockedParticipants.push(blockData);
-    }
-
-    eventBooks[eventBookIndex] = eventBook;
-    localStorage.setItem('eventbooks', JSON.stringify(eventBooks));
-    
-    return blockData;
   }
 
   async unblockParticipant(eventBookId: string, userId: string) {
-    const eventBooks = await this.getAllEventBooks();
-    const eventBookIndex = eventBooks.findIndex(eb => eb.id === eventBookId);
-    
-    if (eventBookIndex === -1) {
-      throw new Error('EventBook no encontrado');
-    }
-
-    const eventBook = eventBooks[eventBookIndex];
-    
-    if (!eventBook.blockedParticipants) {
-      return false;
-    }
-
-    // Remover el bloqueo
-    eventBook.blockedParticipants = eventBook.blockedParticipants.filter(bp => bp.userId !== userId);
-    
-    eventBooks[eventBookIndex] = eventBook;
-    localStorage.setItem('eventbooks', JSON.stringify(eventBooks));
-    
-    return true;
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/participants/${userId}/block`, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    return response.ok;
   }
 
   async getParticipantBlockStatus(eventBookId: string, userId: string) {
-    const eventBooks = await this.getAllEventBooks();
-    const eventBook = eventBooks.find(eb => eb.id === eventBookId);
-    
-    if (!eventBook || !eventBook.blockedParticipants) {
-      return null;
-    }
-
-    return eventBook.blockedParticipants.find(bp => bp.userId === userId) || null;
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/participants/${userId}/block-status`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const json = await response.json();
+    if (!response.ok) return null;
+    if (!json?.data?.blocked) return null;
+    return {
+      userId,
+      blocked: true,
+      blockedType: json.data.blockType as 'total' | 'partial',
+      blockedReason: json.data.blockedReason,
+      blockedAt: '',
+      blockedBy: 'system',
+    };
   }
 
   async isParticipantBlocked(eventBookId: string, userId: string): Promise<{ blocked: boolean; blockType?: 'total' | 'partial' }> {
@@ -757,6 +456,89 @@ class EventBookStorage {
       blocked: true,
       blockType: blockStatus.blockedType
     };
+  }
+
+  async getModerationFeed(eventBookId: string): Promise<{ posts: EventBookPost[]; reports: any[] }> {
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/moderation/posts`, {
+      method: 'GET',
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error loading moderation feed');
+    }
+    return json.data as { posts: EventBookPost[]; reports: any[] };
+  }
+
+  async ensureModeratorParticipant(eventBookId: string) {
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/moderation/moderator-participant`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    });
+    const json = await response.json();
+    if (!response.ok) throw new Error(json?.message || 'Error ensuring moderator participant');
+    return json.data;
+  }
+
+  async assignModerator(eventBookId: string, userId: number) {
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/moderators`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((json as any)?.message || 'Error assigning moderator');
+  }
+
+  async revokeModerator(eventBookId: string, userId: number) {
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/moderators/${userId}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((json as any)?.message || 'Error revoking moderator');
+  }
+
+  async setActivationAsModerator(eventBookId: string, isActive: boolean) {
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/moderation/activation`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ is_active: isActive }),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((json as any)?.message || 'Error updating activation');
+    return Boolean((json as any)?.data?.isActive);
+  }
+
+  async publishPost(postId: string) {
+    const response = await fetch(`${API_BASE}/event-books/posts/${postId}/publish`, {
+      method: 'PATCH',
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((json as any)?.message || 'Error publishing post');
+  }
+
+  async deletePost(postId: string) {
+    const response = await fetch(`${API_BASE}/event-books/posts/${postId}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((json as any)?.message || 'Error deleting post');
+  }
+
+  async resolveReport(reportId: string) {
+    const response = await fetch(`${API_BASE}/event-books/reports/${reportId}/resolve`, {
+      method: 'PATCH',
+      headers: { Accept: 'application/json', ...getAuthHeaders() },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error((json as any)?.message || 'Error resolving report');
   }
 }
 

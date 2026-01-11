@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { User, Camera, X } from 'lucide-react';
+import { User, Camera } from 'lucide-react';
 
 interface GuestRegistrationModalProps {
   isOpen: boolean;
-  onRegister: (firstName: string, lastName: string, profilePhoto?: string) => void;
+  onRegister: (firstName: string, lastName: string, profilePhoto?: string) => Promise<void> | void;
   eventName: string;
 }
 

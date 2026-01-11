@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Shield, Users, Settings, Lock, Plus, Search, Crown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUser } from '../contexts/UserContext';
-import { storage } from '../lib/storage';
+import { useEvents } from '../contexts/EventContext';
 import { eventBookStorage } from '../lib/eventbook-storage';
 import { deleteUserAPI } from '../endpoints/user';
 import { CreateUserAccessModal } from '../components/CreateUserAccessModal';
@@ -14,45 +14,65 @@ import type { EventBook } from '../types/eventbook';
 
 export function Roles() {
   const { user } = useAuth();
+  const { events } = useEvents();
   const { fetchUsers, users } = useUser();
-  const [userAccesses, setUserAccesses] = useState<any[]>([]);
+  const [userAccesses, setUserAccesses] = useState<UserAccess[]>([]);
   const [availableEvents, setAvailableEvents] = useState<Event[]>([]);
   const [availableEventBooks, setAvailableEventBooks] = useState<EventBook[]>([]);
+  const [moderatorAssignments, setModeratorAssignments] = useState<Record<string, string[]>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const [editingUserAccess, setEditingUserAccess] = useState<UserAccess | null>(null);
   const [editingAccessApiUser, setEditingAccessApiUser] = useState<ApiUser | null>(null);
 
   useEffect(() => {
     loadUserAccesses();
-    loadAvailableEvents();
     loadAvailableEventBooks();
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    setAvailableEvents(events);
+  }, [events]);
+
   // Re-derive access list whenever backend users change
   useEffect(() => {
     loadUserAccesses();
-  }, [users]);
+  }, [users, moderatorAssignments]);
+
+  useEffect(() => {
+    if (availableEventBooks.length > 0) {
+      loadModeratorAssignments();
+    } else {
+      setModeratorAssignments({});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableEventBooks]);
 
   const loadUserAccesses = async () => {
     try {
-      // Derive accesses from backend users by role_id 3/4
-      const accessUsers = users.filter(u => Number(u.role_id) === 3 || Number(u.role_id) === 4);
-      setUserAccesses(accessUsers);
+      const accessUsers = users.filter(u => Number((u as any).role_id) === 3 || Number((u as any).role_id) === 4);
+      const mapped: UserAccess[] = accessUsers.map((u: any) => {
+        const roleId = Number(u.role_id);
+        const accessType: UserAccess['accessType'] = roleId === 4 ? 'moderador' : 'control_acceso';
+        const assignedEventBooks = accessType === 'moderador' ? (moderatorAssignments[String(u.id)] || []) : undefined;
+        return {
+          id: String(u.id),
+          accessType,
+          name: u.name || '',
+          lastName: u.last_name || '',
+          username: u.username || '',
+          password: u.password_plain || '',
+          assignedEvents: [],
+          assignedEventBooks,
+          createdAt: u.created_at || new Date().toISOString(),
+          createdBy: String(u.creator_id || ''),
+        };
+      });
+      setUserAccesses(mapped);
     } catch (error) {
       console.error('Error loading user accesses:', error);
-    }
-  };
-
-  const loadAvailableEvents = async () => {
-    try {
-      const events = await storage.getEvents();
-      setAvailableEvents(events);
-    } catch (error) {
-      console.error('Error loading events:', error);
     }
   };
 
@@ -60,23 +80,45 @@ export function Roles() {
     if (!user?.id) return;
     try {
       const allEventBooks = await eventBookStorage.getEventBooksByUser();
-      const events = await storage.getEvents();
-      
-      // Filter EventBooks that belong to events created by the current admin
-      const adminEvents = events.filter(event => event.created_by === user.id);
-      const adminEventIds = adminEvents.map(event => event.id);
-      const adminEventBooks = allEventBooks.filter(eventBook => 
-        adminEventIds.includes(eventBook.event_id)
-      );
-      
-      setAvailableEventBooks(adminEventBooks);
+      setAvailableEventBooks(allEventBooks);
     } catch (error) {
       console.error('Error loading EventBooks:', error);
     }
   };
 
+  const loadModeratorAssignments = async () => {
+    try {
+      const assignments: Record<string, string[]> = {};
+      await Promise.all(
+        availableEventBooks.map(async (eb) => {
+          try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/event-books/${eb.id}/moderators`, {
+              method: 'GET',
+              headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${sessionStorage.getItem('auth_token') || ''}`,
+              },
+            });
+            const json = await res.json();
+            if (!res.ok) return;
+            const mods = json.data || [];
+            mods.forEach((m: any) => {
+              const uid = String(m.id);
+              if (!assignments[uid]) assignments[uid] = [];
+              assignments[uid].push(eb.id);
+            });
+          } catch {
+            // ignore per-event errors
+          }
+        })
+      );
+      setModeratorAssignments(assignments);
+    } catch (error) {
+      console.error('Error loading moderator assignments:', error);
+    }
+  };
+
   const handleEditUserAccess = (userAccess: UserAccess) => {
-    setEditingUserAccess(userAccess);
     const api = users.find(u => String(u.id) === String(userAccess.id)) || null;
     setEditingAccessApiUser(api as any);
     setShowCreateModal(true);
@@ -133,29 +175,24 @@ export function Roles() {
 
   const handleAssignEventBook = async (userAccessId: string, eventBookId: string) => {
     try {
-      const userAccess = userAccesses.find((access: any) => String(access.id) === String(userAccessId));
+      setIsLoading(true);
+      const userAccess = userAccesses.find((access) => String(access.id) === String(userAccessId));
       if (!userAccess || userAccess.accessType !== 'moderador') return;
 
-      const assignedEventBooks = userAccess.assignedEventBooks || [];
-      
-      if (assignedEventBooks.includes(eventBookId)) {
-        // If already assigned, revoke it
-        setUserAccesses(prev => prev.map((access: any) => 
-          String(access.id) === String(userAccessId)
-            ? { ...access, assignedEventBooks: (access.assignedEventBooks || []).filter((id: string) => id !== eventBookId) }
-            : access
-        ));
+      const currentlyAssigned = (moderatorAssignments[String(userAccessId)] || []).includes(eventBookId);
+      if (currentlyAssigned) {
+        await eventBookStorage.revokeModerator(eventBookId, Number(userAccessId));
       } else {
-        // If not assigned, assign it
-        setUserAccesses(prev => prev.map((access: any) => 
-          String(access.id) === String(userAccessId)
-            ? { ...access, assignedEventBooks: [...(access.assignedEventBooks || []), eventBookId] }
-            : access
-        ));
+        await eventBookStorage.assignModerator(eventBookId, Number(userAccessId));
       }
+
+      // Refresh assignments map
+      await loadModeratorAssignments();
     } catch (error) {
       console.error('Error assigning/revoking EventBook:', error);
       alert('Error al gestionar la asignación del EventBook');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -189,14 +226,14 @@ export function Roles() {
 
   const handleRevokeEventBook = async (userAccessId: string, eventBookId: string) => {
     try {
-      setUserAccesses(prev => prev.map((access: any) => 
-        String(access.id) === String(userAccessId)
-          ? { ...access, assignedEventBooks: (access.assignedEventBooks || []).filter((id: string) => id !== eventBookId) }
-          : access
-      ));
+      setIsLoading(true);
+      await eventBookStorage.revokeModerator(eventBookId, Number(userAccessId));
+      await loadModeratorAssignments();
     } catch (error) {
       console.error('Error revoking EventBook:', error);
       alert('Error al quitar el acceso al EventBook');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -205,10 +242,10 @@ export function Roles() {
   const filteredAccesses = useMemo(() => {
     const norm = (v: unknown) => (v ?? '').toString().toLowerCase();
     const q = searchTerm.toLowerCase();
-    return userAccesses.filter((access: any) => {
+    return userAccesses.filter((access) => {
       return (
         norm(access.name).includes(q) ||
-        norm(access.last_name).includes(q) ||
+        norm(access.lastName).includes(q) ||
         norm(access.username).includes(q)
       );
     });
@@ -216,8 +253,8 @@ export function Roles() {
 
   const stats = useMemo(() => {
     const total = userAccesses.length;
-    const control = userAccesses.filter((a: any) => Number(a.role_id) === 3).length;
-    const moderator = userAccesses.filter((a: any) => Number(a.role_id) === 4).length;
+    const control = userAccesses.filter((a) => a.accessType === 'control_acceso').length;
+    const moderator = userAccesses.filter((a) => a.accessType === 'moderador').length;
     const catering = 0;
     const security = 0;
     return { total, control, moderator, catering, security };
@@ -226,6 +263,11 @@ export function Roles() {
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
+        {isLoading && (
+          <div className="mb-4 bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-3 rounded-md text-sm">
+            Procesando... por favor esperá un momento.
+          </div>
+        )}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center space-x-3">
             <Shield className="h-8 w-8 text-indigo-600" />
@@ -367,21 +409,10 @@ export function Roles() {
         <div className="space-y-6">
           {filteredAccesses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {filteredAccesses.map((userAccess: any) => (
+              {filteredAccesses.map((userAccess) => (
                 <UserAccessCard
                   key={userAccess.id}
-                  userAccess={{
-                    id: String(userAccess.id),
-                    accessType: userAccess.role_id === 4 ? 'moderador' : 'control_acceso',
-                    name: userAccess.name || '',
-                    lastName: userAccess.last_name || '',
-                    username: userAccess.username || '',
-                    password: (userAccess as any).password_plain || '',
-                    assignedEvents: [],
-                    assignedEventBooks: [],
-                    createdAt: userAccess.created_at || new Date().toISOString(),
-                    createdBy: String(user?.id || ''),
-                  }}
+                  userAccess={userAccess}
                   onEdit={handleEditUserAccess}
                   onDelete={handleDeleteUserAccess}
                   onAssignEvent={handleAssignEvent}
@@ -436,7 +467,6 @@ export function Roles() {
           isOpen={showCreateModal}
           onClose={() => {
             setShowCreateModal(false);
-            setEditingUserAccess(null);
             setEditingAccessApiUser(null);
           }}
           onSaved={() => {

@@ -2,15 +2,12 @@ import React from 'react';
 import { Calendar, Users, Clock, Crown, AlertTriangle, Settings, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { rolesStorage } from '../lib/roles-storage';
 import { eventBookStorage } from '../lib/eventbook-storage';
-import type { UserAccess } from '../types/roles';
 import type { EventBook } from '../types/eventbook';
 
 export function Moderador() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [, setUserAccess] = React.useState<UserAccess | null>(null);
   const [assignedEventBooks, setAssignedEventBooks] = React.useState<EventBook[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -23,57 +20,10 @@ export function Moderador() {
     
     try {
       setIsLoading(true);
-      
-      // Get user access data
-      const allAccesses = await rolesStorage.getUserAccesses('all');
-      const currentUserAccess = allAccesses.find(access => access.id === user.id);
-      
-      if (currentUserAccess) {
-        setUserAccess(currentUserAccess);
-        
-        // Get assigned EventBooks
-        const allEventBooks = await eventBookStorage.getAllEventBooks();
-        
-        const userEventBooks = allEventBooks.filter(eventBook => {
-          const isAssigned = (currentUserAccess.assignedEventBooks || []).includes(eventBook.id);
-          return isAssigned;
-        });
-        
-        // Obtener estadísticas reales y fecha del evento para cada EventBook asignado
-        const eventBooksWithStats = await Promise.all(
-          userEventBooks.map(async (book) => {
-            try {
-              // Obtener posts del EventBook
-              const posts = await eventBookStorage.getAllPosts(book.id);
-              
-              // Obtener invitados del EventBook
-              const { guestStorage } = await import('../lib/guest-storage');
-              const guests = guestStorage.getAllGuests(book.id);
-              
-              // Contar fotos en los posts
-              const photoCount = posts.reduce((count, post) => {
-                return count + (post.mediaFiles?.filter(media => media.type === 'image').length || 0);
-              }, 0);
-              
-              // Actualizar estadísticas
-              return {
-                ...book,
-                stats: {
-                  participants: guests.length,
-                  posts: posts.length,
-                  photos: photoCount,
-                  reported: book.stats?.reported || 0
-                }
-              };
-            } catch (error) {
-              console.error(`Error loading stats for EventBook ${book.id}:`, error);
-              return book; // Devolver el libro sin cambios si hay error
-            }
-          })
-        );
-        
-        setAssignedEventBooks(eventBooksWithStats);
-      }
+
+      // Backend already enforces assigned EventBooks for MODERATOR via scope=assigned
+      const assigned = await eventBookStorage.getAllEventBooks();
+      setAssignedEventBooks(assigned);
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {

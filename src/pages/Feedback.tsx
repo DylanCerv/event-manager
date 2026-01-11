@@ -4,34 +4,63 @@ import { utils, writeFile } from 'xlsx';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { useAuth } from '../contexts/AuthContext';
-import { storage } from '../lib/storage';
 import type { Event, Guest } from '../types/event';
+import { useEvents } from '../contexts/EventContext';
 
 export function Feedback() {
   const { user } = useAuth();
-  const [events, setEvents] = React.useState<Event[]>([]);
+  const { events } = useEvents();
+  const [eventsList, setEventsList] = React.useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = React.useState<Event | null>(null);
   const [guests, setGuests] = React.useState<Guest[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [showGuestModal, setShowGuestModal] = React.useState(false);
 
   React.useEffect(() => {
-    loadEvents();
-  }, []);
+    // Eventos vienen del backend vía EventContext
+    setEventsList(events);
+  }, [events]);
 
-  const loadEvents = async () => {
-    try {
-      const allEvents = await storage.getEvents();
-      setEvents(allEvents);
-    } catch (error) {
-      console.error('Error loading events:', error);
-    }
+  const API_BASE = import.meta.env.VITE_API_URL as string;
+  const getAuthHeaders = (): Record<string, string> => {
+    const token =
+      sessionStorage.getItem('auth_token') ||
+      localStorage.getItem('auth_token') ||
+      '';
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
   };
 
   const handleEventSelect = async (event: Event) => {
     try {
       setIsLoading(true);
-      const eventGuests = await storage.getGuests(event.id);
+      const response = await fetch(`${API_BASE}/event-guests/event/${event.id}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error loading guests');
+      }
+      const eventGuests = (json.data || []).map((g: any) => ({
+        id: String(g.id),
+        event_id: String(g.event_id),
+        name: g.name || undefined,
+        guest_number: Number(g.guest_number || 0),
+        table_number: g.table_number ? Number(g.table_number) : undefined,
+        email: g.email || undefined,
+        phone: g.phone || undefined,
+        profile_photo: g.profile_photo || undefined,
+        health_info: g.health_information || undefined,
+        qr_code: g.qr_code || '',
+        created_at: g.created_at || new Date().toISOString(),
+        qr_code_status: typeof g.qr_code_status === 'boolean' ? g.qr_code_status : undefined,
+        video_status: typeof g.video_status === 'boolean' ? g.video_status : undefined,
+        video_url: g.video_url || undefined,
+        status: g.status || undefined,
+        confirmation_status: (g.confirmation_status || 'not confirmed') as Guest['confirmation_status'],
+      })) as Guest[];
       // Only show guests with complete information
       const completedGuests = eventGuests.filter(guest => 
         guest.name && guest.email && guest.phone
@@ -103,7 +132,7 @@ export function Feedback() {
             <div className="px-4 py-5 sm:p-6">
               <h2 className="text-lg font-medium text-gray-900 mb-4">Tus Eventos</h2>
               <div className="space-y-4">
-                {events.map((event) => (
+                {eventsList.map((event) => (
                   <div 
                     key={event.id} 
                     className={`p-4 rounded-lg border cursor-pointer transition-colors ${

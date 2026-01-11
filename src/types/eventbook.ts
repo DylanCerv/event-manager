@@ -13,6 +13,7 @@ export interface EventBook {
   slug: string; // URL amigable para el EventBook
   publicUrl: string; // URL pública completa
   status?: 'active' | 'closed'; // Estado de cierre automático
+  moderatorsCount?: number; // Cantidad de moderadores asignados (backend)
   settings: {
     functionality: {
       allowPosts?: boolean;

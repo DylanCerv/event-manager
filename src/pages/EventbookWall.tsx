@@ -52,64 +52,69 @@ export function EventbookWall() {
     }
   }, [eventBook]);
 
-  // Recargar posts cada 30 segundos para simular tiempo real
+  // Recargar cada 1 minuto para simular tiempo real (sin sockets)
   React.useEffect(() => {
     if (!eventBook) return;
     
     const interval = setInterval(() => {
+      // IMPORTANTE: No recargar la "página" (ni estados de UI).
+      // Pausar auto-refresh mientras el usuario registra o escribe un post para evitar perder el draft.
+      if (showRegistrationModal || showCreatePostModal) return;
+
+      refreshEventBookSilently();
       loadPosts();
       loadGuests(); // También actualizar lista de invitados
-    }, 30000);
+      if (currentGuest) {
+        checkBlockStatus(currentGuest.id);
+      }
+    }, 60000);
 
     return () => clearInterval(interval);
-  }, [eventBook]);
+  }, [eventBook, userSlug, eventSlug, currentGuest, showRegistrationModal, showCreatePostModal]);
 
   const loadEventBook = async () => {
     try {
       setIsLoading(true);
-      const books = await eventBookStorage.getAllEventBooks();
-      
-      console.log('🔍 Debugging EventBook search:');
-      console.log('userSlug:', userSlug);
-      console.log('eventSlug:', eventSlug);
-      console.log('Available EventBooks:', books.map(b => ({
-        id: b.id,
-        name: b.name,
-        slug: b.slug,
-        publicUrl: b.publicUrl
-      })));
-      
-      let book;
       if (id) {
-        // Búsqueda por ID directo (ruta administrativa)
-        book = books.find(b => b.id === id);
-        console.log('🔍 Admin search result:', book);
-      } else if (userSlug && eventSlug) {
-        // Búsqueda por slug (ruta pública)
-        // Verificar que el slug del evento coincida y que la URL pública contenga el userSlug
-        book = books.find(b => 
-          b.slug === eventSlug && 
-          b.publicUrl.includes(`/${userSlug}/`)
-        );
-        console.log('🔍 Public search result:', book);
-        
-        // Verificar si el EventBook está cerrado (acceso público bloqueado)
-        if (book && isEventBookClosed(book)) {
-          console.log('🔒 EventBook is closed, blocking public access');
-          book = null; // Bloquear acceso público
-        }
-      }
-      
-      if (book) {
+        // Ruta administrativa (requiere auth)
+        const book = await eventBookStorage.getEventBookById(String(id));
         setEventBook(book);
-        console.log('✅ EventBook found:', book.name);
+      } else if (userSlug && eventSlug) {
+        // Ruta pública
+        const book = await eventBookStorage.getPublicEventBook(String(userSlug), String(eventSlug));
+        if (book && isEventBookClosed(book)) {
+          setEventBook(null);
+        } else {
+          setEventBook(book);
+        }
       } else {
-        console.log('❌ EventBook not found or access blocked');
+        setEventBook(null);
       }
     } catch (error) {
       console.error('Error loading EventBook:', error);
+      setEventBook(null);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Refresco silencioso: NO toca isLoading para no afectar UX (no "parpadea" ni reinicia modales).
+  const refreshEventBookSilently = async () => {
+    try {
+      if (id) {
+        const book = await eventBookStorage.getEventBookById(String(id));
+        setEventBook(book);
+        return;
+      }
+      if (userSlug && eventSlug) {
+        const book = await eventBookStorage.getPublicEventBook(String(userSlug), String(eventSlug));
+        if (book && !isEventBookClosed(book)) {
+          setEventBook(book);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing EventBook:', error);
+      // Best-effort: no modificar estado visible si falla el refresh
     }
   };
 
@@ -153,22 +158,27 @@ export function EventbookWall() {
     }
   };
 
-  const loadGuests = () => {
+  const loadGuests = async () => {
     if (!eventBook) return;
     
-    const allGuests = guestStorage.getAllGuests(eventBook.id);
-    setGuests(allGuests);
+    try {
+      const allGuests = await guestStorage.getAllGuests(eventBook.id);
+      setGuests(allGuests);
+    } catch (error) {
+      console.error('Error loading guests:', error);
+      setGuests([]);
+    }
   };
 
-  const handleGuestRegistration = (firstName: string, lastName: string, profilePhoto?: string) => {
+  const handleGuestRegistration = async (firstName: string, lastName: string, profilePhoto?: string) => {
     if (!eventBook) return;
     
-    const newGuest = guestStorage.registerGuest(eventBook.id, firstName, lastName, profilePhoto);
+    const newGuest = await guestStorage.registerGuest(eventBook.id, firstName, lastName, profilePhoto);
     setCurrentGuest(newGuest);
     setShowRegistrationModal(false);
     
     // Recargar lista de invitados
-    loadGuests();
+    await loadGuests();
   };
 
   const loadPosts = async () => {

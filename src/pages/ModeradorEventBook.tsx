@@ -29,7 +29,6 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { eventBookStorage } from '../lib/eventbook-storage';
 import { guestStorage } from '../lib/guest-storage';
-import { rolesStorage } from '../lib/roles-storage';
 import type { EventBook, EventBookPost } from '../types/eventbook';
 import type { EventBookGuest } from '../lib/guest-storage';
 import { ParticipantBlockModal } from '../components/ParticipantBlockModal';
@@ -115,6 +114,7 @@ export function ModeradorEventBook() {
   const [moderatorShowFeelingPicker, setModeratorShowFeelingPicker] = React.useState(false);
   const [moderatorPostType, setModeratorPostType] = React.useState<'normal' | 'highlighted' | 'announcement'>('normal');
   const [isSubmittingModeratorPost, setIsSubmittingModeratorPost] = React.useState(false);
+  const [isTogglingActive, setIsTogglingActive] = React.useState(false);
   const moderatorFileInputRef = React.useRef<HTMLInputElement>(null);
   const moderatorVideoInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -146,37 +146,50 @@ export function ModeradorEventBook() {
     if (activeTab === 'participants' && eventBook) {
       const interval = setInterval(() => {
         loadParticipants();
-      }, 30000);
+      }, 60000);
 
       return () => clearInterval(interval);
     }
   }, [activeTab, eventBook]);
+
+  // Refrescar stats/posts/reportes cada 1 minuto para no perder moderación (sin sockets)
+  React.useEffect(() => {
+    if (!eventBook || !hasAccess) return;
+    const interval = setInterval(() => {
+      // Evitar pisar la UI mientras el moderador está escribiendo/publicando (no perder drafts)
+      const isComposing =
+        isSubmittingModeratorPost ||
+        moderatorPostContent.trim().length > 0 ||
+        moderatorMediaFiles.length > 0;
+      if (isComposing) return;
+
+      loadRealStats();
+      if (activeTab === 'posts') {
+        loadPostsAndReports();
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [
+    eventBook,
+    hasAccess,
+    activeTab,
+    isSubmittingModeratorPost,
+    moderatorPostContent,
+    moderatorMediaFiles.length,
+  ]);
 
   const loadEventBookData = async () => {
     if (!id || !user?.id) return;
 
     try {
       setIsLoading(true);
-
-      // Verificar que el moderador tenga acceso a este EventBook
-      const allAccesses = await rolesStorage.getUserAccesses('all');
-      const currentUserAccess = allAccesses.find(access => access.id === user.id);
-      
-      if (!currentUserAccess || !currentUserAccess.assignedEventBooks?.includes(id)) {
-        setHasAccess(false);
-        setIsLoading(false);
-        return;
-      }
-
+      const eventBookData = await eventBookStorage.getEventBookById(id);
       setHasAccess(true);
-
-      // Cargar datos del EventBook
-      const allEventBooks = await eventBookStorage.getAllEventBooks();
-      const eventBookData = allEventBooks.find(eb => eb.id === id);
       setEventBook(eventBookData || null);
     } catch (error) {
       console.error('Error loading EventBook data:', error);
       setHasAccess(false);
+      setEventBook(null);
     } finally {
       setIsLoading(false);
     }
@@ -186,16 +199,12 @@ export function ModeradorEventBook() {
     if (!eventBook) return;
 
     try {
-      // Cargar datos reales
-      const allPosts = await eventBookStorage.getAllPosts(eventBook.id);
-      
-      // Obtener reportes desde localStorage directamente
-      const allReports = JSON.parse(localStorage.getItem('post_reports') || '[]');
-      
-      // Filtrar reportes que corresponden a posts de este EventBook
-      const eventBookReports = allReports.filter((report: any) => {
-        return allPosts.some(post => post.id === report.postId);
-      });
+      const feed = await eventBookStorage.getModerationFeed(eventBook.id);
+      const allPosts = feed.posts || [];
+      const eventBookReports = feed.reports || [];
+
+      setPosts(allPosts);
+      setReports(eventBookReports);
 
       // Calcular participantes únicos basándose en los guestId de los posts
       const uniqueParticipants = new Set<string>();
@@ -218,7 +227,7 @@ export function ModeradorEventBook() {
       const pendingPosts = allPosts.filter(post => post.status === 'pending').length;
 
       // Contar reportes pendientes
-      const pendingReports = eventBookReports.filter(report => report.status === 'pending').length;
+      const pendingReports = eventBookReports.filter((report: any) => report.status === 'pending').length;
 
       setRealStats({
         totalParticipants: uniqueParticipants.size,
@@ -259,19 +268,28 @@ export function ModeradorEventBook() {
     
     setIsLoadingParticipants(true);
     try {
-      // Usar la misma fuente de datos que el muro público
-      const guestsData = guestStorage.getAllGuests(eventBook.id);
-      const allPosts = await eventBookStorage.getAllPosts(eventBook.id);
-      
-      // Obtener datos de bloqueo del EventBook actual
-      const eventBooks = await eventBookStorage.getAllEventBooks();
-      const currentEventBook = eventBooks.find(eb => eb.id === eventBook.id);
-      const blockedUsers = currentEventBook?.blockedParticipants || [];
+      const guestsData = await guestStorage.getAllGuests(eventBook.id);
+      // Asegurar que tenemos posts/reports cargados para cálculos y filtros
+      const feed = await eventBookStorage.getModerationFeed(eventBook.id);
+      const allPosts = feed.posts || [];
+      const blocks = await (async () => {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/event-books/${eventBook.id}/moderation/blocks`, {
+            method: 'GET',
+            headers: { Accept: 'application/json', Authorization: `Bearer ${sessionStorage.getItem('auth_token') || ''}` },
+          });
+          const json = await res.json();
+          return res.ok ? (json.data || []) : [];
+        } catch {
+          return [];
+        }
+      })();
+      const blockedUsers = blocks;
       
       // Procesar participantes con la misma lógica que EventBookUsersSidebar
       const participantsData: ParticipantData[] = guestsData.map(guest => {
         const userPosts = allPosts.filter(post => post.guestId === guest.id);
-        const blockedInfo = blockedUsers.find(bu => bu.userId === guest.id);
+        const blockedInfo = blockedUsers.find((bu: any) => bu.participantId === guest.id || bu.participant_id === guest.id);
         const lastActiveTime = new Date(guest.lastActiveAt).getTime();
         const now = new Date().getTime();
         const isActive = (now - lastActiveTime) < 5 * 60 * 1000; // Activo si estuvo en los últimos 5 minutos
@@ -296,10 +314,10 @@ export function ModeradorEventBook() {
           lastActivity: guest.lastActiveAt,
           registrationDate: guest.registeredAt,
           postCount: userPosts.length,
-          isBlocked: blockedInfo?.blocked || false,
-          blockedType: blockedInfo?.blockedType,
-          blockedReason: blockedInfo?.blockedReason,
-          blockedAt: blockedInfo?.blockedAt
+          isBlocked: Boolean(blockedInfo),
+          blockedType: blockedInfo?.blockedType || blockedInfo?.blocked_type,
+          blockedReason: blockedInfo?.blockedReason || blockedInfo?.blocked_reason,
+          blockedAt: blockedInfo?.blockedAt || blockedInfo?.blocked_at
         };
       });
       
@@ -373,19 +391,9 @@ export function ModeradorEventBook() {
     
     setIsLoadingPosts(true);
     try {
-      // Cargar posts
-      const postsData = await eventBookStorage.getAllPosts(eventBook.id);
-      
-      // Cargar reportes desde localStorage directamente
-      const allReports = JSON.parse(localStorage.getItem('post_reports') || '[]');
-      
-      // Filtrar reportes que corresponden a posts de este EventBook
-      const reportsData = allReports.filter((report: any) => {
-        return postsData.some(post => post.id === report.postId);
-      });
-      
-      setPosts(postsData);
-      setReports(reportsData);
+      const feed = await eventBookStorage.getModerationFeed(eventBook.id);
+      setPosts(feed.posts || []);
+      setReports(feed.reports || []);
       
       // También cargar invitados para mostrar nombres reales
       await loadGuests();
@@ -398,17 +406,7 @@ export function ModeradorEventBook() {
 
   const executeDeletePost = async (postId: string) => {
     try {
-      // Eliminar el post del localStorage directamente
-      const allPosts = JSON.parse(localStorage.getItem('eventbook_posts') || '[]');
-      const updatedPosts = allPosts.filter((post: any) => post.id !== postId);
-      localStorage.setItem('eventbook_posts', JSON.stringify(updatedPosts));
-      
-      // También eliminar reportes asociados
-      const allReports = JSON.parse(localStorage.getItem('post_reports') || '[]');
-      const updatedReports = allReports.filter((report: any) => report.postId !== postId);
-      localStorage.setItem('post_reports', JSON.stringify(updatedReports));
-      
-      // Recargar datos completos para mantener sincronización
+      await eventBookStorage.deletePost(postId);
       await Promise.all([loadRealStats(), loadPostsAndReports()]);
       
       showToast('success', 'Publicación eliminada correctamente.');
@@ -421,14 +419,7 @@ export function ModeradorEventBook() {
 
   const executePublishPost = async (postId: string) => {
     try {
-      // Aprobar/publicar el post en localStorage
-      const allPosts = JSON.parse(localStorage.getItem('eventbook_posts') || '[]');
-      const updatedPosts = allPosts.map((post: any) => 
-        post.id === postId ? { ...post, status: 'published', isModerated: true } : post
-      );
-      localStorage.setItem('eventbook_posts', JSON.stringify(updatedPosts));
-      
-      // Recargar datos completos para mantener sincronización
+      await eventBookStorage.publishPost(postId);
       await Promise.all([loadRealStats(), loadPostsAndReports()]);
       
       showToast('success', 'Publicación aprobada y publicada.');
@@ -441,14 +432,8 @@ export function ModeradorEventBook() {
 
   const executeIgnoreReport = async (postId: string) => {
     try {
-      // Resolver el reporte en localStorage
-      const allReports = JSON.parse(localStorage.getItem('post_reports') || '[]');
-      const updatedReports = allReports.map((report: any) => 
-        report.postId === postId ? { ...report, status: 'resolved' } : report
-      );
-      localStorage.setItem('post_reports', JSON.stringify(updatedReports));
-      
-      // Recargar datos completos para mantener sincronización
+      const related = (reports || []).filter((r: any) => r.postId === postId && r.status === 'pending');
+      await Promise.all(related.map((r: any) => eventBookStorage.resolveReport(String(r.id))));
       await Promise.all([loadRealStats(), loadPostsAndReports()]);
       
       showToast('success', 'Reporte marcado como resuelto.');
@@ -643,7 +628,7 @@ export function ModeradorEventBook() {
         selectedParticipant.id,
         blockType,
         reason,
-        user.id
+        String(user.id)
       );
 
       // Actualizar la lista de participantes
@@ -741,105 +726,21 @@ export function ModeradorEventBook() {
 
     setIsSubmittingModeratorPost(true);
     try {
-      // Obtener el nombre personalizado del moderador desde la configuración
-      const moderatorDisplayName = eventBook.settings.customization?.organizerDisplayName || 'Moderador';
-      const moderatorPhoto = eventBook.settings.customization?.moderatorProfilePhoto;
-      
-      console.log('🔍 Configuración del moderador:', {
-        displayName: moderatorDisplayName,
-        hasPhoto: !!moderatorPhoto,
-        photoLength: moderatorPhoto?.length
-      });
-      
-      // Buscar guest existente del moderador
-      let moderatorGuest = guestStorage.getAllGuests(eventBook.id).find(g => 
-        g.moderatorUserId === user.id
-      );
-      
-      console.log('🔍 Guest del moderador encontrado:', moderatorGuest);
-      
-      // Si existe un guest pero no tiene la imagen actual, actualizar directamente
-      if (moderatorGuest && moderatorGuest.profilePhoto !== moderatorPhoto) {
-        console.log('🔄 Actualizando imagen del guest del moderador...');
-        
-        // Actualizar directamente sin eliminar el guest
-        const guests = JSON.parse(localStorage.getItem(`eventbook_guests_${eventBook.id}`) || '[]');
-        const guestIndex = guests.findIndex((g: any) => g.id === moderatorGuest!.id);
-        if (guestIndex !== -1) {
-          guests[guestIndex].profilePhoto = moderatorPhoto;
-          localStorage.setItem(`eventbook_guests_${eventBook.id}`, JSON.stringify(guests));
-          moderatorGuest.profilePhoto = moderatorPhoto;
-          console.log('✅ Imagen del guest del moderador actualizada');
-        }
-      }
-      
-      if (!moderatorGuest) {
-        // Crear guest especial para el moderador usando el nombre personalizado
-        moderatorGuest = guestStorage.registerGuest(
-          eventBook.id, 
-          moderatorDisplayName, 
-          '',
-          eventBook.settings.customization?.moderatorProfilePhoto
-        );
-        
-        // Actualizar el guest con un ID especial en localStorage para identificarlo
-        const guests = JSON.parse(localStorage.getItem(`eventbook_guests_${eventBook.id}`) || '[]');
-        const guestIndex = guests.findIndex((g: any) => g.id === moderatorGuest!.id);
-        if (guestIndex !== -1) {
-          guests[guestIndex].moderatorUserId = user.id;
-          localStorage.setItem(`eventbook_guests_${eventBook.id}`, JSON.stringify(guests));
-        }
-        
-        console.log('✅ Guest del moderador creado:', moderatorGuest);
-      } else {
-        // Actualizar el nombre y foto del guest existente si cambió la configuración
-        const guests = JSON.parse(localStorage.getItem(`eventbook_guests_${eventBook.id}`) || '[]');
-        const guestIndex = guests.findIndex((g: any) => g.id === moderatorGuest!.id);
-        if (guestIndex !== -1) {
-          let needsUpdate = false;
-          
-          if (guests[guestIndex].firstName !== moderatorDisplayName) {
-            guests[guestIndex].firstName = moderatorDisplayName;
-            guests[guestIndex].lastName = '';
-            moderatorGuest.firstName = moderatorDisplayName;
-            moderatorGuest.lastName = '';
-            needsUpdate = true;
-          }
-          
-          if (guests[guestIndex].profilePhoto !== eventBook.settings.customization?.moderatorProfilePhoto) {
-            guests[guestIndex].profilePhoto = eventBook.settings.customization?.moderatorProfilePhoto;
-            moderatorGuest.profilePhoto = eventBook.settings.customization?.moderatorProfilePhoto;
-            needsUpdate = true;
-          }
-          
-          if (needsUpdate) {
-            localStorage.setItem(`eventbook_guests_${eventBook.id}`, JSON.stringify(guests));
-            console.log('✅ Guest del moderador actualizado:', moderatorGuest);
-          }
-        }
-      }
+      const moderatorParticipant = await eventBookStorage.ensureModeratorParticipant(eventBook.id);
 
-      const { post } = await eventBookStorage.createPost(
+      await eventBookStorage.createPost(
         eventBook.id,
-        moderatorGuest.id, // Usar ID del guest del moderador
+        moderatorParticipant.id,
         moderatorPostContent,
         moderatorMediaFiles.length > 0 ? moderatorMediaFiles : undefined,
         moderatorSelectedFeeling || undefined,
-        'moderator'
-      );
-
-      // Actualizar el post con los campos específicos del moderador
-      const posts = JSON.parse(localStorage.getItem('eventbook_posts') || '[]');
-      const postIndex = posts.findIndex((p: any) => p.id === post.id);
-      if (postIndex !== -1) {
-        posts[postIndex] = {
-          ...posts[postIndex],
+        'moderator',
+        {
           moderatorPost: true,
           isHighlighted: moderatorPostType === 'highlighted',
           isAnnouncement: moderatorPostType === 'announcement'
-        };
-        localStorage.setItem('eventbook_posts', JSON.stringify(posts));
-      }
+        }
+      );
 
       // Limpiar el composer
       setModeratorPostContent('');
@@ -848,7 +749,7 @@ export function ModeradorEventBook() {
       setModeratorPostType('normal');
 
       // Recargar estadísticas
-      await loadRealStats();
+      await Promise.all([loadRealStats(), loadPostsAndReports()]);
 
       showToast('success', 'Post publicado exitosamente');
     } catch (error) {
@@ -987,20 +888,32 @@ export function ModeradorEventBook() {
                   <button
                     onClick={async () => {
                       if (!eventBook) return;
+                      if (isTogglingActive) return;
                       const newIsActive = !eventBook.isActive;
-                      await handleUpdateEventBook({ isActive: newIsActive });
+                      try {
+                        setIsTogglingActive(true);
+                        const updated = await eventBookStorage.setActivationAsModerator(eventBook.id, newIsActive);
+                        setEventBook(prev => prev ? { ...prev, isActive: updated } : prev);
+                        await loadRealStats();
+                      } catch (error) {
+                        console.error('Error toggling EventBook activation:', error);
+                        showToast('error', 'No se pudo actualizar el estado del EventBook');
+                      } finally {
+                        setIsTogglingActive(false);
+                      }
                     }}
+                    disabled={isTogglingActive}
                     className={`inline-flex items-center px-2 sm:px-3 py-1 sm:py-2 border border-transparent text-xs sm:text-sm font-medium rounded-md shadow-sm text-white ${
                       eventBook?.isActive
                         ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
                         : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
-                    } focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200`}
+                    } focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200 ${isTogglingActive ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
                     <span className="hidden sm:inline">
-                      {eventBook?.isActive ? 'Desactivar EventBook' : 'Activar EventBook'}
+                      {isTogglingActive ? 'Procesando...' : (eventBook?.isActive ? 'Desactivar EventBook' : 'Activar EventBook')}
                     </span>
                     <span className="sm:hidden">
-                      {eventBook?.isActive ? 'Desactivar' : 'Activar'}
+                      {isTogglingActive ? '...' : (eventBook?.isActive ? 'Desactivar' : 'Activar')}
                     </span>
                   </button>
                 </div>

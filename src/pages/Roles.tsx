@@ -20,15 +20,18 @@ export function Roles() {
   const [availableEvents, setAvailableEvents] = useState<Event[]>([]);
   const [availableEventBooks, setAvailableEventBooks] = useState<EventBook[]>([]);
   const [moderatorAssignments, setModeratorAssignments] = useState<Record<string, string[]>>({});
+  const [accessControlAssignments, setAccessControlAssignments] = useState<Record<string, string[]>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   const [editingAccessApiUser, setEditingAccessApiUser] = useState<ApiUser | null>(null);
+  const authToken = sessionStorage.getItem('auth_token') || localStorage.getItem('auth_token') || '';
 
   useEffect(() => {
     loadUserAccesses();
     loadAvailableEventBooks();
+    loadAccessControlAssignments();
     fetchUsers();
   }, []);
 
@@ -39,7 +42,7 @@ export function Roles() {
   // Re-derive access list whenever backend users change
   useEffect(() => {
     loadUserAccesses();
-  }, [users, moderatorAssignments]);
+  }, [users, moderatorAssignments, accessControlAssignments]);
 
   useEffect(() => {
     if (availableEventBooks.length > 0) {
@@ -57,6 +60,7 @@ export function Roles() {
         const roleId = Number(u.role_id);
         const accessType: UserAccess['accessType'] = roleId === 4 ? 'moderador' : 'control_acceso';
         const assignedEventBooks = accessType === 'moderador' ? (moderatorAssignments[String(u.id)] || []) : undefined;
+        const assignedEvents = accessType === 'control_acceso' ? (accessControlAssignments[String(u.id)] || []) : [];
         return {
           id: String(u.id),
           accessType,
@@ -64,7 +68,7 @@ export function Roles() {
           lastName: u.last_name || '',
           username: u.username || '',
           password: u.password_plain || '',
-          assignedEvents: [],
+          assignedEvents,
           assignedEventBooks,
           createdAt: u.created_at || new Date().toISOString(),
           createdBy: String(u.creator_id || ''),
@@ -73,6 +77,30 @@ export function Roles() {
       setUserAccesses(mapped);
     } catch (error) {
       console.error('Error loading user accesses:', error);
+    }
+  };
+
+  const loadAccessControlAssignments = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/access-control/assignments`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      const rows = (json.data || []) as { userId: string; eventId: string }[];
+      const map: Record<string, string[]> = {};
+      rows.forEach((r) => {
+        const uid = String(r.userId);
+        if (!map[uid]) map[uid] = [];
+        map[uid].push(String(r.eventId));
+      });
+      setAccessControlAssignments(map);
+    } catch (error) {
+      console.error('Error loading access control assignments:', error);
     }
   };
 
@@ -96,7 +124,7 @@ export function Roles() {
               method: 'GET',
               headers: {
                 Accept: 'application/json',
-                Authorization: `Bearer ${sessionStorage.getItem('auth_token') || ''}`,
+                Authorization: `Bearer ${authToken}`,
               },
             });
             const json = await res.json();
@@ -152,24 +180,34 @@ export function Roles() {
         return handleAssignEventBook(userAccessId, eventId); // eventId is actually eventBookId for moderators
       }
 
-      if ((userAccess.assignedEvents || []).includes(eventId)) {
-        // If already assigned, revoke it
-        setUserAccesses(prev => prev.map((access: any) => 
-          String(access.id) === String(userAccessId)
-            ? { ...access, assignedEvents: (access.assignedEvents || []).filter((id: string) => id !== eventId) }
-            : access
-        ));
+      setIsLoading(true);
+      const currentlyAssigned = (accessControlAssignments[String(userAccessId)] || []).includes(eventId);
+      if (currentlyAssigned) {
+        await fetch(`${import.meta.env.VITE_API_URL}/access-control/assignments/${userAccessId}/${eventId}`, {
+          method: 'DELETE',
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+        });
       } else {
-        // If not assigned, assign it
-        setUserAccesses(prev => prev.map((access: any) => 
-          String(access.id) === String(userAccessId)
-            ? { ...access, assignedEvents: [...(access.assignedEvents || []), eventId] }
-            : access
-        ));
+        await fetch(`${import.meta.env.VITE_API_URL}/access-control/assignments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ user_id: Number(userAccessId), bolt_event_id: Number(eventId) }),
+        });
       }
+
+      await loadAccessControlAssignments();
     } catch (error) {
       console.error('Error assigning/revoking event:', error);
       alert('Error al gestionar la asignación del evento');
+    } finally {
+      setIsLoading(false);
     }
   };
 

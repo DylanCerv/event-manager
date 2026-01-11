@@ -220,16 +220,49 @@ class EventBookStorage {
   }
 
   // CRUD para Posts
+  async getBackupPosts(eventBookId: string): Promise<EventBookPost[]> {
+    const response = await fetch(`${API_BASE}/event-books/${eventBookId}/backup/posts`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((json as any)?.message || 'Error loading backup posts');
+    }
+    return (json as any).data as EventBookPost[];
+  }
+
   async getAllPosts(eventBookId: string): Promise<EventBookPost[]> {
     const response = await fetch(`${API_BASE}/event-books/${eventBookId}/posts`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
-    const json = await response.json();
-    if (!response.ok) {
-      throw new Error(json?.message || 'Error loading posts');
+    const json = await response.json().catch(() => ({}));
+    if (response.ok) {
+      return (json as any).data as EventBookPost[];
     }
-    return json.data as EventBookPost[];
+
+    // If the EventBook is closed/inactive, public endpoint returns 404.
+    // Fallback to authenticated backup endpoint (creator/moderator/superadmin).
+    const message = String((json as any)?.message || '');
+    if (response.status === 404 && message.toLowerCase().includes('not available')) {
+      const backupRes = await fetch(`${API_BASE}/event-books/${eventBookId}/backup/posts`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          ...getAuthHeaders(),
+        },
+      });
+      const backupJson = await backupRes.json().catch(() => ({}));
+      if (backupRes.ok) {
+        return (backupJson as any).data as EventBookPost[];
+      }
+    }
+
+    throw new Error(message || 'Error loading posts');
   }
 
   async createPost(

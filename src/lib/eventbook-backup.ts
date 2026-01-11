@@ -28,11 +28,15 @@ export const generateEventBookBackup = async (eventBook: EventBook): Promise<Blo
   const zip = new JSZip();
   
   // Obtener todos los posts del EventBook
-  let posts = await eventBookStorage.getAllPosts(eventBook.id);
+  let posts = isEventBookClosed(eventBook)
+    ? await eventBookStorage.getBackupPosts(eventBook.id)
+    : await eventBookStorage.getAllPosts(eventBook.id);
   // Preferir feed de moderación (incluye pendientes/reportados) cuando hay sesión
   try {
-    const feed = await eventBookStorage.getModerationFeed(eventBook.id);
-    if (feed?.posts) posts = feed.posts;
+    if (!isEventBookClosed(eventBook)) {
+      const feed = await eventBookStorage.getModerationFeed(eventBook.id);
+      if (feed?.posts) posts = feed.posts;
+    }
   } catch {
     // best-effort
   }
@@ -245,11 +249,15 @@ export const generateEventBookPDF = async (eventBook: EventBook): Promise<void> 
       posts = snapshot.posts;
       guests = snapshot.guests;
     } else {
-      posts = await eventBookStorage.getAllPosts(eventBook.id);
+      posts = isEventBookClosed(eventBook)
+        ? await eventBookStorage.getBackupPosts(eventBook.id)
+        : await eventBookStorage.getAllPosts(eventBook.id);
       // Preferir feed de moderación (incluye pendientes/reportados) cuando hay sesión
       try {
-        const feed = await eventBookStorage.getModerationFeed(eventBook.id);
-        if (feed?.posts) posts = feed.posts;
+        if (!isEventBookClosed(eventBook)) {
+          const feed = await eventBookStorage.getModerationFeed(eventBook.id);
+          if (feed?.posts) posts = feed.posts;
+        }
       } catch {
         // best-effort
       }

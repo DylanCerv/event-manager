@@ -2,8 +2,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Info, QrCode, Check, X, AlertTriangle, MessageSquare, Video, Search, UserCheck, UserX, ClipboardCheck, ClipboardX, Users, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { storage } from '../lib/storage';
-import { rolesStorage } from '../lib/roles-storage';
+import { useEvents } from '../contexts/EventContext';
 import { QRAccessScanner } from '../components/QRAccessScanner';
 import { ScreensaverOverlay } from '../components/ScreensaverOverlay';
 import type { Event, Guest, GuestAccessSettings } from '../types/event';
@@ -13,6 +12,7 @@ export function AccessControlEventManagement() {
   const { eventId } = useParams<{ eventId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { events } = useEvents();
   const [activeTab, setActiveTab] = React.useState<'info' | 'qr-scan'>('info');
   const [userAccess, setUserAccess] = React.useState<UserAccess | null>(null);
   const [assignedEvents, setAssignedEvents] = React.useState<Event[]>([]);
@@ -29,63 +29,43 @@ export function AccessControlEventManagement() {
   const [screensaverEnabled, setScreensaverEnabled] = React.useState(true);
   const [isScanning, setIsScanning] = React.useState(false);
 
+  const API_BASE = import.meta.env.VITE_API_URL as string;
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = sessionStorage.getItem('auth_token') || localStorage.getItem('auth_token') || '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   React.useEffect(() => {
     if (user?.id && eventId) {
       loadData();
     }
-  }, [user, eventId]);
-
-  // Listener para cambios de configuración de acceso hechos desde otros paneles
-  React.useEffect(() => {
-    const handleStorageUpdate = async (e: CustomEvent<{ type: string; eventId: string }>) => {
-      const { type, eventId } = e.detail;
-      
-      // Solo reaccionar a cambios en configuración de acceso
-      if (type === 'access_settings_updated' && assignedEvents.some(evt => evt.id === eventId)) {
-        try {
-          // Recargar configuración de acceso
-          const settings = await storage.getAccessSettings(eventId);
-          setAccessSettings(settings);
-          setIsAccessActive(settings?.is_active || false);
-        } catch (error) {
-          console.error('Error updating access settings:', error);
-        }
-      }
-    };
-
-    window.addEventListener('storage_update', handleStorageUpdate as any);
-    return () => window.removeEventListener('storage_update', handleStorageUpdate as any);
-  }, [assignedEvents]);
+  }, [user, eventId, events]);
 
   const loadData = async () => {
     if (!user?.id || !eventId) return;
     
     try {
-      // Get user access data
-      const allAccesses = await rolesStorage.getUserAccesses('all');
-      const currentUserAccess = allAccesses.find(access => access.id === user.id);
-      
-      if (currentUserAccess) {
-        // Verificar si el usuario tiene acceso a este evento específico
-        if (!currentUserAccess.assignedEvents.includes(eventId)) {
-          navigate('/access-control');
-          return;
-        }
+      const assignRes = await fetch(`${API_BASE}/access-control/assignments/me`, {
+        method: 'GET',
+        headers: { Accept: 'application/json', ...getAuthHeaders() },
+      });
+      const assignJson = await assignRes.json().catch(() => ({}));
+      if (!assignRes.ok) throw new Error((assignJson as any)?.message || 'Error loading assignments');
 
-        setUserAccess(currentUserAccess);
-        
-        // Cargar el evento específico
-        const allEvents = await storage.getEvents();
-        const targetEvent = allEvents.find(event => event.id === eventId);
-        
-        if (!targetEvent) {
-          navigate('/access-control');
-          return;
-        }
-
-        setAssignedEvents([targetEvent]); // Solo guardamos el evento actual
-        await loadEventData(targetEvent.id);
+      const assignedIds = (assignJson as any).data as string[];
+      if (!assignedIds.includes(eventId)) {
+        navigate('/access-control');
+        return;
       }
+
+      const targetEvent = events.find(evt => evt.id === eventId);
+      if (!targetEvent) {
+        navigate('/access-control');
+        return;
+      }
+
+      setAssignedEvents([targetEvent]);
+      await loadEventData(targetEvent.id);
     } catch (error) {
       console.error('Error loading data:', error);
       navigate('/access-control');
@@ -94,12 +74,45 @@ export function AccessControlEventManagement() {
 
   const loadEventData = async (eventId: string) => {
     try {
-      const [eventGuests, settings] = await Promise.all([
-        storage.getGuests(eventId),
-        storage.getAccessSettings(eventId)
+      const [guestsRes, settingsRes] = await Promise.all([
+        fetch(`${API_BASE}/event-guests/event/${eventId}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json', ...getAuthHeaders() },
+        }),
+        fetch(`${API_BASE}/bolt-events/${eventId}/access-settings`, {
+          method: 'GET',
+          headers: { Accept: 'application/json', ...getAuthHeaders() },
+        }),
       ]);
-      
-      setGuests(eventGuests.sort((a: Guest, b: Guest) => (a.guest_number || 0) - (b.guest_number || 0)));
+
+      const guestsJson = await guestsRes.json().catch(() => ({}));
+      if (!guestsRes.ok) throw new Error((guestsJson as any)?.message || 'Error loading guests');
+
+      const settingsJson = await settingsRes.json().catch(() => ({}));
+      if (!settingsRes.ok) throw new Error((settingsJson as any)?.message || 'Error loading access settings');
+
+      const mappedGuests = ((guestsJson as any).data || []).map((g: any) => ({
+        id: String(g.id),
+        event_id: String(g.event_id),
+        name: g.name || undefined,
+        guest_number: Number(g.guest_number || 0),
+        table_number: g.table_number ? Number(g.table_number) : undefined,
+        email: g.email || undefined,
+        phone: g.phone || undefined,
+        profile_photo: g.profile_photo || undefined,
+        health_info: g.health_information || undefined,
+        qr_code: g.qr_code || '',
+        created_at: g.created_at || new Date().toISOString(),
+        qr_code_status: typeof g.qr_code_status === 'boolean' ? g.qr_code_status : undefined,
+        video_status: typeof g.video_status === 'boolean' ? g.video_status : undefined,
+        video_url: g.video_url || undefined,
+        status: g.status || undefined,
+        confirmation_status: (g.confirmation_status || 'not confirmed') as Guest['confirmation_status'],
+      })) as Guest[];
+
+      const settings = (settingsJson as any).data as GuestAccessSettings;
+
+      setGuests(mappedGuests.sort((a: Guest, b: Guest) => (a.guest_number || 0) - (b.guest_number || 0)));
       setAccessSettings(settings);
       setIsAccessActive(settings?.is_active || false);
     } catch (error) {
@@ -113,19 +126,36 @@ export function AccessControlEventManagement() {
     try {
       setIsLoading(true);
       setIsAccessActive(isActive);
-      
-      const settings: GuestAccessSettings = {
-        id: accessSettings?.id || crypto.randomUUID(),
-        event_id: eventId,
-        access_type: accessSettings?.access_type || 'message',
+
+      const next: Partial<GuestAccessSettings> = {
         is_active: isActive,
+        access_type: accessSettings?.access_type || 'message',
         welcome_message: accessSettings?.welcome_message || '',
         rejection_message: accessSettings?.rejection_message || '',
-        created_at: new Date().toISOString(),
       };
-      
-      await storage.saveAccessSettings(settings);
-      setAccessSettings(settings);
+
+      const res = await fetch(`${API_BASE}/bolt-events/${eventId}/access-settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(next),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((json as any)?.message || 'Error saving access settings');
+
+      // Keep local state in sync
+      setAccessSettings((prev) => ({
+        id: prev?.id || eventId,
+        event_id: eventId,
+        access_type: next.access_type || 'message',
+        is_active: isActive,
+        welcome_message: next.welcome_message || '',
+        rejection_message: next.rejection_message || '',
+        created_at: prev?.created_at || new Date().toISOString(),
+      }));
     } catch (error) {
       console.error('Error activating access:', error);
       setIsAccessActive(!isActive);

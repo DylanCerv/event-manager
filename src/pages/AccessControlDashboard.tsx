@@ -2,45 +2,44 @@ import React from 'react';
 import { Calendar, MapPin, Users, Clock, Shield, AlertTriangle, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { storage } from '../lib/storage';
-import { rolesStorage } from '../lib/roles-storage';
+import { useEvents } from '../contexts/EventContext';
 import type { Event } from '../types/event';
 import type { UserAccess } from '../types/roles';
 
 export function AccessControlDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { events } = useEvents();
   const [userAccess, setUserAccess] = React.useState<UserAccess | null>(null);
   const [assignedEvents, setAssignedEvents] = React.useState<Event[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
 
+  const API_BASE = import.meta.env.VITE_API_URL as string;
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = sessionStorage.getItem('auth_token') || localStorage.getItem('auth_token') || '';
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   React.useEffect(() => {
     loadUserData();
-  }, [user]);
+  }, [user, events]);
 
   const loadUserData = async () => {
     if (!user?.id) return;
     
     try {
       setIsLoading(true);
-      
-      // Get user access data
-      const allAccesses = await rolesStorage.getUserAccesses('all');
-      const currentUserAccess = allAccesses.find(access => access.id === user.id);
-      
-      if (currentUserAccess) {
-        setUserAccess(currentUserAccess);
-        
-        // Get assigned events
-        const allEvents = await storage.getEvents();
-        
-        const userEvents = allEvents.filter(event => {
-          const isAssigned = currentUserAccess.assignedEvents.includes(event.id);
-          return isAssigned;
-        });
-        
-        setAssignedEvents(userEvents);
-      }
+
+      // Get assigned events from backend (persisted)
+      const res = await fetch(`${API_BASE}/access-control/assignments/me`, {
+        method: 'GET',
+        headers: { Accept: 'application/json', ...getAuthHeaders() },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((json as any)?.message || 'Error loading assignments');
+
+      const assignedIds = (json as any).data as string[];
+      setAssignedEvents(events.filter(evt => assignedIds.includes(evt.id)));
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {

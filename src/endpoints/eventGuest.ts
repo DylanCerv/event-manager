@@ -1,6 +1,9 @@
 /** Event Guests API endpoints */
 
-const token = sessionStorage.getItem('auth_token');
+const getAuthHeaders = (): Record<string, string> => {
+    const token = sessionStorage.getItem('auth_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 /**
  * Get all guests for a specific event
@@ -12,7 +15,7 @@ export const getEventGuestsByEventIdAPI = async (eventId: number): Promise<any> 
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
         });
         const data = await response.json();
@@ -36,7 +39,7 @@ export const createEventGuestAPI = async (body: object): Promise<any> => {
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
             body: JSON.stringify(body),
         });
@@ -64,7 +67,7 @@ export const updateEventGuestAPI = async (eventId: number, guestNumber: string |
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
             body: JSON.stringify(body),
         });
@@ -91,7 +94,7 @@ export const uploadEventGuestVideoAPI = async (eventId: number, guestNumber: str
             method: 'POST',
             headers: {
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
             body: formData,
         });
@@ -117,7 +120,7 @@ export const deleteEventGuestAPI = async (id: number): Promise<any> => {
             headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
             },
         });
         const data = await response.json();

@@ -1,18 +1,39 @@
 import type { EventFinalization } from '../types/event';
+import { deleteEventFinalizationAPI, getEventFinalizationAPI, upsertEventFinalizationAPI } from '../endpoints/finalization';
 
 class FinalizationStorage {
-  private localStorage = new LocalStorage();
-
   async getEventFinalization(eventId: string): Promise<EventFinalization | null> {
-    return this.localStorage.getEventFinalization(eventId);
+    // Primary source: backend (DB)
+    try {
+      const res = await getEventFinalizationAPI(eventId);
+      const data = (res as any)?.data ?? null;
+      return data ? (data as EventFinalization) : null;
+    } catch (error) {
+      // Legacy fallback (best-effort)
+      console.error('Error loading finalization from API, falling back to localStorage:', error);
+      return new LocalStorage().getEventFinalization(eventId);
+    }
   }
 
   async saveEventFinalization(finalization: Omit<EventFinalization, 'id' | 'created_at'>): Promise<void> {
-    await this.localStorage.saveEventFinalization(finalization);
+    // Persist to backend (DB)
+    await upsertEventFinalizationAPI(finalization.event_id, finalization as any);
+    // Keep local cache updated for legacy screens (best-effort)
+    try {
+      await new LocalStorage().saveEventFinalization(finalization);
+    } catch {
+      // ignore
+    }
   }
 
   async deleteEventFinalization(eventId: string): Promise<void> {
-    await this.localStorage.deleteEventFinalization(eventId);
+    await deleteEventFinalizationAPI(eventId);
+    // Keep local cache updated for legacy screens (best-effort)
+    try {
+      await new LocalStorage().deleteEventFinalization(eventId);
+    } catch {
+      // ignore
+    }
   }
 }
 

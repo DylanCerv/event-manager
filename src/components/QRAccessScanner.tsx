@@ -1,9 +1,10 @@
 import React from 'react';
-import { Camera, Scan, Search, Users, Clock, CheckCircle, XCircle, AlertTriangle, Play, Volume2, Download, Trash2, Eye, UserCheck, Wifi, WifiOff } from 'lucide-react';
+import { Camera, Scan, Search, Users, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import type { Guest, GuestAccessSettings } from '../types/event';
 import { storage } from '../lib/storage';
 import { updateEventGuestAPI } from '../endpoints/eventGuest';
+import { clearAccessControlScansAPI, getAccessControlScansAPI, logAccessControlScanAPI } from '../endpoints/accessControlScans';
 import { QRAccessModal } from './QRAccessModal';
 import { QRAccessVideoModal } from './QRAccessVideoModal';
 import { jsPDF } from 'jspdf';
@@ -48,7 +49,7 @@ interface RecentScan {
   id: string;
   guest: Guest;
   timestamp: Date;
-  status: 'success' | 'duplicate' | 'denied';
+  status: 'success' | 'duplicate' | 'denied' | 'invalid';
   eventId: string;
   scanMethod: ScanMethod;
 }
@@ -544,6 +545,20 @@ export function QRAccessScanner({
       const guest = localGuests.find(g => g.qr_code === qrCode);
       
       if (!guest) {
+        // Log invalid scan (best-effort)
+        try {
+          await logAccessControlScanAPI({
+            bolt_event_id: Number(eventId),
+            qr_code: qrCode,
+            scan_method: selectedMethod,
+            status: 'invalid',
+            message: 'Código QR no válido para este evento',
+            meta: null,
+          });
+        } catch (e) {
+          console.error('Error logging invalid scan:', e);
+        }
+
         showScanResult({
           success: false,
           message: 'Código QR no válido para este evento',
@@ -555,6 +570,20 @@ export function QRAccessScanner({
 
       // Verificar si el acceso está activo
       if (!accessSettings?.is_active) {
+        // Log denied scan (not active)
+        try {
+          await logAccessControlScanAPI({
+            bolt_event_id: Number(eventId),
+            qr_code: guest.qr_code,
+            scan_method: selectedMethod,
+            status: 'denied',
+            message: 'El acceso QR no está activado',
+            meta: null,
+          });
+        } catch (e) {
+          console.error('Error logging denied scan:', e);
+        }
+
         // Mostrar modal de pre-activación si está configurado para mensajes
         if (accessSettings?.access_type === 'message') {
           setModalType('pre-activation');
@@ -580,6 +609,20 @@ export function QRAccessScanner({
 
       // Verificar si el invitado tiene acceso denegado
       if (isDenied) {
+        // Log denied scan
+        try {
+          await logAccessControlScanAPI({
+            bolt_event_id: Number(eventId),
+            qr_code: guest.qr_code,
+            scan_method: selectedMethod,
+            status: 'denied',
+            message: accessSettings?.rejection_message || 'Acceso denegado',
+            meta: null,
+          });
+        } catch (e) {
+          console.error('Error logging denied scan:', e);
+        }
+
         // Mostrar modal de rechazo si está configurado para mensajes
         if (accessSettings?.access_type === 'message') {
           setModalType('rejection');
@@ -604,6 +647,19 @@ export function QRAccessScanner({
 
       // Verificar si ya había ingresado
       if (guest.confirmation_status === 'attended') {
+        // Log duplicate scan
+        try {
+          await logAccessControlScanAPI({
+            bolt_event_id: Number(eventId),
+            qr_code: guest.qr_code,
+            scan_method: selectedMethod,
+            status: 'duplicate',
+            message: `${guest.name || `Invitado #${guest.guest_number}`} ya había ingresado anteriormente.`,
+            meta: null,
+          });
+        } catch (e) {
+          console.error('Error logging duplicate scan:', e);
+        }
 
         showScanResult({
           success: false,
@@ -732,36 +788,30 @@ export function QRAccessScanner({
     loadScanHistory();
   }, [eventId]);
 
-  const loadScanHistory = () => {
+  const loadScanHistory = async () => {
     try {
-      const stored = localStorage.getItem(`scan_history_${eventId}`);
-      if (stored) {
-        const history: RecentScan[] = JSON.parse(stored).map((scan: any) => ({
-          ...scan,
-          timestamp: new Date(scan.timestamp)
-        }));
-        setRecentScans(history);
-      }
+      const res = await getAccessControlScansAPI(Number(eventId), 500);
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      const mapped: RecentScan[] = rows
+        .map((r: any) => {
+          if (!r?.guest) return null;
+          return {
+            id: String(r.id ?? crypto.randomUUID()),
+            guest: r.guest as Guest,
+            timestamp: new Date(r.timestamp || new Date().toISOString()),
+            status: (r.status as any) || 'invalid',
+            eventId: String(r.eventId ?? eventId),
+            scanMethod: (r.scanMethod as any) || 'reader',
+          } as RecentScan;
+        })
+        .filter(Boolean) as RecentScan[];
+      setRecentScans(mapped);
     } catch (error) {
-      console.error('Error loading scan history:', error);
+      console.error('Error loading scan history from API:', error);
     }
   };
 
-  const saveScanToHistory = (newScan: RecentScan) => {
-    try {
-      const currentHistory = [...recentScans, newScan];
-      // Ordenar por timestamp más reciente primero
-      const sortedHistory = currentHistory.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-      
-      // Guardar en localStorage (sin límite para mantener todo el historial)
-      localStorage.setItem(`scan_history_${eventId}`, JSON.stringify(sortedHistory));
-      setRecentScans(sortedHistory);
-    } catch (error) {
-      console.error('Error saving scan history:', error);
-    }
-  };
-
-  const addToRecentScans = (guest: Guest, status: 'success' | 'duplicate' | 'denied') => {
+  const addToRecentScans = async (guest: Guest, status: 'success' | 'duplicate' | 'denied' | 'invalid', meta?: Record<string, any>) => {
     const newScan: RecentScan = {
       id: crypto.randomUUID(),
       guest,
@@ -771,13 +821,37 @@ export function QRAccessScanner({
       scanMethod: selectedMethod
     };
     
-    saveScanToHistory(newScan);
+    setRecentScans(prev => {
+      const next = [newScan, ...prev];
+      return next.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    });
+
+    // Persist in DB (best-effort)
+    try {
+      await logAccessControlScanAPI({
+        bolt_event_id: Number(eventId),
+        qr_code: guest.qr_code || null,
+        scan_method: selectedMethod,
+        status,
+        message: null,
+        meta: meta || null,
+      });
+    } catch (e) {
+      console.error('Error logging scan to API:', e);
+    }
   };
 
   const clearScanHistory = () => {
     if (confirm('¿Estás seguro de que quieres limpiar todo el historial de escaneos? Esta acción no se puede deshacer.')) {
-      localStorage.removeItem(`scan_history_${eventId}`);
-      setRecentScans([]);
+      (async () => {
+        try {
+          await clearAccessControlScansAPI(Number(eventId));
+        } catch (e) {
+          console.error('Error clearing scan history in API:', e);
+        } finally {
+          setRecentScans([]);
+        }
+      })();
     }
   };
 
@@ -895,20 +969,22 @@ export function QRAccessScanner({
     }
   };
 
-  const getStatusColor = (status: 'success' | 'duplicate' | 'denied') => {
+  const getStatusColor = (status: 'success' | 'duplicate' | 'denied' | 'invalid') => {
     switch (status) {
       case 'success': return 'bg-green-400';
       case 'duplicate': return 'bg-yellow-400';
       case 'denied': return 'bg-red-400';
+      case 'invalid': return 'bg-gray-400';
       default: return 'bg-gray-400';
     }
   };
 
-  const getStatusText = (status: 'success' | 'duplicate' | 'denied') => {
+  const getStatusText = (status: 'success' | 'duplicate' | 'denied' | 'invalid') => {
     switch (status) {
       case 'success': return 'Ingresó';
       case 'duplicate': return 'Duplicado';
       case 'denied': return 'Denegado';
+      case 'invalid': return 'Inválido';
       default: return 'Desconocido';
     }
   };

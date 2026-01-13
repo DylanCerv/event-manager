@@ -1,6 +1,9 @@
 /** Bolt Events API endpoints */
 
-const token = sessionStorage.getItem('auth_token');
+const getAuthHeaders = (): Record<string, string> => {
+    const token = sessionStorage.getItem('auth_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 /**
  * Interface for Bolt Event query parameters
@@ -37,7 +40,7 @@ export const getBoltEventsAPI = async ({ queryParams }: { queryParams?: BoltEven
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
         });
         const data = await response.json();
@@ -55,15 +58,13 @@ export const getBoltEventsAPI = async ({ queryParams }: { queryParams?: BoltEven
  * Create a new Bolt Event
  */
 export const createBoltEventAPI = async (body: object): Promise<any> => {
-    console.log('body', body);
-    console.log('token', token);
     try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/bolt-events`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
             body: JSON.stringify(body),
         });
@@ -97,7 +98,7 @@ export const getBoltEventByIdAPI = async (id: number, includeRequests: boolean =
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
         });
         const data = await response.json();
@@ -121,7 +122,7 @@ export const updateBoltEventAPI = async (id: number, body: object): Promise<any>
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
             body: JSON.stringify(body),
         });
@@ -146,7 +147,7 @@ export const deleteBoltEventAPI = async (id: number): Promise<any> => {
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...getAuthHeaders(),
             },
         });
         const data = await response.json();

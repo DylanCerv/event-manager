@@ -1,6 +1,9 @@
 import type { EventCard } from '../types/event';
 
-const token = sessionStorage.getItem('auth_token');
+const getAuthHeaders = (): Record<string, string> => {
+    const token = sessionStorage.getItem('auth_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 // Función para obtener la tarjeta interactiva por ID de evento
 export const getInteractiveCardByEventId = async (eventId: string | number): Promise<EventCard> => {
@@ -8,8 +11,8 @@ export const getInteractiveCardByEventId = async (eventId: string | number): Pro
         const response = await fetch(`${import.meta.env.VITE_API_URL}/interactive-cards/event/${eventId}`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
+                ...getAuthHeaders(),
             },
         });
         
@@ -32,8 +35,8 @@ export const getInteractiveCardById = async (id: string | number): Promise<Event
         const response = await fetch(`${import.meta.env.VITE_API_URL}/interactive-cards/${id}`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
+                ...getAuthHeaders(),
             },
         });
         
@@ -56,7 +59,7 @@ export const createInteractiveCard = async (body: FormData): Promise<EventCard> 
         const response = await fetch(`${import.meta.env.VITE_API_URL}/interactive-cards`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                ...getAuthHeaders(),
             },
             body: body,
         });
@@ -80,8 +83,8 @@ export const updateInteractiveCard = async (id: string | number, data: FormData)
         const response = await fetch(`${import.meta.env.VITE_API_URL}/interactive-cards/${id}`, {
             method: 'PUT',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 // No establecer Content-Type para FormData, el navegador lo hará automáticamente con el boundary correcto
+                ...getAuthHeaders(),
             },
             body: data,
         });
@@ -105,8 +108,8 @@ export const deleteInteractiveCard = async (id: string | number): Promise<void> 
         const response = await fetch(`${import.meta.env.VITE_API_URL}/interactive-cards/${id}`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
+                ...getAuthHeaders(),
             },
         });
         

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Bell, AlertCircle, CheckCircle, Clock, TrendingUp, Users, Calendar, BarChart3, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { storage } from '../../lib/storage';
+import { getCreatorDashboardAPI, getCreatorEventConfigAPI } from '../../endpoints/dashboard';
 
 interface Notification {
   id: string;
@@ -81,19 +81,16 @@ export default function CreatorHome() {
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, 5); // Show only latest 5
 
-      // Load quick stats
-      const allUsers = await storage.getUsers();
-      const creatorUsers = allUsers.filter(u => u.createdBy === user.id);
-      const loadedEvents = await storage.getEvents();
-      
-      // Set users and events for calendar
-      setUsers(allUsers);
-      setEvents(loadedEvents);
-      const allRequests = await storage.getEventRequests();
-      const creatorRequests = allRequests.filter(request => 
-        creatorUsers.some(u => u.id === request.requested_by)
-      );
+      // Load real stats/events/users/requests from backend
+      const dashboard = await getCreatorDashboardAPI();
+      const dashboardData = dashboard?.data || {};
+      const creatorUsers = (dashboardData.users || []) as any[];
+      const loadedEvents = (dashboardData.events || []) as any[];
+      const creatorRequests = (dashboardData.requests || []) as any[];
       const approvedRequests = creatorRequests.filter(r => r.status === 'approved');
+
+      setUsers(creatorUsers);
+      setEvents(loadedEvents);
 
       // Calculate weekly changes
       const now = new Date();
@@ -101,9 +98,9 @@ export default function CreatorHome() {
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
       // Users created this week vs last week
-      const usersThisWeek = creatorUsers.filter(u => new Date(u.createdAt) >= weekAgo).length;
+      const usersThisWeek = creatorUsers.filter(u => new Date(u.createdAt || u.created_at) >= weekAgo).length;
       const usersLastWeek = creatorUsers.filter(u => {
-        const userDate = new Date(u.createdAt);
+        const userDate = new Date(u.createdAt || u.created_at);
         const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
         return userDate >= twoWeeksAgo && userDate < weekAgo;
       }).length;
@@ -227,13 +224,13 @@ export default function CreatorHome() {
       
       // Add recent user registrations
       const recentUsers = creatorUsers
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .sort((a, b) => new Date(b.createdAt || b.created_at).getTime() - new Date(a.createdAt || a.created_at).getTime())
         .slice(0, 2);
       
       for (const user of recentUsers) {
         activity.push({
-          text: `${user.company} se registró en el sistema`,
-          timestamp: user.createdAt
+          text: `${user.company || 'Usuario'} se registró en el sistema`,
+          timestamp: user.createdAt || user.created_at
         });
       }
       
@@ -317,76 +314,16 @@ export default function CreatorHome() {
 
   const loadEventConfigurations = async (eventId: string) => {
     try {
-      // Load real configuration data for the event
-      const { finalizationStorage } = await import('../../lib/finalization-storage');
-      const { eventBookStorage } = await import('../../lib/eventbook-storage');
-
       console.log('Loading configurations for event:', eventId);
 
-      // Check if interactive card exists (from storage)
-      const hasCard = !!(await storage.getEventCard(eventId));
-      console.log('Has card:', hasCard);
-
-      // Check if event is finalized
-      const finalization = await finalizationStorage.getEventFinalization(eventId);
-      const isFinalized = !!finalization?.is_finalized;
-      console.log('Finalization object:', finalization);
-      console.log('Is finalized:', isFinalized);
-
-      // Check if EventBook exists - need to check all EventBooks, not just current user's
-      const allEventBooks = await eventBookStorage.getAllEventBooks();
-      const hasEventBook = allEventBooks.some((eb: any) => eb.event_id === eventId);
-      console.log('All EventBooks:', allEventBooks);
-      console.log('Has EventBook:', hasEventBook);
-
-      // Check if moderator is assigned to this event
-      const { rolesStorage } = await import('../../lib/roles-storage');
-      const allUserAccesses = await rolesStorage.getUserAccesses('all');
-      console.log('All user accesses:', allUserAccesses);
-      
-      // Check for moderator by assigned events OR by assigned EventBooks
-      const moderatorAccess = allUserAccesses.find((access: any) => {
-        if (access.accessType === 'moderador') {
-          // Check if event is directly assigned
-          const hasDirectEvent = access.assignedEvents?.includes(eventId);
-          
-          // Check if moderator has EventBook for this event
-          const hasEventBookForEvent = access.assignedEventBooks?.some((ebId: string) => {
-            const eventBook = allEventBooks.find((eb: any) => eb.id === ebId);
-            return eventBook?.event_id === eventId;
-          });
-          
-          console.log(`Moderator ${access.username}:`, {
-            hasDirectEvent,
-            hasEventBookForEvent,
-            assignedEvents: access.assignedEvents,
-            assignedEventBooks: access.assignedEventBooks
-          });
-          
-          return hasDirectEvent || hasEventBookForEvent;
-        }
-        return false;
-      });
-      
-      const hasModerator = !!moderatorAccess;
-      console.log('Found moderator access:', moderatorAccess);
-      console.log('Has moderator:', hasModerator);
-
-      // Check if access control is assigned to this event
-      const accessControlAccess = allUserAccesses.find((access: any) => 
-        access.accessType === 'control_acceso' && 
-        access.assignedEvents?.includes(eventId)
-      );
-      const hasAccessControl = !!accessControlAccess;
-      console.log('Access control access:', accessControlAccess);
-      console.log('Has access control:', hasAccessControl);
-
+      const res = await getCreatorEventConfigAPI(eventId);
+      const d = res?.data || {};
       const config = {
-        hasCard,
-        isFinalized,
-        hasEventBook,
-        hasModerator,
-        hasAccessControl
+        hasCard: Boolean(d.hasCard),
+        isFinalized: Boolean(d.isFinalized),
+        hasEventBook: Boolean(d.hasEventBook),
+        hasModerator: Boolean(d.hasModerator),
+        hasAccessControl: Boolean(d.hasAccessControl),
       };
 
       console.log('Final config:', config);

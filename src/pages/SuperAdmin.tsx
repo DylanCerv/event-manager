@@ -1,9 +1,6 @@
 import React from 'react';
 import { Users, Calendar, DollarSign, TrendingUp, AlertTriangle, CheckCircle, Clock, BarChart3, CalendarDays, MapPin, Building2, User, X, ChevronLeft, ChevronRight, BookOpen, Activity } from 'lucide-react';
-import { storage } from '../lib/storage';
-import { creatorsStorage } from '../lib/creators-storage';
-import { eventBookStorage } from '../lib/eventbook-storage';
-import { rolesStorage } from '../lib/roles-storage';
+import { getSuperAdminDashboardAPI } from '../endpoints/dashboard';
 import type { Creator } from '../types/creator';
 import type { Event } from '../types/event';
 // Definir el tipo StoredUser localmente
@@ -75,19 +72,31 @@ export function SuperAdmin() {
   });
 
   React.useEffect(() => {
-    loadUserStats();
-    loadEventStats();
-    loadEventBookStats();
-    loadAppUsageStats();
-    loadAllEvents();
-    loadAllUsers();
-    loadCreatorNames();
+    loadDashboard();
   }, [dateFilter, specificDate]);
+
+  const loadDashboard = async () => {
+    try {
+      const res = await getSuperAdminDashboardAPI({ dateFilter, specificDate });
+      const data = res?.data || {};
+
+      setAllEvents((data.events || []) as any);
+      setAllUsers((data.users || []) as any);
+      setCreatorNames((data.creatorNames || {}) as any);
+
+      if (data.userStats) setUserStats(data.userStats);
+      if (data.eventStats) setEventStats(data.eventStats);
+      if (data.eventBookStats) setEventBookStats(data.eventBookStats);
+      if (data.appUsageStats) setAppUsageStats(data.appUsageStats);
+    } catch (error) {
+      console.error('Error loading super admin dashboard:', error);
+    }
+  };
 
   const loadAllEvents = async () => {
     try {
-      const events = await storage.getEvents();
-      setAllEvents(events);
+      // Legacy (dashboard now loads from backend)
+      return;
     } catch (error) {
       console.error('Error loading all events:', error);
     }
@@ -95,8 +104,8 @@ export function SuperAdmin() {
 
   const loadAllUsers = async () => {
     try {
-      const users = await storage.getUsers();
-      setAllUsers(users as any);
+      // Legacy (dashboard now loads from backend)
+      return;
     } catch (error) {
       console.error('Error loading all users:', error);
     }
@@ -143,66 +152,8 @@ export function SuperAdmin() {
 
   const loadUserStats = async () => {
     try {
-      const users = await storage.getUsers();
-      const creators = await creatorsStorage.getCreators();
-      const events = await storage.getEvents();
-      
-      const dateRange = getDateFilterRange(dateFilter, specificDate);
-      let filteredEvents = events;
-      
-      if (dateRange) {
-        filteredEvents = filterByDateRange(events, 'date', dateRange);
-      }
-      
-      // Contar usuarios por rol (admin_users)
-      const adminUsers = users.filter(u => u.role === 'ADMIN').length;
-      const moderatorUsers = users.filter(u => u.role === 'MODERADOR').length;
-      const accessControlUsers = users.filter(u => u.role === 'ACCESS_CONTROL').length;
-      
-      // Contar creadores desde creators-storage
-      const creatorUsers = creators.length;
-      
-      // Calcular creadores más productivos usando creators-storage
-      const creatorStats = creators
-        .map((creator: any) => {
-          // Buscar usuarios creados por este creador
-          const usersCreatedByCreator = users.filter(u => u.createdBy === creator.id);
-          // Contar eventos de esos usuarios
-          const creatorEvents = events.filter(e => 
-            usersCreatedByCreator.some(user => user.id === e.created_by)
-          );
-          return {
-            name: `${creator.firstName} ${creator.lastName}`,
-            company: creator.email, // Usar email como "company" para creadores
-            eventCount: creatorEvents.length
-          };
-        })
-        .sort((a, b) => b.eventCount - a.eventCount)
-        .slice(0, 3);
-
-      // Calcular administradores más productivos
-      const adminStats = users
-        .filter(u => u.role === 'ADMIN')
-        .map(admin => {
-          const adminEvents = events.filter(e => e.created_by === admin.id);
-          return {
-            name: `${admin.firstName} ${admin.lastName}`,
-            company: admin.company,
-            eventCount: adminEvents.length
-          };
-        })
-        .sort((a, b) => b.eventCount - a.eventCount)
-        .slice(0, 3);
-
-      setUserStats({
-        totalUsers: users.length + creators.length, // Sumar ambos tipos de usuarios
-        adminUsers,
-        creatorUsers,
-        moderatorUsers,
-        accessControlUsers,
-        topCreators: creatorStats,
-        topAdmins: adminStats
-      });
+      // Legacy (dashboard now loads from backend)
+      return;
     } catch (error) {
       console.error('Error loading user stats:', error);
     }
@@ -210,57 +161,8 @@ export function SuperAdmin() {
 
   const loadEventStats = async () => {
     try {
-      const events = await storage.getEvents();
-      const users = await storage.getUsers();
-      
-      const dateRange = getDateFilterRange(dateFilter, specificDate);
-      let filteredEvents = events;
-      
-      if (dateRange) {
-        filteredEvents = filterByDateRange(events, 'date', dateRange);
-      }
-      
-      // Calcular estadísticas básicas
-      const totalEvents = filteredEvents.length;
-      const activeEvents = filteredEvents.filter(e => new Date(e.date) >= new Date()).length;
-      const finishedEvents = filteredEvents.filter(e => new Date(e.date) < new Date()).length;
-      
-      // Calcular promedio de invitados
-      const totalGuests = filteredEvents.reduce((sum, event) => sum + (event.guest_count || 0), 0);
-      const averageGuests = totalEvents > 0 ? Math.round(totalGuests / totalEvents) : 0;
-      
-      // Calcular eventos próximos esta semana
-      const now = new Date();
-      const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      const upcomingThisWeek = filteredEvents.filter(event => {
-        if (!event.date) return false;
-        const eventDate = new Date(event.date);
-        return eventDate >= now && eventDate <= weekFromNow;
-      }).length;
-      
-      // Top 3 eventos ACTIVOS con más invitados
-      const topEvents = events
-        .filter(e => new Date(e.date) >= new Date() && e.guest_count && e.guest_count > 0)
-        .sort((a, b) => (b.guest_count || 0) - (a.guest_count || 0))
-        .slice(0, 3)
-        .map(event => {
-          // Buscar el administrador que creó el evento
-          const creator = users.find((u: any) => u.id === event.created_by);
-          return {
-            name: event.name,
-            guestCount: event.guest_count || 0,
-            createdBy: creator ? creator.company : 'Administrador desconocido'
-          };
-        });
-
-      setEventStats({
-        totalEvents,
-        activeEvents,
-        finishedEvents,
-        averageGuests,
-        upcomingThisWeek,
-        topEvents
-      });
+      // Legacy (dashboard now loads from backend)
+      return;
     } catch (error) {
       console.error('Error loading event stats:', error);
     }
@@ -268,69 +170,8 @@ export function SuperAdmin() {
 
   const loadEventBookStats = async () => {
     try {
-      const eventBooks = await eventBookStorage.getAllEventBooks();
-      const allPosts = [];
-      let totalPhotos = 0;
-      let pendingReports = 0;
-
-      // Obtener todos los posts y calcular estadísticas
-      for (const eventBook of eventBooks) {
-        const posts = await eventBookStorage.getAllPosts(eventBook.id);
-        allPosts.push(...posts);
-        
-        // Contar fotos
-        const photosInEventBook = posts.filter(post => 
-          post.mediaFiles && post.mediaFiles.length > 0
-        ).length;
-        totalPhotos += photosInEventBook;
-      }
-
-      // Obtener reportes pendientes
-      const reports = JSON.parse(localStorage.getItem('post_reports') || '[]');
-      pendingReports = reports.filter((report: any) => report.status === 'pending').length;
-
-      // Calcular estadísticas básicas
-      const totalEventBooks = eventBooks.length;
-      const activeEventBooks = eventBooks.filter(eb => eb.isActive).length;
-      const unconfiguredEventBooks = eventBooks.filter(eb => !eb.settings?.isConfigured).length;
-
-      // Top 3 EventBooks con más interacción
-      const eventBooksWithStats = await Promise.all(
-        eventBooks.map(async (eventBook) => {
-          const posts = await eventBookStorage.getAllPosts(eventBook.id);
-          const photos = posts.filter(post => post.mediaFiles && post.mediaFiles.length > 0).length;
-          const stats = await eventBookStorage.getEventBookStats(eventBook.id);
-          
-          
-          // Buscar el administrador que creó el EventBook
-          const users = await storage.getUsers();
-          const creator = users.find((u: any) => u.id === eventBook.created_by);
-          
-          return {
-            name: eventBook.name,
-            createdBy: creator ? creator.company : 'Administrador desconocido',
-            posts: posts.length,
-            photos,
-            participants: stats.participants,
-            likes: 0, // Placeholder - agregar lógica si existe
-            comments: 0 // Placeholder - agregar lógica si existe
-          };
-        })
-      );
-
-      const topEventBooks = eventBooksWithStats
-        .sort((a, b) => (b.posts + b.photos + b.participants) - (a.posts + a.photos + a.participants))
-        .slice(0, 3);
-
-      setEventBookStats({
-        totalEventBooks,
-        activeEventBooks,
-        unconfiguredEventBooks,
-        totalPosts: allPosts.length,
-        totalPhotos,
-        pendingReports,
-        topEventBooks
-      });
+      // Legacy (dashboard now loads from backend)
+      return;
     } catch (error) {
       console.error('Error loading EventBook stats:', error);
     }
@@ -339,85 +180,8 @@ export function SuperAdmin() {
 
   const loadAppUsageStats = async () => {
     try {
-      const users = await storage.getUsers();
-      const events = await storage.getEvents();
-      const eventBooks = await eventBookStorage.getAllEventBooks();
-      const requests = await storage.getEventRequests();
-      const creators = await creatorsStorage.getCreators();
-      const userAccesses = await rolesStorage.getUserAccesses('all');
-
-      // 1. Usuarios con más eventos
-      const userEventCounts = users.map(user => {
-        const userEvents = events.filter(e => e.created_by === user.id);
-        const creator = creators.find((c: Creator) => c.id === user.createdBy);
-        return {
-          company: user.company || 'Sin empresa',
-          creator: creator ? `${creator.firstName} ${creator.lastName}` : 'Sin creador',
-          country: user.country || 'No especificado',
-          eventCount: userEvents.length
-        };
-      }).sort((a, b) => b.eventCount - a.eventCount).slice(0, 3);
-
-      // 2. Usuarios con más EventBooks
-      const userEventBookCounts = users.map(user => {
-        const userEventBooks = eventBooks.filter(eb => {
-          const event = events.find(e => e.id === eb.event_id);
-          return event && event.created_by === user.id;
-        });
-        const creator = creators.find((c: Creator) => c.id === user.createdBy);
-        return {
-          company: user.company || 'Sin empresa',
-          creator: creator ? `${creator.firstName} ${creator.lastName}` : 'Sin creador',
-          country: user.country || 'No especificado',
-          eventBookCount: userEventBooks.length
-        };
-      }).sort((a, b) => b.eventBookCount - a.eventBookCount).slice(0, 3);
-
-      // 3. Usuarios con más creación de roles (basado en datos reales)
-      const userRoleCounts = users.map(user => {
-        // Contar roles reales creados por este usuario
-        const roleCount = userAccesses.filter(access => access.createdBy === user.id).length;
-        const creator = creators.find((c: Creator) => c.id === user.createdBy);
-        return {
-          company: user.company || 'Sin empresa',
-          creator: creator ? `${creator.firstName} ${creator.lastName}` : 'Sin creador',
-          country: user.country || 'No especificado',
-          roleCount
-        };
-      }).sort((a, b) => b.roleCount - a.roleCount).slice(0, 3);
-
-      // 4. Usuarios con más solicitudes aceptadas
-      const userApprovedCounts = users.map(user => {
-        const userRequests = requests.filter(r => r.requested_by === user.id && r.status === 'approved');
-        const creator = creators.find((c: Creator) => c.id === user.createdBy);
-        return {
-          company: user.company || 'Sin empresa',
-          creator: creator ? `${creator.firstName} ${creator.lastName}` : 'Sin creador',
-          country: user.country || 'No especificado',
-          approvedCount: userRequests.length
-        };
-      }).sort((a, b) => b.approvedCount - a.approvedCount).slice(0, 3);
-
-      // 5. Usuarios con más invitados
-      const userGuestCounts = users.map(user => {
-        const userEvents = events.filter(e => e.created_by === user.id);
-        const totalGuests = userEvents.reduce((sum, event) => sum + (event.guest_count || 0), 0);
-        const creator = creators.find((c: Creator) => c.id === user.createdBy);
-        return {
-          company: user.company || 'Sin empresa',
-          creator: creator ? `${creator.firstName} ${creator.lastName}` : 'Sin creador',
-          country: user.country || 'No especificado',
-          totalGuests
-        };
-      }).sort((a, b) => b.totalGuests - a.totalGuests).slice(0, 3);
-
-      setAppUsageStats({
-        topUsersByEvents: userEventCounts,
-        topUsersByEventBooks: userEventBookCounts,
-        topUsersByRoleCreation: userRoleCounts,
-        topUsersByApprovedRequests: userApprovedCounts,
-        topUsersByGuests: userGuestCounts
-      });
+      // Legacy (dashboard now loads from backend)
+      return;
     } catch (error) {
       console.error('Error loading app usage stats:', error);
     }
@@ -443,12 +207,8 @@ export function SuperAdmin() {
 
   const loadCreatorNames = async () => {
     try {
-      const creators = await creatorsStorage.getCreators();
-      const names: {[key: string]: string} = {};
-      creators.forEach(creator => {
-        names[creator.id] = `${creator.firstName} ${creator.lastName}`;
-      });
-      setCreatorNames(names);
+      // Legacy (dashboard now loads from backend)
+      return;
     } catch (error) {
       console.error('Error loading creators:', error);
     }

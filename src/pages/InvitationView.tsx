@@ -103,6 +103,23 @@ export function InvitationView() {
     updated_at: apiCard.updated_at || new Date().toISOString(),
   });
 
+  const mapApiFinalizationToLocal = (apiFinalization: any, eventId: string): EventFinalization => ({
+    id: String(apiFinalization.id ?? `auto-${eventId}`),
+    event_id: String(apiFinalization.event_id ?? eventId),
+    is_finalized: !!apiFinalization.is_finalized,
+    final_message: String(apiFinalization.final_message || ''),
+    final_title: apiFinalization.final_title || undefined,
+    final_subtitle: apiFinalization.final_subtitle || undefined,
+    cover_image: apiFinalization.cover_image || undefined,
+    video_url: apiFinalization.video_url || undefined,
+    video_message: apiFinalization.video_message || undefined,
+    whatsapp_number: apiFinalization.whatsapp_number || undefined,
+    whatsapp_button_text: apiFinalization.whatsapp_button_text || undefined,
+    created_at: apiFinalization.created_at || new Date().toISOString(),
+    event_type: apiFinalization.event_type || undefined,
+    theme_colors: apiFinalization.theme_colors || undefined,
+  });
+
   const loadGuestData = async () => {
     if (!qrCode) return;
 
@@ -116,6 +133,7 @@ export function InvitationView() {
         const apiGuest = response?.guest;
         const apiEvent = response?.event;
         const apiCard = response?.event_card;
+        const apiFinalization = response?.event_finalization;
 
         if (!apiGuest || !apiEvent) {
           throw new Error('Respuesta incompleta del servidor');
@@ -129,12 +147,11 @@ export function InvitationView() {
         setGuest(mappedGuest);
         setEventCard(mappedCard);
 
-        // Finalization currently lives in local storage (legacy), keep as best-effort
-        try {
-          const eventFinalization = await finalizationStorage.getEventFinalization(mappedEvent.id);
-          setFinalization(eventFinalization);
-        } catch (finalizationError) {
-          console.error('Error loading finalization data:', finalizationError);
+        // Finalization comes from backend when event is finalized (public response)
+        if (apiFinalization) {
+          setFinalization(mapApiFinalizationToLocal(apiFinalization, mappedEvent.id));
+        } else {
+          setFinalization(null);
         }
 
         // Decide if we should show data form based on backend guest data
@@ -193,6 +210,15 @@ export function InvitationView() {
       // IMPORTANT: for minors, we must clear email/phone so GuestList infers correctly.
       const payload: Record<string, any> = {};
       if (updatedGuest.name !== undefined) payload.name = updatedGuest.name;
+
+      // Age mapping required by backend:
+      // - "mayor de 16" => age: 30
+      // - "menor de 16" => age: 10
+      if (updatedGuest.age_category === 'minor') {
+        payload.age = 10;
+      } else if (updatedGuest.age_category === 'adult') {
+        payload.age = 30;
+      }
 
       if (updatedGuest.age_category === 'minor') {
         payload.email = null;

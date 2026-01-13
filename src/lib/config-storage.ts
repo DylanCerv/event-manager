@@ -153,27 +153,43 @@ class ConfigStorage {
   }
 
   async testSMTPConnection(config: Omit<SMTPConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ success: boolean; message: string }> {
-    // TODO: Implementar prueba real de conexión SMTP
-    console.log('🧪 Probando conexión SMTP:', {
-      host: config.host,
-      port: config.port,
-      user: config.user,
-      secure: config.secure
-    });
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/system/smtp-configs/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          host: config.host,
+          port: config.port,
+          secure: config.secure,
+          user: config.user,
+          password: config.password,
+          fromEmail: config.fromEmail,
+          fromName: config.fromName,
+          // send test to same from email
+          toEmail: config.fromEmail,
+        }),
+      });
 
-    // Simulación por ahora
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // Simular éxito o fallo aleatorio para demo
-        const success = Math.random() > 0.3;
-        resolve({
-          success,
-          message: success 
-            ? '✅ Conexión SMTP exitosa' 
-            : '❌ Error de conexión: Verificar credenciales'
-        });
-      }, 2000);
-    });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return {
+          success: false,
+          message: json?.message || '❌ Error de conexión SMTP',
+        };
+      }
+
+      return {
+        success: true,
+        message: json?.message || '✅ Conexión SMTP exitosa',
+      };
+    } catch (error) {
+      console.error('SMTP test error:', error);
+      return { success: false, message: '❌ Error al probar la conexión SMTP' };
+    }
   }
 
   // Email Template Configuration Methods

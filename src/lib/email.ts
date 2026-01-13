@@ -18,41 +18,18 @@ export async function sendMassiveEmails(
   message: string,
   config?: EmailConfig
 ): Promise<{ success: number; failed: number; errors: string[] }> {
-  const results = {
-    success: 0,
-    failed: 0,
-    errors: [] as string[]
-  };
-
-  // Si no se proporciona configuración, intentar usar la activa
-  if (!config) {
-    try {
-      const { configStorage } = await import('./config-storage');
-      const activeConfig = await configStorage.getActiveSMTPConfig();
-      if (activeConfig) {
-        config = {
-          smtpHost: activeConfig.host,
-          smtpPort: activeConfig.port,
-          smtpUser: activeConfig.user,
-          smtpPassword: activeConfig.password,
-          fromEmail: activeConfig.fromEmail,
-          fromName: activeConfig.fromName
-        };
-        console.log(`📧 Usando configuración SMTP activa: ${activeConfig.name}`);
-      }
-    } catch (error) {
-      console.warn('No se pudo cargar configuración SMTP activa:', error);
-    }
-  }
+  const results = { success: 0, failed: 0, errors: [] as string[] };
 
   // Obtener plantilla activa y generar contenido HTML
   let htmlContent = message; // Fallback a mensaje de texto plano
+  let templateId: string | null = null;
   try {
     const { configStorage } = await import('./config-storage');
     const { renderTemplate } = await import('./email-templates');
     
     const activeTemplate = await configStorage.getActiveEmailTemplate();
     if (activeTemplate) {
+      templateId = activeTemplate.templateId;
       htmlContent = renderTemplate(activeTemplate.templateId, message);
       console.log(`🎨 Usando plantilla: ${activeTemplate.templateId}`);
     } else {
@@ -62,38 +39,35 @@ export async function sendMassiveEmails(
     console.warn('No se pudo cargar plantilla activa:', error);
   }
 
-  console.log('📧 Preparando envío masivo de emails...');
-  console.log(`📊 Destinatarios: ${recipients.length}`);
-  console.log(`📝 Asunto: ${subject}`);
-  console.log(`💬 Mensaje: ${message.substring(0, 50)}...`);
-  console.log(`🎨 Contenido: ${htmlContent.includes('<html>') ? 'HTML con plantilla' : 'Texto plano'}`);
-  
-  if (config) {
-    console.log(`🔧 Servidor SMTP: ${config.smtpHost}:${config.smtpPort}`);
-    console.log(`📨 Remitente: ${config.fromName} <${config.fromEmail}>`);
-  } else {
-    console.warn('⚠️ No hay configuración SMTP disponible - modo simulación');
+  // Enviar desde backend usando la configuración SMTP guardada + plantilla activa seleccionada
+  const token = sessionStorage.getItem('auth_token');
+  const response = await fetch(`${import.meta.env.VITE_API_URL}/system/emails/send-bulk`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      recipients,
+      subject,
+      message,
+      html: htmlContent,
+      templateId,
+    }),
+  });
+
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(json?.message || 'Error al enviar emails');
   }
 
-  for (const recipient of recipients) {
-    try {
-      // Simulación por ahora - aquí irá la implementación real
-      console.log(`✉️ Enviando a ${recipient.name} (${recipient.email})`);
-      console.log(`   📋 Contenido: ${htmlContent.includes('<html>') ? 'Email HTML estilizado' : 'Texto plano'}`);
-      
-      // Simular delay entre envíos (evitar spam)
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      results.success++;
-    } catch (error) {
-      console.error(`❌ Error enviando a ${recipient.email}:`, error);
-      results.failed++;
-      results.errors.push(`${recipient.email}: ${error}`);
-    }
-  }
-
-  console.log(`✅ Envío completado: ${results.success} éxitos, ${results.failed} fallos`);
-  return results;
+  const data = json?.data || {};
+  return {
+    success: Number(data.success || 0),
+    failed: Number(data.failed || 0),
+    errors: Array.isArray(data.errors) ? data.errors : [],
+  };
 }
 
 export function validateEmail(email: string): boolean {

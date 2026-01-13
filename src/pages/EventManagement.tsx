@@ -119,11 +119,11 @@ export function EventManagement() {
       const existingGuestNumbers = new Set(mappedGuests.map((g: Guest) => g.guest_number));
       const placeholderGuests: Guest[] = [];
       
-      // Starting from 100 (as shown in the UI example)
-      let guestNumber = 0;
+      // Start from 1 (UI shows 001, 002, ...)
+      let guestNumber = 1;
       
       // Create placeholder guests until we reach the total count
-      while (mappedGuests.length + placeholderGuests.length <= totalGuestCount) {
+      while (mappedGuests.length + placeholderGuests.length < totalGuestCount) {
         // Skip guest numbers that already exist
         while (existingGuestNumbers.has(guestNumber)) {
           guestNumber++;
@@ -176,7 +176,8 @@ export function EventManagement() {
       if (guest.table_number !== undefined) payload.table_number = String(guest.table_number);
       if (guest.health_info !== undefined) payload.health_information = guest.health_info;
       if (guest.mobility_restrictions !== undefined) payload.transportation_status = guest.mobility_restrictions;
-      if (guest.qr_code !== undefined) payload.qr_code = guest.qr_code;
+      // Do not send empty qr_code; backend generates it when missing
+      if (guest.qr_code !== undefined && String(guest.qr_code).trim() !== '') payload.qr_code = guest.qr_code;
       if (guest.qr_code_status !== undefined) payload.qr_code_status = guest.qr_code_status;
       if (guest.video_status !== undefined) payload.video_status = guest.video_status;
       if (guest.video_url !== undefined) payload.video_url = guest.video_url;

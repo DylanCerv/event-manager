@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User, Calendar, Star, Gift, Camera, X } from 'lucide-react';
 import { PhotoUploadModal } from './PhotoUploadModal';
 import { useAuth } from '../contexts/AuthContext';
+import { getPointTransactionsAPI } from '../endpoints/points';
 
 interface UserProfileDropdownProps {
   user: any;
@@ -14,6 +15,7 @@ interface UserProfileDropdownProps {
 export function UserProfileDropdown({ user, isOpen, onClose, onViewRewards, onCloseMobileMenu }: UserProfileDropdownProps) {
   const { updateUserPhoto } = useAuth();
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  const [points, setPoints] = useState<number>(0);
 
   // Cerrar modal de foto cuando se cierre el dropdown
   React.useEffect(() => {
@@ -21,6 +23,17 @@ export function UserProfileDropdown({ user, isOpen, onClose, onViewRewards, onCl
       setIsPhotoModalOpen(false);
     }
   }, [isOpen]);
+
+  React.useEffect(() => {
+    if (!isOpen || !user?.id) return;
+    getPointTransactionsAPI(String(user.id))
+      .then((resp) => {
+        const txs = resp?.data || [];
+        const balance = txs.reduce((sum: number, t: any) => sum + (Number(t.points) || 0), 0);
+        setPoints(balance);
+      })
+      .catch(() => setPoints(0));
+  }, [isOpen, user?.id]);
 
   if (!isOpen) return null;
 
@@ -32,15 +45,7 @@ export function UserProfileDropdown({ user, isOpen, onClose, onViewRewards, onCl
     });
   };
 
-  // Obtener puntos reales desde localStorage
-  const userPoints = (() => {
-    try {
-      const storedPoints = JSON.parse(localStorage.getItem('userPoints') || '{}');
-      return storedPoints[user.id] || 0;
-    } catch {
-      return 0;
-    }
-  })();
+  const userPoints = points;
 
   const handlePhotoUpdate = (newPhotoUrl: string) => {
     updateUserPhoto(newPhotoUrl);

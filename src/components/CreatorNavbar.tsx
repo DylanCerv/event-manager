@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Home, FileText, LogOut, User, DollarSign, Menu, X, Users } from 'lucide-react';
 import { UserProfileDropdown } from './UserProfileDropdown';
 import { RewardsModal } from './RewardsModal';
+import { getPointTransactionsAPI } from '../endpoints/points';
 
 export default function CreatorNavbar() {
   const { user, logout } = useAuth();
@@ -11,6 +12,19 @@ export default function CreatorNavbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = React.useState(false);
   const [isRewardsModalOpen, setIsRewardsModalOpen] = React.useState(false);
+  const [creatorPoints, setCreatorPoints] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    if (!user?.id) return;
+    if (!isRewardsModalOpen) return;
+    getPointTransactionsAPI(String(user.id))
+      .then((resp) => {
+        const txs = resp?.data || [];
+        const balance = txs.reduce((sum: number, t: any) => sum + (Number(t.points) || 0), 0);
+        setCreatorPoints(balance);
+      })
+      .catch(() => setCreatorPoints(0));
+  }, [isRewardsModalOpen, user?.id]);
 
   const navigation = [
     { name: 'Home', href: '/creator/home', icon: Home },
@@ -169,14 +183,7 @@ export default function CreatorNavbar() {
       <RewardsModal
         isOpen={isRewardsModalOpen}
         onClose={closeRewardsModal}
-        userPoints={(() => {
-          try {
-            const userPoints = JSON.parse(localStorage.getItem('userPoints') || '{}');
-            return userPoints[user?.id] || 0;
-          } catch {
-            return 0;
-          }
-        })()}
+        userPoints={creatorPoints}
         userType="Creadores"
       />
 

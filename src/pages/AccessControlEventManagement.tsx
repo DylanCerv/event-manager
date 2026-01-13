@@ -101,13 +101,19 @@ export function AccessControlEventManagement() {
         phone: g.phone || undefined,
         profile_photo: g.profile_photo || undefined,
         health_info: g.health_information || undefined,
+        mobility_restrictions: g.transportation_status || undefined,
         qr_code: g.qr_code || '',
         created_at: g.created_at || new Date().toISOString(),
         qr_code_status: typeof g.qr_code_status === 'boolean' ? g.qr_code_status : undefined,
         video_status: typeof g.video_status === 'boolean' ? g.video_status : undefined,
         video_url: g.video_url || undefined,
         status: g.status || undefined,
-        confirmation_status: (g.confirmation_status || 'not confirmed') as Guest['confirmation_status'],
+        confirmation_status: (
+          g.confirmation_status === 'attended' ? 'attended' :
+          g.confirmation_status === 'confirmed' ? 'confirmed' :
+          g.confirmation_status === 'not confirmed' ? 'not confirmed' :
+          'not confirmed'
+        ) as Guest['confirmation_status'],
       })) as Guest[];
 
       const settings = (settingsJson as any).data as GuestAccessSettings;
@@ -172,21 +178,31 @@ export function AccessControlEventManagement() {
   }, [guests, search]);
 
   const stats = React.useMemo(() => {
+    const isGuestComplete = (guest: Guest) => {
+      const hasName = !!guest.name && guest.name.trim() !== '';
+      const hasTableNumber = !!guest.table_number;
+      const hasConfirmationStatus = !!guest.confirmation_status;
+      const hasHealthInfo = !!guest.health_info && guest.health_info.trim() !== '';
+      const hasMobilityInfo = !!guest.mobility_restrictions && guest.mobility_restrictions.trim() !== '';
+
+      const isMinor = (!guest.email && !guest.phone);
+      const isAdult = (!!guest.email && !!guest.phone);
+
+      if (isMinor) {
+        return hasName && hasTableNumber && hasConfirmationStatus && hasHealthInfo && hasMobilityInfo;
+      }
+      if (isAdult) {
+        return hasName && hasTableNumber && hasConfirmationStatus && hasHealthInfo && hasMobilityInfo;
+      }
+
+      return hasName && hasTableNumber && hasConfirmationStatus && hasHealthInfo && hasMobilityInfo;
+    };
+
     return {
-      complete: guests.filter(guest => 
-        guest.name && 
-        guest.email && 
-        guest.phone && 
-        guest.table_number
-      ).length,
-      incomplete: guests.filter(guest => 
-        !guest.name || 
-        !guest.email || 
-        !guest.phone || 
-        !guest.table_number
-      ).length,
-      confirmed: guests.filter(guest => guest.status === 'confirmed').length,
-      notConfirmed: guests.filter(guest => guest.status !== 'confirmed').length,
+      complete: guests.filter(isGuestComplete).length,
+      incomplete: guests.filter(g => !isGuestComplete(g)).length,
+      confirmed: guests.filter(guest => guest.confirmation_status === 'confirmed').length,
+      notConfirmed: guests.filter(guest => guest.confirmation_status !== 'confirmed').length,
       accessDenied: guests.filter(guest => !guest.qr_code_status).length,
     };
   }, [guests]);
@@ -389,7 +405,7 @@ export function AccessControlEventManagement() {
                              </div>
                              <div className="ml-2 sm:ml-3">
                                <p className="text-xs sm:text-sm font-medium text-purple-600">Ingresaron</p>
-                               <p className="text-lg sm:text-2xl font-bold text-purple-900">{guests.filter(guest => guest.status === 'attended').length}</p>
+                               <p className="text-lg sm:text-2xl font-bold text-purple-900">{guests.filter(guest => guest.confirmation_status === 'attended').length}</p>
                              </div>
                            </div>
                          </div>
@@ -401,7 +417,7 @@ export function AccessControlEventManagement() {
                              </div>
                              <div className="ml-2 sm:ml-3">
                                <p className="text-xs sm:text-sm font-medium text-amber-600">Faltan Ingresar</p>
-                               <p className="text-lg sm:text-2xl font-bold text-amber-900">{guests.length - guests.filter(guest => guest.status === 'attended').length}</p>
+                               <p className="text-lg sm:text-2xl font-bold text-amber-900">{guests.length - guests.filter(guest => guest.confirmation_status === 'attended').length}</p>
                              </div>
                            </div>
                          </div>
@@ -495,11 +511,11 @@ export function AccessControlEventManagement() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    guest.status === 'attended' ? 'bg-purple-100 text-purple-800' :
-                                    guest.status === 'confirmed' ? 'bg-green-100 text-green-800' : 
+                                    guest.confirmation_status === 'attended' ? 'bg-purple-100 text-purple-800' :
+                                    guest.confirmation_status === 'confirmed' ? 'bg-green-100 text-green-800' : 
                                     'bg-gray-100 text-gray-800'
                                   }`}>
-                                    {guest.status === 'attended' ? 'Asistió' : guest.status === 'confirmed' ? 'Confirmado' : 'No Confirmado'}
+                                    {guest.confirmation_status === 'attended' ? 'Asistió' : guest.confirmation_status === 'confirmed' ? 'Confirmado' : 'No Confirmado'}
                                   </span>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

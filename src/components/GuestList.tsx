@@ -95,7 +95,7 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
       // Campos básicos que todos los invitados deben tener
       const hasName = !!guest.name && guest.name.trim() !== '';
       const hasTableNumber = !!guest.table_number;
-      const hasConfirmationStatus = guest.confirmed !== undefined;
+      const hasConfirmationStatus = guest.confirmation_status !== undefined && guest.confirmation_status !== null;
       const hasHealthInfo = !!guest.health_info && guest.health_info.trim() !== '';
       const hasMobilityInfo = !!guest.mobility_restrictions && guest.mobility_restrictions.trim() !== '';
 
@@ -191,7 +191,7 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                   </th>
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                     Invitado #
-                    <span className="text-xs text-gray-500 block">Starting from 100</span>
+                    <span className="text-xs text-gray-500 block">Empieza en 001</span>
                   </th>
                   <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6 w-48">
                     Invitado

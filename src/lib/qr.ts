@@ -187,14 +187,17 @@ export async function generateGuestQRPDF(guests: Guest[], eventName?: string): P
 
   // Generate individual PDFs for each guest
   for (const guest of guests) {
+    if (!guest.qr_code || String(guest.qr_code).trim() === '') {
+      // Skip guests without QR (backend should generate it on create/update)
+      continue;
+    }
     const pdfBlob = await generateSingleGuestPDF(guest, eventName || 'Evento');
-    
+
     // Create descriptive filename
     const eventNameSlug = (eventName || 'evento').toLowerCase()
       .replace(/[^a-z0-9]/g, '-')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
-    
     const fileName = `invitacion-${eventNameSlug}-${guest.guest_number?.toString().padStart(3, '0')}.pdf`;
     zip.file(fileName, pdfBlob);
   }

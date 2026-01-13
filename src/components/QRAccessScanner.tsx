@@ -1,8 +1,9 @@
 import React from 'react';
 import { Camera, Scan, Search, Users, Clock, CheckCircle, XCircle, AlertTriangle, Play, Volume2, Download, Trash2, Eye, UserCheck, Wifi, WifiOff } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import type { Event, Guest, GuestAccessSettings } from '../types/event';
+import type { Guest, GuestAccessSettings } from '../types/event';
 import { storage } from '../lib/storage';
+import { updateEventGuestAPI } from '../endpoints/eventGuest';
 import { QRAccessModal } from './QRAccessModal';
 import { QRAccessVideoModal } from './QRAccessVideoModal';
 import { jsPDF } from 'jspdf';
@@ -124,7 +125,7 @@ export function QRAccessScanner({
   // Calcular estadísticas
   React.useEffect(() => {
     const total = localGuests.length;
-    const attended = localGuests.filter(g => g.attended).length;
+    const attended = localGuests.filter(g => g.confirmation_status === 'attended').length;
     setStatistics({
       total,
       attended,
@@ -279,19 +280,8 @@ export function QRAccessScanner({
               
               onActivity?.();
               
-              // Actualizar localGuests antes de procesar para tener datos frescos
-              const refreshGuests = async () => {
-                try {
-                  const updatedGuests = await storage.getGuests(eventId);
-                  setLocalGuests(updatedGuests);
-                } catch (error) {
-                  console.error('Error refreshing guests:', error);
-                }
-              };
-              
-              refreshGuests().then(() => {
-                processQRCode(cleanCode);
-              });
+              // Procesar directamente: los guests vienen del backend via props
+              processQRCode(cleanCode);
               
             } else {
               showScanResult({
@@ -498,8 +488,13 @@ export function QRAccessScanner({
 
   const finalizeScanProcess = async (updatedGuest: Guest) => {
     try {
-      // Actualizar en storage
-      await storage.updateGuest(updatedGuest);
+      // Persist check-in in backend (Access Control is authenticated)
+      await updateEventGuestAPI(Number(eventId), updatedGuest.guest_number, {
+        guest_number: String(updatedGuest.guest_number),
+        confirmation_status: 'attended',
+        status: 'attended',
+        check_in_time: new Date().toISOString(),
+      });
       
       // IMPORTANTE: Actualizar estado local INMEDIATAMENTE
       setLocalGuests(prevGuests => 
@@ -579,8 +574,12 @@ export function QRAccessScanner({
         }
       }
 
+      const isDenied = accessSettings?.access_type === 'video'
+        ? guest.video_status === false
+        : guest.qr_code_status === false;
+
       // Verificar si el invitado tiene acceso denegado
-      if (guest.access_denied) {
+      if (isDenied) {
         // Mostrar modal de rechazo si está configurado para mensajes
         if (accessSettings?.access_type === 'message') {
           setModalType('rejection');
@@ -604,23 +603,12 @@ export function QRAccessScanner({
       }
 
       // Verificar si ya había ingresado
-      if (guest.attended) {
-
-        
-        const attendedTime = guest.attended_at 
-          ? new Date(guest.attended_at).toLocaleString('es-ES', {
-              day: '2-digit',
-              month: '2-digit', 
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })
-          : 'fecha no disponible';
+      if (guest.confirmation_status === 'attended') {
 
         showScanResult({
           success: false,
           guest,
-          message: `${guest.name || `Invitado #${guest.guest_number}`} ya había ingresado anteriormente.\n\nÚltimo ingreso: ${attendedTime}`,
+          message: `${guest.name || `Invitado #${guest.guest_number}`} ya había ingresado anteriormente.`,
           type: 'warning'
         });
         playWarningSound();
@@ -631,7 +619,7 @@ export function QRAccessScanner({
       }
 
       // ¡Éxito! Preparar actualización del invitado
-      const updatedGuest = { ...guest, attended: true, attended_at: new Date().toISOString() };
+      const updatedGuest: Guest = { ...guest, confirmation_status: 'attended' };
 
       // Manejar según el tipo de acceso
       if (accessSettings?.access_type === 'message') {
@@ -644,10 +632,9 @@ export function QRAccessScanner({
       } else if (accessSettings?.access_type === 'video') {
         // Si está configurado para video, intentar obtener y mostrar el video
         try {
-          const guestVideo = await storage.getGuestVideo(guest.id);
-          if (guestVideo?.video_url) {
+          if (guest.video_url) {
             setVideoModalGuest(updatedGuest);
-            setCurrentVideoUrl(guestVideo.video_url);
+            setCurrentVideoUrl(guest.video_url);
             setShowVideoModal(true);
           } else {
             // Si no hay video, procesar directamente
@@ -691,7 +678,11 @@ export function QRAccessScanner({
       // Crear resultados de búsqueda con estado
       const results: SearchResult[] = foundGuests.map(guest => ({
         guest,
-        status: guest.access_denied ? 'denied' : guest.attended ? 'attended' : 'pending'
+        status: (accessSettings?.access_type === 'video' ? guest.video_status === false : guest.qr_code_status === false)
+          ? 'denied'
+          : guest.confirmation_status === 'attended'
+            ? 'attended'
+            : 'pending'
       }));
       
       setSearchResults(results);
@@ -1294,7 +1285,7 @@ export function QRAccessScanner({
                       }
                     </div>
                     
-                    {searchResults.map((result, index) => (
+                    {searchResults.map((result) => (
                       <div key={result.guest.id} className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
                           <div className="flex-1">

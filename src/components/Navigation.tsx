@@ -5,6 +5,8 @@ import { LogOut, Home, Calendar, MessageSquare, InboxIcon, MessageCircle, Users,
 import { UserProfileDropdown } from './UserProfileDropdown';
 import { RewardsModal } from './RewardsModal';
 import { SupportModal } from './SupportModal';
+import { getPointTransactionsAPI } from '../endpoints/points';
+import type { Role as RoleType, User as SupportUser } from '../types/auth';
 
 export function Navigation() {
   const { user, role, logout } = useAuth();
@@ -12,8 +14,31 @@ export function Navigation() {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = React.useState(false);
   const [isRewardsModalOpen, setIsRewardsModalOpen] = React.useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = React.useState(false);
+  const [userPoints, setUserPoints] = React.useState<number>(0);
+
+  React.useEffect(() => {
+    if (!user?.id) return;
+    // Load points when needed (modal open), but also refresh on user change.
+    if (!isRewardsModalOpen) return;
+    getPointTransactionsAPI(String(user.id))
+      .then((resp) => {
+        const txs = resp?.data || [];
+        const balance = txs.reduce((sum: number, t: any) => sum + (Number(t.points) || 0), 0);
+        setUserPoints(balance);
+      })
+      .catch(() => setUserPoints(0));
+  }, [isRewardsModalOpen, user?.id]);
 
   if (!user) return null;
+
+  const supportUser: SupportUser = {
+    id: String(user.id),
+    name: user.name,
+    role: (role?.name as RoleType) || 'ADMIN',
+    company: user.company || undefined,
+    profilePhoto: user.profile_photo || undefined,
+    createdBy: user.creator_id ? String(user.creator_id) : undefined,
+  };
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -229,14 +254,7 @@ export function Navigation() {
         <RewardsModal
           isOpen={isRewardsModalOpen}
           onClose={closeRewardsModal}
-          userPoints={(() => {
-            try {
-              const userPoints = JSON.parse(localStorage.getItem('userPoints') || '{}');
-              return userPoints[user.id] || 0;
-            } catch {
-              return 0;
-            }
-          })()}
+          userPoints={userPoints}
         />
       )}
 
@@ -245,7 +263,7 @@ export function Navigation() {
         <SupportModal
           isOpen={isSupportModalOpen}
           onClose={closeSupportModal}
-          user={user}
+          user={supportUser}
         />
       )}
 

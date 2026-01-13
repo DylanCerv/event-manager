@@ -11,6 +11,7 @@ import { AwardPrizeModal } from '../components/AwardPrizeModal';
 import { HistoryModal } from '../components/HistoryModal';
 import type { Creator } from '../types/creator';
 import { deleteUserAPI } from '../endpoints/user';
+import { getPrizesAPI, createPrizeAPI, deletePrizeAPI } from '../endpoints/prize';
 
 interface User {
   id: string;
@@ -150,48 +151,49 @@ export function Usuarios() {
     }
   };
 
-  const loadPrizes = () => {
+  const loadPrizes = async () => {
     try {
-      const storedPrizes = localStorage.getItem('prizes');
-      if (storedPrizes) {
-        const parsedPrizes = JSON.parse(storedPrizes);
-        setPrizes(parsedPrizes);
-      } else {
-        // Crear premio por defecto si no existe
-        const defaultPrizes = [
-          {
-            id: '1',
-            name: 'LECTOR QR',
-            description: 'LECTOR QR PARA INGRESO A EVENTOS!',
-            cost: 500,
-            eligibleUsers: 'Administradores'
-          }
-        ];
-        setPrizes(defaultPrizes);
-        localStorage.setItem('prizes', JSON.stringify(defaultPrizes));
-      }
+      const response = await getPrizesAPI();
+      setPrizes(response?.data || []);
     } catch (error) {
-      console.error('Error loading prizes:', error);
+      console.error('Error loading prizes from API, falling back to localStorage:', error);
+      try {
+        const storedPrizes = localStorage.getItem('prizes');
+        if (storedPrizes) {
+          setPrizes(JSON.parse(storedPrizes));
+        } else {
+          setPrizes([]);
+        }
+      } catch {
+        setPrizes([]);
+      }
     }
   };
 
-  const handleCreatePrize = (newPrize: any) => {
+  const handleCreatePrize = async (newPrize: any) => {
     try {
-      const updatedPrizes = [...prizes, newPrize];
-      setPrizes(updatedPrizes);
-      localStorage.setItem('prizes', JSON.stringify(updatedPrizes));
+      const payload = {
+        title: newPrize.title || newPrize.name,
+        description: newPrize.description || null,
+        points: Number(newPrize.points ?? newPrize.cost ?? 0),
+        targetAudience: newPrize.targetAudience || newPrize.eligibleUsers || 'Administradores',
+        image: newPrize.image || null,
+        isActive: newPrize.isActive ?? true,
+      };
+
+      const response = await createPrizeAPI(payload);
+      setPrizes((prev) => [response.data, ...prev]);
     } catch (error) {
       console.error('Error saving prize:', error);
       alert('Error al guardar el premio');
     }
   };
 
-  const handleDeletePrize = (prizeId: string) => {
+  const handleDeletePrize = async (prizeId: string) => {
     if (window.confirm('¿Estás seguro de que deseas eliminar este premio?')) {
       try {
-        const updatedPrizes = prizes.filter(prize => prize.id !== prizeId);
-        setPrizes(updatedPrizes);
-        localStorage.setItem('prizes', JSON.stringify(updatedPrizes));
+        await deletePrizeAPI(prizeId);
+        setPrizes((prev) => prev.filter(prize => prize.id !== prizeId));
       } catch (error) {
         console.error('Error deleting prize:', error);
         alert('Error al eliminar el premio');

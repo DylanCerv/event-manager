@@ -1,6 +1,8 @@
 import React from 'react';
 import { X, Gift, Star, Lock, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { getPrizesAPI } from '../endpoints/prize';
+import { createPrizeRedemptionAPI, getPrizeRedemptionsAPI } from '../endpoints/prizeRedemption';
 
 interface Reward {
   id: string;
@@ -26,24 +28,23 @@ export function RewardsModal({ isOpen, onClose, userPoints, userType = 'Administ
   const [allUserRequests, setAllUserRequests] = React.useState<any[]>([]);
   const [availablePoints, setAvailablePoints] = React.useState(userPoints);
   const [showHistory, setShowHistory] = React.useState(false);
+  const [rewards, setRewards] = React.useState<Reward[]>([]);
 
   // Cargar solicitudes pendientes del usuario
   React.useEffect(() => {
     if (user?.id && isOpen) {
       loadUserPendingRequests();
+      loadRewardsFromApi();
     }
   }, [user?.id, isOpen]);
 
   // Actualizar puntos disponibles cuando cambian los userPoints
   React.useEffect(() => {
-    if (user?.id) {
-      const reservedPoints = JSON.parse(localStorage.getItem('reservedPoints') || '{}');
-      const userReservedPoints = reservedPoints[user?.id] || 0;
-      setAvailablePoints(userPoints - userReservedPoints);
-    }
+    // Backend reserves points via transactions, so the balance is the available points.
+    setAvailablePoints(userPoints);
   }, [userPoints, user?.id]);
 
-  // Listener para actualizar cuando se crean nuevas solicitudes
+  // Listener para actualizar cuando otras pantallas disparen un refresh manual
   React.useEffect(() => {
     const handleStorageUpdate = () => {
       if (user?.id && isOpen) {
@@ -55,48 +56,15 @@ export function RewardsModal({ isOpen, onClose, userPoints, userType = 'Administ
     return () => window.removeEventListener('localStorageUpdate', handleStorageUpdate);
   }, [user?.id, isOpen]);
 
-  const loadUserPendingRequests = () => {
+  const loadUserPendingRequests = async () => {
     try {
-      const storedRequests = localStorage.getItem('prizeRequests');
-      let userPendingRequests: any[] = [];
-      let allUserPrizeRequests: any[] = [];
-      
-      if (storedRequests) {
-        const allRequests = JSON.parse(storedRequests);
-        userPendingRequests = allRequests.filter((request: any) => 
-          request.userId === user?.id && request.status === 'pending'
-        );
-        allUserPrizeRequests = allRequests.filter((request: any) => 
-          request.userId === user?.id
-        );
-        setPendingRequests(userPendingRequests);
-        setAllUserRequests(allUserPrizeRequests);
-      } else {
-        setPendingRequests([]);
-        setAllUserRequests([]);
-      }
-      
-      // Sincronizar reservedPoints con solicitudes pendientes existentes
-      const reservedPoints = JSON.parse(localStorage.getItem('reservedPoints') || '{}');
-      const userId = user?.id || '';
-      
-      // Calcular puntos que deberían estar reservados basándose en solicitudes pendientes
-      const shouldBeReserved = userPendingRequests.reduce((total, request) => total + request.prizePoints, 0);
-      
-      // Si no coinciden, actualizar reservedPoints
-      if ((reservedPoints[userId] || 0) !== shouldBeReserved) {
-        if (shouldBeReserved > 0) {
-          reservedPoints[userId] = shouldBeReserved;
-        } else {
-          delete reservedPoints[userId];
-        }
-        localStorage.setItem('reservedPoints', JSON.stringify(reservedPoints));
-        console.log('Sincronizados puntos reservados:', shouldBeReserved);
-      }
-      
-      const userReservedPoints = reservedPoints[userId] || 0;
-      console.log('Puntos totales:', userPoints, 'Puntos reservados:', userReservedPoints);
-      setAvailablePoints(userPoints - userReservedPoints);
+      if (!user?.id) return;
+      const response = await getPrizeRedemptionsAPI({ userId: String(user.id) });
+      const allRequests = response?.data || [];
+      const userPendingRequests = allRequests.filter((r: any) => r.status === 'pending');
+      setPendingRequests(userPendingRequests);
+      setAllUserRequests(allRequests);
+      setAvailablePoints(userPoints);
     } catch (error) {
       console.error('Error loading pending requests:', error);
       setPendingRequests([]);
@@ -104,8 +72,22 @@ export function RewardsModal({ isOpen, onClose, userPoints, userType = 'Administ
     }
   };
 
-  // Cargar premios reales desde localStorage
-  const loadRewards = (): Reward[] => {
+  const loadRewardsFromApi = async () => {
+    try {
+      const response = await getPrizesAPI();
+      const allPrizes = (response?.data || []) as Reward[];
+      const filtered = allPrizes.filter((prize: any) =>
+        prize.isActive && (prize.targetAudience === userType || prize.targetAudience === 'Todos')
+      );
+      setRewards(filtered);
+    } catch (error) {
+      console.error('Error loading rewards:', error);
+      setRewards(loadRewardsLocal());
+    }
+  };
+
+  // Fallback: Cargar premios desde localStorage
+  const loadRewardsLocal = (): Reward[] => {
     try {
       const storedPrizes = localStorage.getItem('prizes');
       if (storedPrizes) {
@@ -122,8 +104,6 @@ export function RewardsModal({ isOpen, onClose, userPoints, userType = 'Administ
       return [];
     }
   };
-
-  const rewards = loadRewards();
 
   // Helper function to get status information
   const getStatusInfo = (status: string) => {
@@ -166,12 +146,8 @@ export function RewardsModal({ isOpen, onClose, userPoints, userType = 'Administ
   // Función para verificar si el usuario puede canjear el producto (restricción de 90 días)
   const canRedeemProduct = (prizeId: string): { canRedeem: boolean; message?: string } => {
     try {
-      const storedRequests = localStorage.getItem('prizeRequests');
-      if (!storedRequests) return { canRedeem: true };
-      
-      const allRequests = JSON.parse(storedRequests);
-      const userRequests = allRequests.filter((request: any) => 
-        request.userId === user?.id && 
+      const userRequests = allUserRequests.filter((request: any) =>
+        request.userId === String(user?.id) &&
         request.prizeId === prizeId &&
         request.status === 'approved'
       );
@@ -214,67 +190,17 @@ export function RewardsModal({ isOpen, onClose, userPoints, userType = 'Administ
     }
 
     if (availablePoints >= reward.points) {
-      // Crear solicitud de canje en lugar de canje directo
-      const prizeRequest = {
-        id: Date.now().toString(),
-        userId: user?.id || 'unknown-user',
-        prizeId: reward.id,
-        prizeTitle: reward.title,
-        prizePoints: reward.points,
-        userType: userType,
-        status: 'pending',
-        requestDate: new Date().toISOString(),
-        processedDate: null,
-        processedBy: null
-      };
-
-      // Guardar solicitud y reservar puntos
-      try {
-        const existingRequests = localStorage.getItem('prizeRequests');
-        const requests = existingRequests ? JSON.parse(existingRequests) : [];
-        requests.push(prizeRequest);
-        localStorage.setItem('prizeRequests', JSON.stringify(requests));
-        
-        // Reservar puntos (crear entrada en reservedPoints)
-        const reservedPoints = JSON.parse(localStorage.getItem('reservedPoints') || '{}');
-        const userId = user?.id || 'unknown-user';
-        if (!reservedPoints[userId]) {
-          reservedPoints[userId] = 0;
-        }
-        reservedPoints[userId] += reward.points;
-        localStorage.setItem('reservedPoints', JSON.stringify(reservedPoints));
-        console.log('Puntos reservados guardados:', reservedPoints);
-        
-        // Registrar transacción de reserva
-        const userTransactions = JSON.parse(localStorage.getItem('userTransactions') || '{}');
-        if (!userTransactions[user?.id || 'unknown-user']) {
-          userTransactions[user?.id || 'unknown-user'] = [];
-        }
-        
-        userTransactions[user?.id || 'unknown-user'].push({
-          id: Date.now().toString(),
-          type: 'reservation',
-          amount: reward.points,
-          reason: `Puntos reservados - Solicitud de ${reward.title}`,
-          date: new Date().toISOString(),
-          requestId: prizeRequest.id
+      if (!user?.id) return;
+      createPrizeRedemptionAPI({ prize_id: reward.id, user_id: String(user.id) })
+        .then(() => {
+          loadUserPendingRequests();
+          window.dispatchEvent(new CustomEvent('localStorageUpdate', { detail: { type: 'prizeRequest', userId: user?.id } }));
+          alert(`¡Solicitud de canje de ${reward.title} enviada!`);
+        })
+        .catch((error) => {
+          console.error('Error creating prize redemption:', error);
+          alert(error instanceof Error ? error.message : 'Error al enviar la solicitud. Inténtalo de nuevo.');
         });
-        
-        localStorage.setItem('userTransactions', JSON.stringify(userTransactions));
-        
-        // Recargar solicitudes pendientes después de crear una nueva
-        loadUserPendingRequests();
-        
-        // Disparar evento para actualizar la interfaz
-        window.dispatchEvent(new CustomEvent('localStorageUpdate', {
-          detail: { type: 'prizeRequest', userId: user?.id }
-        }));
-        
-        alert(`¡Solicitud de canje de ${reward.title} enviada!`);
-      } catch (error) {
-        console.error('Error creating prize request:', error);
-        alert('Error al enviar la solicitud. Inténtalo de nuevo.');
-      }
     }
   };
 

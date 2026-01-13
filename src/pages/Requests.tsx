@@ -5,6 +5,7 @@ import { useEvents } from '../contexts/EventContext';
 import { generateGuestQRPDF } from '../lib/qr';
 import { getEventGuestsByEventIdAPI } from '../endpoints/eventGuest';
 import { createEventRequestAPI, updateEventRequestStatusAPI, deleteEventRequestAPI } from '../endpoints/eventRequest';
+import { getPrizeRedemptionsAPI, updatePrizeRedemptionStatusAPI } from '../endpoints/prizeRedemption';
 
 // Definir interfaces para trabajar con la respuesta del API
 interface Creator {
@@ -135,25 +136,19 @@ export function Requests() {
     }
   }, [events]);
 
-  // Cargar solicitudes de premios desde localStorage
-  const loadPrizeRequests = () => {
+  // Cargar solicitudes de premios desde backend
+  const loadPrizeRequests = async () => {
     try {
-      const storedRequests = localStorage.getItem('prizeRequests');
-      if (storedRequests) {
-        const requests = JSON.parse(storedRequests);
-        setPrizeRequests(requests);
-        
-        // Calcular estadísticas
-        setPrizeRequestsStats({
-          total: requests.length,
-          pending: requests.filter((r: any) => r.status === 'pending').length,
-          approved: requests.filter((r: any) => r.status === 'approved').length,
-          rejected: requests.filter((r: any) => r.status === 'rejected').length
-        });
-      } else {
-        setPrizeRequests([]);
-        setPrizeRequestsStats({ total: 0, pending: 0, approved: 0, rejected: 0 });
-      }
+      const response = await getPrizeRedemptionsAPI();
+      const requests = response?.data || [];
+      setPrizeRequests(requests);
+
+      setPrizeRequestsStats({
+        total: requests.length,
+        pending: requests.filter((r: any) => r.status === 'pending').length,
+        approved: requests.filter((r: any) => r.status === 'approved').length,
+        rejected: requests.filter((r: any) => r.status === 'rejected').length,
+      });
     } catch (error) {
       console.error('Error loading prize requests:', error);
       setPrizeRequests([]);
@@ -161,119 +156,18 @@ export function Requests() {
     }
   };
 
-  // Procesar solicitud de premio (aprobar/rechazar)
+  // Procesar solicitud de premio (aprobar/rechazar) (ahora en backend)
   const handleProcessPrizeRequest = async (requestId: string, action: 'approved' | 'rejected') => {
     setIsLoading(true);
     try {
-      const storedRequests = localStorage.getItem('prizeRequests');
-      if (!storedRequests) return;
+      await updatePrizeRedemptionStatusAPI(requestId, action);
+      await loadPrizeRequests();
 
-      const requests = JSON.parse(storedRequests);
-      const requestIndex = requests.findIndex((r: any) => r.id === requestId);
-      
-      if (requestIndex === -1) {
-        alert('Solicitud no encontrada');
-        return;
-      }
-
-      const request = requests[requestIndex];
-      
-      
-      // Actualizar el estado de la solicitud
-      requests[requestIndex] = {
-        ...request,
-        status: action,
-        processedDate: new Date().toISOString(),
-        processedBy: 'SuperAdmin' // En el futuro usar el ID del usuario actual
-      };
-
-      // Manejar puntos reservados
-      const reservedPoints = JSON.parse(localStorage.getItem('reservedPoints') || '{}');
-      const userTransactions = JSON.parse(localStorage.getItem('userTransactions') || '{}');
-      
-      if (!userTransactions[request.userId]) {
-        userTransactions[request.userId] = [];
-      }
-
-      if (action === 'approved') {
-        // Confirmar descuento: Los puntos ya están reservados, solo confirmar la transacción
-        const userPoints = JSON.parse(localStorage.getItem('userPoints') || '{}');
-        const currentPoints = userPoints[request.userId] || 0;
-        
-        // Descontar puntos reales (los reservados ya no están disponibles)
-        userPoints[request.userId] = currentPoints - request.prizePoints;
-        localStorage.setItem('userPoints', JSON.stringify(userPoints));
-        
-        // Liberar puntos reservados
-        if (reservedPoints[request.userId]) {
-          reservedPoints[request.userId] -= request.prizePoints;
-          if (reservedPoints[request.userId] <= 0) {
-            delete reservedPoints[request.userId];
-          }
-        }
-        
-        // Registrar transacción de canje aprobado
-        userTransactions[request.userId].push({
-          id: Date.now().toString(),
-          type: 'deduction',
-          amount: request.prizePoints,
-          reason: `Canje aprobado - ${request.prizeTitle}`,
-          date: new Date().toISOString(),
-          processedBy: 'SuperAdmin',
-          requestId: requestId
-        });
-        
-        // Eliminar transacción de reserva anterior
-        userTransactions[request.userId] = userTransactions[request.userId].filter(
-          (transaction: any) => transaction.requestId !== requestId || transaction.type !== 'reservation'
-        );
-        
-      } else if (action === 'rejected') {
-        // Devolver puntos reservados
-        if (reservedPoints[request.userId]) {
-          reservedPoints[request.userId] -= request.prizePoints;
-          if (reservedPoints[request.userId] <= 0) {
-            delete reservedPoints[request.userId];
-          }
-        }
-        
-        // Registrar transacción de devolución
-        userTransactions[request.userId].push({
-          id: Date.now().toString(),
-          type: 'refund',
-          amount: request.prizePoints,
-          reason: `Solicitud rechazada - Devolución de ${request.prizeTitle}`,
-          date: new Date().toISOString(),
-          processedBy: 'SuperAdmin',
-          requestId: requestId
-        });
-        
-        // Eliminar transacción de reserva anterior
-        userTransactions[request.userId] = userTransactions[request.userId].filter(
-          (transaction: any) => transaction.requestId !== requestId || transaction.type !== 'reservation'
-        );
-      }
-
-      // Guardar cambios
-      localStorage.setItem('reservedPoints', JSON.stringify(reservedPoints));
-      localStorage.setItem('userTransactions', JSON.stringify(userTransactions));
-      localStorage.setItem('prizeRequests', JSON.stringify(requests));
-      
-      // Disparar evento para actualizar otras partes de la aplicación
-      window.dispatchEvent(new CustomEvent('localStorageUpdate', {
-        detail: { type: 'prizeRedemption', userId: request.userId }
-      }));
-      
-      // Recargar datos
-      loadPrizeRequests();
-      
       const actionText = action === 'approved' ? 'aprobada' : 'rechazada';
-      const pointsText = action === 'approved' ? 'descontados' : 'devueltos';
-      alert(`Solicitud ${actionText} exitosamente. Puntos ${pointsText}.`);
-      
+      alert(`Solicitud ${actionText} exitosamente.`);
     } catch (error) {
       console.error('Error processing prize request:', error);
-      alert('Error al procesar la solicitud');
+      alert(error instanceof Error ? error.message : 'Error al procesar la solicitud');
     } finally {
       setIsLoading(false);
     }
@@ -364,8 +258,26 @@ export function Requests() {
       
       // Obtener todos los invitados para este evento usando el endpoint
       const response = await getEventGuestsByEventIdAPI(parseInt(eventId));
-      const guests = response?.data || [];
-      
+      const apiGuests = response?.data || [];
+
+      // Normalizar datos del API al shape que usa el generador de PDF
+      const guests = (apiGuests as any[])
+        .map((g: any) => ({
+          id: String(g.id),
+          event_id: String(g.event_id ?? eventId),
+          name: g.name || '',
+          guest_number: Number(g.guest_number) || 0,
+          table_number: g.table_number ? Number(g.table_number) : undefined,
+          email: g.email || undefined,
+          phone: g.phone || undefined,
+          qr_code: String(g.qr_code || ''),
+          created_at: g.created_at || new Date().toISOString(),
+          confirmation_status: (g.confirmation_status as any) || 'not confirmed',
+          health_info: g.health_information || '',
+          mobility_restrictions: g.transportation_status || '',
+        }))
+        .filter((g: any) => g.qr_code && g.qr_code.trim() !== '');
+
       // Obtener detalles del evento para el PDF
       const event = events.find(e => e.id === eventId) as CustomEvent | undefined;
       

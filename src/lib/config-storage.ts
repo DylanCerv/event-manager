@@ -44,6 +44,11 @@ export interface SystemConfig {
 }
 
 class ConfigStorage {
+  private getAuthHeaders(): Record<string, string> {
+    const token = sessionStorage.getItem('auth_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   private getItem<T>(key: string): T[] {
     try {
       const item = localStorage.getItem(key);
@@ -64,7 +69,26 @@ class ConfigStorage {
 
   // SMTP Configuration Methods
   async getSMTPConfigs(): Promise<SMTPConfig[]> {
-    return this.getItem<SMTPConfig>('smtp_configs');
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/system/smtp-configs?include_password=true`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+      });
+
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error al obtener configuraciones SMTP');
+      }
+
+      return (json?.data || []) as SMTPConfig[];
+    } catch (error) {
+      console.error('Error loading SMTP configs from API, falling back to localStorage:', error);
+      return this.getItem<SMTPConfig>('smtp_configs');
+    }
   }
 
   async getActiveSMTPConfig(): Promise<SMTPConfig | null> {
@@ -73,53 +97,58 @@ class ConfigStorage {
   }
 
   async createSMTPConfig(data: Omit<SMTPConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<SMTPConfig> {
-    const configs = await this.getSMTPConfigs();
-    
-    // Si esta configuración se marca como activa, desactivar las demás
-    if (data.isActive) {
-      configs.forEach(config => config.isActive = false);
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/system/smtp-configs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(data),
+    });
+
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al crear configuración SMTP');
     }
 
-    const newConfig: SMTPConfig = {
-      ...data,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    configs.push(newConfig);
-    this.setItem('smtp_configs', configs);
-    return newConfig;
+    return json.data as SMTPConfig;
   }
 
   async updateSMTPConfig(id: string, data: Partial<SMTPConfig>): Promise<SMTPConfig | null> {
-    const configs = await this.getSMTPConfigs();
-    const index = configs.findIndex(config => config.id === id);
-    
-    if (index === -1) return null;
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/system/smtp-configs/${id}?include_password=true`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(data),
+    });
 
-    // Si esta configuración se marca como activa, desactivar las demás
-    if (data.isActive) {
-      configs.forEach(config => config.isActive = false);
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al actualizar configuración SMTP');
     }
 
-    configs[index] = {
-      ...configs[index],
-      ...data,
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.setItem('smtp_configs', configs);
-    return configs[index];
+    return json.data as SMTPConfig;
   }
 
   async deleteSMTPConfig(id: string): Promise<boolean> {
-    const configs = await this.getSMTPConfigs();
-    const filteredConfigs = configs.filter(config => config.id !== id);
-    
-    if (filteredConfigs.length === configs.length) return false;
-    
-    this.setItem('smtp_configs', filteredConfigs);
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/system/smtp-configs/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+    });
+
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al eliminar configuración SMTP');
+    }
+
     return true;
   }
 
@@ -149,61 +178,97 @@ class ConfigStorage {
 
   // Email Template Configuration Methods
   async getEmailTemplateConfigs(): Promise<EmailTemplateConfig[]> {
-    return this.getItem<EmailTemplateConfig>('email_template_configs');
+    const active = await this.getActiveEmailTemplate();
+    return active ? [active] : [];
   }
 
   async getActiveEmailTemplate(): Promise<EmailTemplateConfig | null> {
-    const configs = await this.getEmailTemplateConfigs();
-    return configs.find(config => config.isActive) || null;
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/system/config/email-template`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error al obtener plantilla activa');
+      }
+      return (json?.data || null) as EmailTemplateConfig | null;
+    } catch (error) {
+      console.error('Error loading active email template from API, falling back to localStorage:', error);
+      const configs = this.getItem<EmailTemplateConfig>('email_template_configs');
+      return configs.find(config => config.isActive) || null;
+    }
   }
 
   async setActiveEmailTemplate(templateId: string): Promise<EmailTemplateConfig> {
-    const configs = await this.getEmailTemplateConfigs();
-    
-    // Desactivar todas las demás
-    configs.forEach(config => config.isActive = false);
-    
-    // Buscar si ya existe esta plantilla
-    let existingConfig = configs.find(config => config.templateId === templateId);
-    
-    if (existingConfig) {
-      existingConfig.isActive = true;
-      existingConfig.updatedAt = new Date().toISOString();
-    } else {
-      // Crear nueva configuración
-      existingConfig = {
-        id: crypto.randomUUID(),
-        templateId,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      configs.push(existingConfig);
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/system/config/email-template`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify({ templateId }),
+    });
+
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al guardar plantilla activa');
     }
-    
-    this.setItem('email_template_configs', configs);
-    return existingConfig;
+
+    return json.data as EmailTemplateConfig;
   }
 
   // Financial Configuration Methods
   async getPricePerGuest(): Promise<number> {
     try {
-      const financialConfig = localStorage.getItem('financial_config');
-      if (financialConfig) {
-        const config: FinancialConfig = JSON.parse(financialConfig);
-        return config.pricePerGuest;
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/system/config/financial`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error al obtener configuración financiera');
+      }
+      return (json?.data?.pricePerGuest ?? 1) as number;
+    } catch (error) {
+      console.error('Error loading financial config from API, falling back to localStorage:', error);
+      try {
+        const financialConfig = localStorage.getItem('financial_config');
+        if (financialConfig) {
+          const config: FinancialConfig = JSON.parse(financialConfig);
+          return config.pricePerGuest;
+        }
+      } catch {
+        // ignore
       }
       return 1; // Default value
-    } catch (error) {
-      console.error('Error loading financial config:', error);
-      return 1;
     }
   }
 
   async setPricePerGuest(price: number): Promise<void> {
     try {
-      const config: FinancialConfig = { pricePerGuest: price };
-      localStorage.setItem('financial_config', JSON.stringify(config));
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/system/config/financial`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify({ pricePerGuest: price }),
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error al guardar configuración financiera');
+      }
     } catch (error) {
       console.error('Error saving financial config:', error);
       throw new Error('Failed to save financial configuration');
@@ -213,21 +278,36 @@ class ConfigStorage {
   // Points Configuration Methods
   async getPointsConfig(): Promise<PointsConfig> {
     try {
-      const pointsConfig = localStorage.getItem('points_config');
-      if (pointsConfig) {
-        const config: PointsConfig = JSON.parse(pointsConfig);
-        return config;
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/system/config/points`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error al obtener configuración de puntos');
       }
-      // Valores por defecto
-      return {
+
+      return (json?.data || {
         admin: 2,
         creator: 1,
         moderator: 1,
-        accessControl: 1
-      };
+        accessControl: 1,
+      }) as PointsConfig;
     } catch (error) {
-      console.error('Error loading points config:', error);
-      // Retornar valores por defecto en caso de error
+      console.error('Error loading points config from API, falling back to localStorage:', error);
+      try {
+        const pointsConfig = localStorage.getItem('points_config');
+        if (pointsConfig) {
+          const config: PointsConfig = JSON.parse(pointsConfig);
+          return config;
+        }
+      } catch {
+        // ignore
+      }
       return {
         admin: 2,
         creator: 1,
@@ -239,11 +319,19 @@ class ConfigStorage {
 
   async savePointsConfig(config: Omit<PointsConfig, 'updatedAt'>): Promise<void> {
     try {
-      const configWithTimestamp: PointsConfig = {
-        ...config,
-        updatedAt: new Date().toISOString()
-      };
-      localStorage.setItem('points_config', JSON.stringify(configWithTimestamp));
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/system/config/points`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify(config),
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error al guardar configuración de puntos');
+      }
     } catch (error) {
       console.error('Error saving points config:', error);
       throw new Error('Failed to save points configuration');

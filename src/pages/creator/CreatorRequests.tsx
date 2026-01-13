@@ -3,6 +3,8 @@ import { FileText, Clock, CheckCircle, XCircle, User, Calendar, Search, Users, I
 import { useAuth } from '../../contexts/AuthContext';
 import { storage } from '../../lib/storage';
 import type { Event, EventRequest } from '../../types/event';
+import { getPrizeRedemptionsAPI } from '../../endpoints/prizeRedemption';
+import { getPrizesAPI } from '../../endpoints/prize';
 
 interface UserInfo {
   id: string;
@@ -135,33 +137,20 @@ export default function CreatorRequests() {
     if (!user) return;
 
     try {
-      const storedRequests = localStorage.getItem('prizeRequests');
-      if (storedRequests) {
-        const allRequests = JSON.parse(storedRequests);
-        
-        // Get users created by this creator
-        const allUsers = await storage.getUsers();
-        const creatorUsers = allUsers.filter(u => u.createdBy === user.id);
-        const creatorUserIds = creatorUsers.map(u => u.id);
-        
-        // Filter requests from users created by this creator
-        const creatorPrizeRequests = allRequests.filter((request: any) => 
-          creatorUserIds.includes(request.userId)
-        );
-        
-        setPrizeRequests(creatorPrizeRequests);
-        
-        // Calcular estadísticas
-        setPrizeRequestsStats({
-          total: creatorPrizeRequests.length,
-          pending: creatorPrizeRequests.filter((r: any) => r.status === 'pending').length,
-          approved: creatorPrizeRequests.filter((r: any) => r.status === 'approved').length,
-          rejected: creatorPrizeRequests.filter((r: any) => r.status === 'rejected').length
-        });
-      } else {
-        setPrizeRequests([]);
-        setPrizeRequestsStats({ total: 0, pending: 0, approved: 0, rejected: 0 });
-      }
+      const response = await getPrizeRedemptionsAPI();
+      const allRequests = response?.data || [];
+
+      // Filter only redemptions from admins created by this creator (backend includes creatorId)
+      const creatorPrizeRequests = allRequests.filter((r: any) => r.creatorId === String(user.id));
+
+      setPrizeRequests(creatorPrizeRequests);
+
+      setPrizeRequestsStats({
+        total: creatorPrizeRequests.length,
+        pending: creatorPrizeRequests.filter((r: any) => r.status === 'pending').length,
+        approved: creatorPrizeRequests.filter((r: any) => r.status === 'approved').length,
+        rejected: creatorPrizeRequests.filter((r: any) => r.status === 'rejected').length,
+      });
     } catch (error) {
       console.error('Error loading prize requests:', error);
       setPrizeRequests([]);
@@ -172,17 +161,14 @@ export default function CreatorRequests() {
   // Cargar premios disponibles desde localStorage
   const loadAvailablePrizes = () => {
     try {
-      const storedPrizes = localStorage.getItem('prizes');
-      console.log('Raw prizes from localStorage:', storedPrizes);
-      if (storedPrizes) {
-        const parsedPrizes = JSON.parse(storedPrizes);
-        console.log('Parsed prizes:', parsedPrizes);
-        console.log('Prizes for administrators:', parsedPrizes.filter((p: any) => p.targetAudience === 'Administradores'));
-        setAvailablePrizes(parsedPrizes);
-      } else {
-        console.log('No prizes found in localStorage');
-        setAvailablePrizes([]);
-      }
+      getPrizesAPI()
+        .then((response) => {
+          setAvailablePrizes(response?.data || []);
+        })
+        .catch((error) => {
+          console.error('Error loading available prizes:', error);
+          setAvailablePrizes([]);
+        });
     } catch (error) {
       console.error('Error loading available prizes:', error);
       setAvailablePrizes([]);

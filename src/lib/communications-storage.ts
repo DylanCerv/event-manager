@@ -1,6 +1,11 @@
 import type { Notification, SystemUpdate } from '../types/communications';
 
 class CommunicationsStorage {
+  private getAuthHeaders(): Record<string, string> {
+    const token = sessionStorage.getItem('auth_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   private getItem<T>(key: string): T[] {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : [];
@@ -12,66 +17,150 @@ class CommunicationsStorage {
 
   // Notifications
   async getNotifications(): Promise<Notification[]> {
-    return this.getItem<Notification>('admin_notifications');
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/communications/notifications`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error al obtener notificaciones');
+      }
+      return (json?.data || []) as Notification[];
+    } catch (error) {
+      console.error('Error loading notifications from API, falling back to localStorage:', error);
+      return this.getItem<Notification>('admin_notifications');
+    }
   }
 
   async createNotification(data: Omit<Notification, 'id' | 'createdAt'>): Promise<Notification> {
-    const notifications = this.getItem<Notification>('admin_notifications');
-    const newNotification: Notification = {
-      ...data,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-    };
-    notifications.push(newNotification);
-    this.setItem('admin_notifications', notifications);
-    return newNotification;
+    const { createdBy: _createdBy, ...payload } = data;
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/communications/notifications`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al crear notificación');
+    }
+    return json.data as Notification;
   }
 
   async updateNotification(id: string, data: Partial<Notification>): Promise<void> {
-    const notifications = this.getItem<Notification>('admin_notifications');
-    const index = notifications.findIndex(n => n.id === id);
-    if (index !== -1) {
-      notifications[index] = { ...notifications[index], ...data };
-      this.setItem('admin_notifications', notifications);
+    const { createdBy: _createdBy, createdAt: _createdAt, id: _id, ...payload } = data as any;
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/communications/notifications/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al actualizar notificación');
     }
   }
 
   async deleteNotification(id: string): Promise<void> {
-    const notifications = this.getItem<Notification>('admin_notifications');
-    const filtered = notifications.filter(n => n.id !== id);
-    this.setItem('admin_notifications', filtered);
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/communications/notifications/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al eliminar notificación');
+    }
   }
 
   // System Updates
   async getSystemUpdates(): Promise<SystemUpdate[]> {
-    return this.getItem<SystemUpdate>('system_updates');
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/communications/updates`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          ...this.getAuthHeaders(),
+        },
+      });
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json?.message || 'Error al obtener actualizaciones del sistema');
+      }
+      return (json?.data || []) as SystemUpdate[];
+    } catch (error) {
+      console.error('Error loading system updates from API, falling back to localStorage:', error);
+      return this.getItem<SystemUpdate>('system_updates');
+    }
   }
 
   async createSystemUpdate(data: Omit<SystemUpdate, 'id' | 'createdAt'>): Promise<SystemUpdate> {
-    const updates = this.getItem<SystemUpdate>('system_updates');
-    const newUpdate: SystemUpdate = {
-      ...data,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-    };
-    updates.push(newUpdate);
-    this.setItem('system_updates', updates);
-    return newUpdate;
+    const { createdBy: _createdBy, ...payload } = data;
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/communications/updates`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al crear actualización del sistema');
+    }
+    return json.data as SystemUpdate;
   }
 
   async updateSystemUpdate(id: string, data: Partial<SystemUpdate>): Promise<void> {
-    const updates = this.getItem<SystemUpdate>('system_updates');
-    const index = updates.findIndex(u => u.id === id);
-    if (index !== -1) {
-      updates[index] = { ...updates[index], ...data };
-      this.setItem('system_updates', updates);
+    const { createdBy: _createdBy, createdAt: _createdAt, id: _id, ...payload } = data as any;
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/communications/updates/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al actualizar actualización del sistema');
     }
   }
 
   async deleteSystemUpdate(id: string): Promise<void> {
-    const updates = this.getItem<SystemUpdate>('system_updates');
-    const filtered = updates.filter(u => u.id !== id);
-    this.setItem('system_updates', filtered);
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/communications/updates/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...this.getAuthHeaders(),
+      },
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.message || 'Error al eliminar actualización del sistema');
+    }
   }
 
   // Get active items for admin dashboard

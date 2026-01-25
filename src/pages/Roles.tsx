@@ -9,7 +9,6 @@ import { CreateUserAccessModal } from '../components/CreateUserAccessModal';
 import { UserAccessCard } from '../components/UserAccessCard';
 import type { UserAccess } from '../types/roles';
 import type { ApiUser } from '../types/auth';
-import type { Event } from '../types/event';
 import type { EventBook } from '../types/eventbook';
 
 export function Roles() {
@@ -17,7 +16,6 @@ export function Roles() {
   const { events } = useEvents();
   const { fetchUsers, users } = useUser();
   const [userAccesses, setUserAccesses] = useState<UserAccess[]>([]);
-  const [availableEvents, setAvailableEvents] = useState<Event[]>([]);
   const [availableEventBooks, setAvailableEventBooks] = useState<EventBook[]>([]);
   const [moderatorAssignments, setModeratorAssignments] = useState<Record<string, string[]>>({});
   const [accessControlAssignments, setAccessControlAssignments] = useState<Record<string, string[]>>({});
@@ -35,9 +33,24 @@ export function Roles() {
     fetchUsers();
   }, []);
 
-  useEffect(() => {
-    setAvailableEvents(events);
-  }, [events]);
+  const globallyAssignedEventIds = useMemo(() => {
+    const ids = Object.values(accessControlAssignments).flat().map(String);
+    return new Set(ids);
+  }, [accessControlAssignments]);
+
+  const globallyAssignedEventBookIds = useMemo(() => {
+    const ids = Object.values(moderatorAssignments).flat().map(String);
+    return new Set(ids);
+  }, [moderatorAssignments]);
+
+  const unassignedEvents = useMemo(() => {
+    return (events || []).filter((e) => !globallyAssignedEventIds.has(String(e.id)));
+  }, [events, globallyAssignedEventIds]);
+
+  const unassignedEventBooks = useMemo(() => {
+    // IMPORTANT: keep availableEventBooks as full list (needed to build assignments map)
+    return (availableEventBooks || []).filter((eb) => !globallyAssignedEventBookIds.has(String(eb.id)));
+  }, [availableEventBooks, globallyAssignedEventBookIds]);
 
   // Re-derive access list whenever backend users change
   useEffect(() => {
@@ -455,8 +468,10 @@ export function Roles() {
                   onDelete={handleDeleteUserAccess}
                   onAssignEvent={handleAssignEvent}
                   onRevokeEvent={handleRevokeEvent}
-                  availableEvents={availableEvents}
-                  availableEventBooks={availableEventBooks}
+                  availableEvents={unassignedEvents}
+                  availableEventBooks={unassignedEventBooks}
+                  allEvents={events}
+                  allEventBooks={availableEventBooks}
                 />
               ))}
             </div>

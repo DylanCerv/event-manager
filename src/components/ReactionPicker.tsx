@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ThumbsUp } from 'lucide-react';
 
 interface ReactionPickerProps {
@@ -20,16 +20,36 @@ const reactions = [
 export function ReactionPicker({ onReaction, currentReaction, isVisible, onClose }: ReactionPickerProps) {
   if (!isVisible) return null;
 
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close on outside click (avoid "instant close" on the same click that opened it)
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      const el = pickerRef.current;
+      if (!el) return;
+      if (el.contains(e.target as Node)) return;
+      onClose();
+    };
+
+    const t = window.setTimeout(() => {
+      document.addEventListener('mousedown', onMouseDown);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [isVisible, onClose]);
+
   return (
     <>
-      {/* Overlay para cerrar al hacer click fuera */}
-      <div 
-        className="fixed inset-0 z-10" 
-        onClick={onClose}
-      />
-      
       {/* Picker de reacciones */}
-      <div className="absolute bottom-full left-0 mb-2 bg-white rounded-full shadow-lg border border-gray-200 p-2 flex space-x-1 z-20 animate-bounce-in">
+      <div
+        ref={pickerRef}
+        className="absolute bottom-full left-0 mb-2 bg-white rounded-full shadow-lg border border-gray-200 p-2 flex space-x-1 z-20 animate-bounce-in"
+      >
         {reactions.map((reaction) => (
           <button
             key={reaction.type}

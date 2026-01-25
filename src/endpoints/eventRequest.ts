@@ -128,3 +128,28 @@ export const deleteEventRequestAPI = async (id: number): Promise<any> => {
         throw error;
     }
 };
+
+/**
+ * Archive/unarchive an event request
+ */
+export const archiveEventRequestAPI = async (id: number, archived: boolean = true): Promise<any> => {
+    try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/event-requests/${id}/archive`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                ...getAuthHeaders(),
+            },
+            body: JSON.stringify({ archived }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || `Error al archivar solicitud de evento con ID ${id}`);
+        }
+        return data;
+    } catch (error) {
+        console.error(`Error en archiveEventRequestAPI (ID: ${id}):`, error);
+        throw error;
+    }
+};

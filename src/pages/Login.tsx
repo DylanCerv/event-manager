@@ -6,8 +6,8 @@ import { LogIn, X, KeyRound, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-re
 export function Login() {
   const { role, loginWithApi } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('superadmin@bolt-events.local');
-  const [password, setPassword] = useState('123456789');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);

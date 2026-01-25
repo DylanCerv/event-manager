@@ -250,7 +250,7 @@ export function EventbookWall() {
     
     try {
       await eventBookStorage.addReaction(postId, currentGuest.id, reactionType);
-      loadPosts(); // Recargar posts para mostrar la nueva reacción
+      await loadPosts(); // Recargar posts para mostrar la nueva reacción
     } catch (error) {
       console.error('Error adding reaction:', error);
     }

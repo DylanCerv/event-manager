@@ -12,6 +12,8 @@ interface UserAccessCardProps {
   onRevokeEvent: (userAccessId: string, eventId: string) => void;
   availableEvents: Event[];
   availableEventBooks: EventBook[];
+  allEvents?: Event[];
+  allEventBooks?: EventBook[];
 }
 
 export function UserAccessCard({ 
@@ -21,9 +23,13 @@ export function UserAccessCard({
   onAssignEvent, 
   onRevokeEvent,
   availableEvents,
-  availableEventBooks
+  availableEventBooks,
+  allEvents,
+  allEventBooks
 }: UserAccessCardProps) {
   const [showEventList, setShowEventList] = React.useState(false);
+  const assignedEventsSource = allEvents ?? availableEvents;
+  const assignedEventBooksSource = allEventBooks ?? availableEventBooks;
 
   const getAccessTypeLabel = (type: string) => {
     switch (type) {
@@ -217,7 +223,7 @@ export function UserAccessCard({
             <h4 className="text-sm font-medium text-gray-900 mb-4">EventBooks Asignados</h4>
             <div className="space-y-3">
               {userAccess.assignedEventBooks.map((eventBookId) => {
-                const eventBook = availableEventBooks.find(eb => eb.id === eventBookId);
+                const eventBook = assignedEventBooksSource.find(eb => eb.id === eventBookId);
                 if (!eventBook) return null;
                 
                 return (
@@ -254,7 +260,7 @@ export function UserAccessCard({
             <h4 className="text-sm font-medium text-gray-900 mb-4">Eventos Asignados</h4>
             <div className="space-y-3">
               {userAccess.assignedEvents.map((eventId) => {
-                const event = availableEvents.find(e => e.id === eventId);
+                const event = assignedEventsSource.find(e => e.id === eventId);
                 if (!event) return null;
                 
                 return (

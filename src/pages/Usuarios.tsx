@@ -1,9 +1,9 @@
 import React from 'react';
 import { storage } from '../lib/storage';
-import { creatorsStorage } from '../lib/creators-storage';
 import { useUser } from '../contexts/UserContext';
 import type { ApiUser } from '../types/auth';
 import { eventBookStorage } from '../lib/eventbook-storage';
+import { getBoltEventsAPI } from '../endpoints/boltEvent';
 import { Users, Plus, Edit, Trash2, Shield, Star, Search, Calendar, Gift, Settings, X, Minus, Clock, UserPlus, Eye, BarChart3, BookOpen, FileText } from 'lucide-react';
 import { CreateUserModal } from '../components/CreateUserModal';
 import { EditUserModal } from '../components/EditUserModal';
@@ -31,6 +31,7 @@ interface User {
   lastLogin: string;
   createdAt: string;
   createdBy?: string;
+  password_plain?: string;
 }
 
 export function Usuarios() {
@@ -48,6 +49,8 @@ export function Usuarios() {
   const [dateFilter, setDateFilter] = React.useState<string>('all');
   const [specificDate, setSpecificDate] = React.useState<string>('');
   const [isLoading, setIsLoading] = React.useState(false);
+  console.log('users', users);
+  console.log('editingUser', editingUser);
   
   // Estados para premios
   const [showCreatePrizeModal, setShowCreatePrizeModal] = React.useState(false);
@@ -87,8 +90,7 @@ export function Usuarios() {
   }, [users.length]); // Only recalculate when users array length changes, not content
 
   React.useEffect(() => {
-    reloadAdminsFromAPI();
-    loadCreators();
+    reloadUsersFromAPI();
     loadUserPoints();
     loadUserTransactions();
     loadPrizes();
@@ -212,7 +214,8 @@ export function Usuarios() {
     phone: (u as any).phone || '',
     email: u.email,
     username: u.username || '',
-    password: '',
+    password: (u as any).password_plain || '',
+    password_plain: (u as any).password_plain || '',
     role: (u.role?.name as string) || 'ADMIN',
     status: (u as any).status || 'active',
     eventsCount: 0,
@@ -221,27 +224,39 @@ export function Usuarios() {
     createdBy: (u as any).creator_id ? String((u as any).creator_id) : undefined,
   });
 
-  const reloadAdminsFromAPI = async () => {
+  const mapApiCreatorToLocalCreator = (u: ApiUser): Creator => ({
+    id: String(u.id),
+    firstName: u.name || '',
+    lastName: u.last_name || '',
+    email: u.email || '',
+    username: u.username || '',
+    password: (u as any).password_plain || '',
+    phone: (u as any).phone || '',
+    country: (u as any).country || '',
+    status: ((u as any).status || 'active') as any,
+    commissionPercentage: Number((u as any).commission_percentage ?? 0),
+    createdAt: (u as any).created_at || new Date().toISOString(),
+    createdBy: (u as any).creator_id ? String((u as any).creator_id) : '',
+    city: (u as any).city || '',
+  });
+
+  const reloadUsersFromAPI = async () => {
     try {
       const loadedUsers = await fetchAllUsers();
+      // ADMINS
       const admins = (loadedUsers || []).filter((u: any) => String((u as any).role_id ?? u.role?.id) === '2');
-      console.log('admins', admins);
       const mapped = admins.map(mapApiUserToLocalUser);
-      console.log('mapped', mapped);
       setUsers(mapped);
+
+      // CREATORS
+      const creators = (loadedUsers || []).filter((u: any) => String((u as any).role_id ?? u.role?.id) === '5');
+      const mappedCreators: Creator[] = creators.map(mapApiCreatorToLocalCreator);
+      setCreators(mappedCreators);
     } catch (error) {
       console.error('Error loading admins from API:', error);
     }
   };
 
-  const loadCreators = async () => {
-    try {
-      const storedCreators = await creatorsStorage.getCreators();
-      setCreators(storedCreators);
-    } catch (error) {
-      console.error('Error loading creators:', error);
-    }
-  };
 
   const calculatePointsStats = async () => {
     try {
@@ -386,25 +401,48 @@ export function Usuarios() {
     }
   };
 
+  const formatDateForInput = (isoDate: string): string => {
+    if (!isoDate) return '';
+    try {
+      const d = new Date(isoDate);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  };
+
   const calculateUserMetrics = async (user: User) => {
     try {
       setIsLoading(true);
       
-      // Cargar todos los datos necesarios
-      const events = await storage.getEvents();
-      const requests = await storage.getEventRequests();
+      // Cargar datos reales desde backend (SuperAdmin)
+      const eventsRes = await getBoltEventsAPI({ queryParams: { include_requests: true } });
+      const events = (eventsRes?.data || []).map((e: any) => ({
+        id: String(e.id),
+        name: e.name,
+        date: formatDateForInput(e.start_at),
+        guest_count: Number(e.guest_count || 0),
+        created_by: String(e.user_id || ''),
+        created_at: e.created_at,
+        request: e.request || null,
+      }));
       const eventBooks = await eventBookStorage.getAllEventBooks();
       
       const now = new Date();
       
       // Filtrar eventos del usuario
-      let userEvents = events.filter(event => event.created_by === user.id);
+      let userEvents = events.filter((event: any) => String(event.created_by) === String(user.id));
       
       // Aplicar filtro de fecha si está seleccionado
       if (dateFilter !== 'all') {
         const filterDate = getFilterDate(dateFilter, specificDate);
         if (filterDate) {
-          userEvents = userEvents.filter(event => {
+          userEvents = userEvents.filter((event: any) => {
             const eventDate = new Date(event.date);
             return eventDate >= filterDate;
           });
@@ -412,49 +450,47 @@ export function Usuarios() {
       }
       
       // Calcular eventos activos y finalizados
-      const activeEvents = userEvents.filter(event => new Date(event.date) >= now);
-      const finishedEvents = userEvents.filter(event => new Date(event.date) < now);
+      const activeEvents = userEvents.filter((event: any) => new Date(event.date) >= now);
+      const finishedEvents = userEvents.filter((event: any) => new Date(event.date) < now);
       
       // Calcular solicitudes del usuario
-      let userRequests = requests.filter(request => request.creator_id ===  Number(user.id));
+      let userRequests = userEvents.map((e: any) => e.request).filter(Boolean);
       
       // Aplicar filtro de fecha a solicitudes si está seleccionado
       if (dateFilter !== 'all') {
         const filterDate = getFilterDate(dateFilter, specificDate);
         if (filterDate) {
-          userRequests = userRequests.filter(request => {
-            const requestDate = new Date(request.created_at);
+          userRequests = userRequests.filter((request: any) => {
+            const requestDate = new Date(request.created_at || request.createdAt || '');
             return requestDate >= filterDate;
           });
         }
       }
       
-      const approvedRequests = userRequests.filter(request => request.status === 'approved');
-      const rejectedRequests = userRequests.filter(request => request.status === 'rejected');
-      const pendingRequests = userRequests.filter(request => request.status === 'pending');
+      const approvedRequests = userRequests.filter((request: any) => request.status === 'approved');
+      const rejectedRequests = userRequests.filter((request: any) => request.status === 'rejected');
+      const pendingRequests = userRequests.filter((request: any) => request.status === 'pending');
       
       // Calcular EventBooks del usuario
-      const userEventIds = userEvents.map(event => event.id);
+      const userEventIds = userEvents.map((event: any) => event.id);
       const userEventBooks = eventBooks.filter(book => userEventIds.includes(book.event_id));
       const activeEventBooks = userEventBooks.filter(book => book.isActive);
       const closedEventBooks = userEventBooks.filter(book => !book.isActive);
       
-      // Calcular total de invitados - obtener todos los invitados para todos los eventos del usuario
-      const allGuests = await storage.getAllGuests();
-      const userEventGuests = allGuests.filter(guest => userEventIds.includes(guest.event_id));
-      const totalGuests = userEventGuests.length;
+      // Total invitados (desde backend: guest_count por evento)
+      const totalGuests = userEvents.reduce((sum: number, e: any) => sum + Number(e.guest_count || 0), 0);
       
       // Encontrar último evento
       const lastEvent = userEvents
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
       
       // Encontrar evento más exitoso (por número de invitados)
-      const eventGuestCounts = userEvents.map(event => ({
+      const eventGuestCounts = userEvents.map((event: any) => ({
         event,
-        guestCount: allGuests.filter(guest => guest.event_id === event.id).length
+        guestCount: Number(event.guest_count || 0)
       }));
       const mostSuccessfulEvent = eventGuestCounts
-        .sort((a, b) => b.guestCount - a.guestCount)[0];
+        .sort((a: any, b: any) => b.guestCount - a.guestCount)[0];
       
       const metrics = {
         events: {
@@ -1062,6 +1098,7 @@ export function Usuarios() {
         {/* Edit User Modal */}
         <EditUserModal
           isOpen={showEditModal}
+          creators={creators}
           onClose={() => {
             setShowEditModal(false);
             setEditingUser(null);
@@ -1121,9 +1158,20 @@ export function Usuarios() {
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center">
                   <BarChart3 className="h-6 w-6 text-blue-600 mr-2" />
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Métricas de {showUserDetails.company}
-                  </h3>
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">
+                      Métricas de {showUserDetails.company}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {showUserDetails.email} • @{showUserDetails.username}
+                    </p>
+                    <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-500">
+                      <div><span className="font-medium text-gray-700">Teléfono:</span> {showUserDetails.phone || '-'}</div>
+                      <div><span className="font-medium text-gray-700">País:</span> {showUserDetails.country || '-'}</div>
+                      <div><span className="font-medium text-gray-700">Ciudad:</span> {showUserDetails.city || '-'}</div>
+                      <div className="sm:col-span-2"><span className="font-medium text-gray-700">Dirección:</span> {showUserDetails.address || '-'}</div>
+                    </div>
+                  </div>
                 </div>
                 <button
                   onClick={() => {

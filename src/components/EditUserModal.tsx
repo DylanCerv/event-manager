@@ -1,6 +1,5 @@
 import React from 'react';
 import { X, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { creatorsStorage } from '../lib/creators-storage';
 import { updateUserAPI } from '../endpoints/user';
 import type { Creator } from '../types/creator';
 import { useUser } from '../contexts/UserContext';
@@ -23,6 +22,7 @@ interface User {
   lastLogin: string;
   createdAt: string;
   createdBy?: string;
+  password_plain?: string;
 }
 
 interface UserFormData {
@@ -47,12 +47,14 @@ interface FormErrors {
 interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
+  creators: Creator[];
   editingUser: User | null;
   onUpdated?: (apiUser: any) => void;
 }
 
-export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditUserModalProps) {
+export function EditUserModal({ isOpen, creators, onClose, editingUser, onUpdated }: EditUserModalProps) {
   const { fetchUsers } = useUser();
+  const [initialPassword, setInitialPassword] = React.useState('');
   const [formData, setFormData] = React.useState<UserFormData>({
     firstName: '',
     lastName: '',
@@ -71,10 +73,11 @@ export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditU
   const [errors, setErrors] = React.useState<FormErrors>({});
   const [isLoading, setIsLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
-  const [creators, setCreators] = React.useState<Creator[]>([]);
 
   React.useEffect(() => {
     if (editingUser) {
+      const existingPassword = ((editingUser as any).password_plain ?? '') as string;
+      setInitialPassword(existingPassword || '');
       setFormData({
         firstName: editingUser.firstName,
         lastName: editingUser.lastName,
@@ -85,33 +88,19 @@ export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditU
         phone: editingUser.phone,
         email: editingUser.email,
         username: editingUser.username,
-        password: ((editingUser as any).password_plain ?? editingUser.password) || '',
+        // Prefill if backend provides decrypted password (scoped)
+        password: existingPassword || '',
         createdBy: editingUser.createdBy || '',
         status: editingUser.status
       });
     }
   }, [editingUser]);
 
-  // Cargar creadores al abrir el modal
-  React.useEffect(() => {
-    const loadCreators = async () => {
-      if (isOpen) {
-        try {
-          const creatorsData = await creatorsStorage.getCreators();
-          setCreators(creatorsData);
-        } catch (error) {
-          console.error('Error loading creators:', error);
-        }
-      }
-    };
-
-    loadCreators();
-  }, [isOpen]);
-
   // Función para obtener el nombre del creador
-  const getCreatorName = (creatorId: string) => {
-    const creator = creators.find(c => c.id === creatorId);
-    return creator ? `${creator.firstName} ${creator.lastName}` : creatorId;
+  const getCreatorName = (creator: any) => {
+    console.log('creators', creators);
+    const creatorFinded = creators.find(c => c.id === creator.createdBy);
+    return creatorFinded ? `${creatorFinded.firstName} ${creatorFinded.lastName}` : creator.creatorId;
   };
 
   const resetForm = () => {
@@ -144,7 +133,9 @@ export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditU
     if (!formData.address.trim()) newErrors.address = 'El domicilio es requerido';
     if (!formData.phone.trim()) newErrors.phone = 'El teléfono es requerido';
     if (!formData.username.trim()) newErrors.username = 'El nombre de usuario es requerido';
-    if (!formData.password.trim()) newErrors.password = 'La contraseña es requerida';
+    if (formData.password && formData.password.trim().length > 0 && formData.password.trim().length < 8) {
+      newErrors.password = 'La contraseña debe tener al menos 8 caracteres';
+    }
 
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -176,7 +167,8 @@ export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditU
         company: formData.company,
         status: formData.status,
       };
-      if (formData.password && formData.password.trim().length >= 6) {
+      const passwordChanged = (formData.password || '') !== (initialPassword || '');
+      if (passwordChanged && formData.password && formData.password.trim().length >= 8) {
         payload.password = formData.password;
       }
 
@@ -418,7 +410,7 @@ export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditU
 
               <div>
                 <label className="block text-xs sm:text-sm font-medium text-gray-700">
-                  🔒 Contraseña <span className="text-red-500">*</span>
+                  🔒 Contraseña (opcional)
                 </label>
                 <div className="relative">
                   <input
@@ -428,7 +420,7 @@ export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditU
                     className={`mt-1 block w-full px-2 sm:px-3 py-1.5 sm:py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm pr-8 ${
                       errors.password ? 'border-red-300' : 'border-gray-300'
                     }`}
-                    placeholder="Ingresa la contraseña"
+                    placeholder="Dejar vacío para no cambiar"
                   />
                   <button
                     type="button"
@@ -456,7 +448,7 @@ export function EditUserModal({ isOpen, onClose, editingUser, onUpdated }: EditU
                 👨‍💼 Creado por
               </label>
               <div className="mt-1 block w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 text-sm text-gray-700">
-                {formData.createdBy ? getCreatorName(formData.createdBy) : 'Sin creador asignado'}
+                {formData.createdBy ? getCreatorName(formData) : 'Sin creador asignado'}
               </div>
               <p className="mt-1 text-xs text-gray-500">
                 Este campo no se puede editar. El creador se asigna al crear el usuario.

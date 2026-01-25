@@ -12,6 +12,7 @@ import EditCreatorModal from '../components/EditCreatorModal';
 import type { Creator, CreateCreatorData } from '../types/creator';
 import type { CommissionSummary } from '../types/commission';
 import type { Event as CustomEvent } from '../types/event';
+import { getBoltEventsAPI } from '../endpoints/boltEvent';
 
 export default function Creadores() {
   const { filterByRoleId, users: apiUsers, fetchUsers } = useUser();
@@ -75,6 +76,7 @@ export default function Creadores() {
     commissionPercentage: Number((u as any).commission_percentage ?? (u as any).commissionPercentage ?? 15),
     createdAt: (u.created_at as string) || new Date().toISOString(),
     createdBy: String((u as any).creator_id ?? ''),
+    city: (u.city as string) || '',
   });
 
   // Stats should come from backend (endpoint /users), not creatorsStorage
@@ -210,6 +212,21 @@ export default function Creadores() {
     return { startDate, endDate: now };
   };
 
+  const formatDateForInput = (isoDate: string): string => {
+    if (!isoDate) return '';
+    try {
+      const d = new Date(isoDate);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return '';
+    }
+  };
+
   const filterCreatorByDateRange = (items: any[], dateField: string, dateRange: any) => {
     if (!dateRange) return items;
     
@@ -223,21 +240,38 @@ export default function Creadores() {
     try {
       setIsLoadingMetrics(true);
       
-      // Cargar todos los datos necesarios
-      const allUsers = await storage.getUsers();
-      const allEvents = await storage.getEvents();
-      const allRequests = await storage.getEventRequests();
+      // Cargar datos reales desde backend (SuperAdmin)
+      await fetchUsers();
+      const allApiUsers = apiUsers || [];
+      const creatorAdmins = allApiUsers.filter((u: any) =>
+        String((u as any).creator_id ?? '') === String(creator.id) &&
+        String((u as any).role_id ?? u.role?.id) === '2'
+      );
+      const creatorAdminIds = creatorAdmins.map((u: any) => String(u.id));
+
+      const eventsRes = await getBoltEventsAPI({ queryParams: { include_requests: true } });
+      const allEvents = (eventsRes?.data || []).map((e: any) => ({
+        id: String(e.id),
+        name: e.name,
+        date: formatDateForInput(e.start_at),
+        guest_count: Number(e.guest_count || 0),
+        created_by: String(e.user_id || ''),
+        created_at: e.created_at,
+        request: e.request || null,
+      }));
       const allEventBooks = await eventBookStorage.getAllEventBooks();
       
-      // Filtrar usuarios creados por este creador
-      const creatorUsers = allUsers.filter(user => user.createdBy === creator.id);
-      const creatorUserIds = creatorUsers.map(user => user.id);
+      // Usuarios creados por este creador (admins)
+      const creatorUsers = creatorAdmins.map((u: any) => ({
+        id: String(u.id),
+        status: (u as any).status || 'active',
+      }));
       
       // Obtener rango de fechas para filtrado
       const dateRange = getCreatorDateFilterRange(dateFilter, specificDate);
       
       // Calcular eventos de los usuarios del creador
-      let creatorEvents = allEvents.filter(event => creatorUserIds.includes(event.created_by));
+      let creatorEvents = allEvents.filter((event: any) => creatorAdminIds.includes(String(event.created_by)));
       
       // Aplicar filtro de fecha si está seleccionado
       if (dateRange) {
@@ -245,43 +279,42 @@ export default function Creadores() {
       }
       
       const now = new Date();
-      const activeEvents = creatorEvents.filter(event => new Date(event.date) >= now);
-      const finishedEvents = creatorEvents.filter(event => new Date(event.date) < now);
+      const activeEvents = creatorEvents.filter((event: any) => new Date(event.date) >= now);
+      const finishedEvents = creatorEvents.filter((event: any) => new Date(event.date) < now);
       
-      // Calcular solicitudes de los usuarios del creador
-      let creatorRequests = allRequests.filter(request => creatorUserIds.includes(String(request.creator_id)));
-      
-      // Aplicar filtro de fecha a solicitudes si está seleccionado
+      // Solicitudes vienen en event.request desde backend
+      let creatorRequests = creatorEvents.map((e: any) => e.request).filter(Boolean);
       if (dateRange) {
-        creatorRequests = filterCreatorByDateRange(creatorRequests, 'created_at', dateRange);
+        creatorRequests = creatorRequests.filter((r: any) => {
+          const d = new Date(r.created_at || r.createdAt || '');
+          return d >= dateRange.startDate && d <= dateRange.endDate;
+        });
       }
       
-      const approvedRequests = creatorRequests.filter(request => request.status === 'approved');
-      const rejectedRequests = creatorRequests.filter(request => request.status === 'rejected');
-      const pendingRequests = creatorRequests.filter(request => request.status === 'pending');
+      const approvedRequests = creatorRequests.filter((request: any) => request.status === 'approved');
+      const rejectedRequests = creatorRequests.filter((request: any) => request.status === 'rejected');
+      const pendingRequests = creatorRequests.filter((request: any) => request.status === 'pending');
       
       // Calcular EventBooks de los usuarios del creador
-      const creatorEventIds = creatorEvents.map(event => event.id);
+      const creatorEventIds = creatorEvents.map((event: any) => event.id);
       const creatorEventBooks = allEventBooks.filter(book => creatorEventIds.includes(book.event_id));
       const activeEventBooks = creatorEventBooks.filter(book => book.isActive);
       const closedEventBooks = creatorEventBooks.filter(book => !book.isActive);
       
-      // Calcular total de invitados
-      const allGuests = await storage.getAllGuests();
-      const creatorEventGuests = allGuests.filter(guest => creatorEventIds.includes(guest.event_id));
-      const totalGuests = creatorEventGuests.length;
+      // Total invitados (guest_count por evento)
+      const totalGuests = creatorEvents.reduce((sum: number, e: any) => sum + Number(e.guest_count || 0), 0);
       
       // Encontrar último evento
       const lastEvent = creatorEvents
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
       
       // Encontrar evento más exitoso (por número de invitados)
-      const eventGuestCounts = creatorEvents.map(event => ({
+      const eventGuestCounts = creatorEvents.map((event: any) => ({
         event,
-        guestCount: allGuests.filter(guest => guest.event_id === event.id).length
+        guestCount: Number(event.guest_count || 0)
       }));
       const mostSuccessfulEvent = eventGuestCounts
-        .sort((a, b) => b.guestCount - a.guestCount)[0];
+        .sort((a: any, b: any) => b.guestCount - a.guestCount)[0];
       
       const metrics = {
         users: {
@@ -1063,7 +1096,15 @@ export default function Creadores() {
                   <h3 className="text-lg font-medium text-gray-900">
                     Métricas de {showCreatorDetails.firstName} {showCreatorDetails.lastName}
                   </h3>
-                  <p className="text-sm text-gray-500">{showCreatorDetails.email}</p>
+                  <p className="text-sm text-gray-500">
+                    {showCreatorDetails.email} • @{showCreatorDetails.username || ''}
+                  </p>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-500">
+                    <div><span className="font-medium text-gray-700">Teléfono:</span> {showCreatorDetails.phone || '-'}</div>
+                    <div><span className="font-medium text-gray-700">País:</span> {showCreatorDetails.country || '-'}</div>
+                    <div><span className="font-medium text-gray-700">Ciudad:</span> {showCreatorDetails.city || '-'}</div>
+                    <div className="sm:col-span-2"><span className="font-medium text-gray-700">Dirección:</span> {showCreatorDetails.address || '-'}</div>
+                  </div>
                 </div>
               </div>
               <button

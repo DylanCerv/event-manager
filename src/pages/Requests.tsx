@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useEvents } from '../contexts/EventContext';
 import { generateGuestQRPDF } from '../lib/qr';
 import { getEventGuestsByEventIdAPI } from '../endpoints/eventGuest';
-import { createEventRequestAPI, updateEventRequestStatusAPI, deleteEventRequestAPI } from '../endpoints/eventRequest';
+import { createEventRequestAPI, updateEventRequestStatusAPI, deleteEventRequestAPI, archiveEventRequestAPI } from '../endpoints/eventRequest';
 import { getPrizeRedemptionsAPI, updatePrizeRedemptionStatusAPI } from '../endpoints/prizeRedemption';
 
 // Definir interfaces para trabajar con la respuesta del API
@@ -25,6 +25,8 @@ interface EventRequest {
   creator_id: number;
   status: 'pending' | 'approved' | 'rejected';
   processed: boolean;
+  archived_at?: string | null;
+  archived_by?: number | null;
   created_at: string;
   updated_at: string;
   creator?: Creator;
@@ -101,7 +103,6 @@ export function Requests() {
 
   useEffect(() => {
     refreshEvents();
-    loadArchivedRequests();
     loadPrizeRequests();
     refreshEvents(); // Cargar eventos desde el contexto
   }, []);
@@ -109,6 +110,11 @@ export function Requests() {
   // Usar eventos del contexto
   useEffect(() => {
     if (events && events.length > 0) {
+      // Derivar solicitudes archivadas desde backend (event.request.archived_at)
+      const archivedIds = events
+        .filter((e: any) => e.request && (e.request as any).archived_at)
+        .map((e: any) => String(e.request.id));
+      setArchivedRequests(archivedIds);
       
       // Calcular estadísticas de eventos
       const currentMonth = new Date().getMonth();
@@ -127,11 +133,12 @@ export function Requests() {
       });
 
       console.log('events', events);
+      const activeRequestEvents = events.filter((event: any) => event.request && !(event.request as any).archived_at);
       setStatistics({
-        total: events.length,
-        pending: events.filter(event => event.request?.status === 'pending').length,
-        approved: events.filter(event => event.request?.status === 'approved').length,
-        rejected: events.filter(event => event.request?.status === 'rejected').length
+        total: activeRequestEvents.length,
+        pending: activeRequestEvents.filter((event: any) => event.request?.status === 'pending').length,
+        approved: activeRequestEvents.filter((event: any) => event.request?.status === 'approved').length,
+        rejected: activeRequestEvents.filter((event: any) => event.request?.status === 'rejected').length
       });
     }
   }, [events]);
@@ -173,20 +180,6 @@ export function Requests() {
     }
   };
 
-  // Cargar solicitudes archivadas desde sessionStorage
-  const loadArchivedRequests = () => {
-    const archived = sessionStorage.getItem('archived_requests');
-    if (archived) {
-      setArchivedRequests(JSON.parse(archived));
-    }
-  };
-
-  // Guardar solicitudes archivadas en sessionStorage
-  const saveArchivedRequests = (archivedIds: string[]) => {
-    sessionStorage.setItem('archived_requests', JSON.stringify(archivedIds));
-    setArchivedRequests(archivedIds);
-  };
-
   const handleRequestAccess = async (eventId: string) => {
     try {
       setIsLoading(true);
@@ -199,7 +192,8 @@ export function Requests() {
       
       const user = JSON.parse(userData);
       const userId = parseInt(user.id);
-      
+
+      console.log('user', user);
       console.log('Solicitando acceso para evento:', eventId, 'con usuario:', userId);
       
       // Crear la solicitud de evento usando el endpoint
@@ -323,8 +317,7 @@ export function Requests() {
   const handleArchiveRequest = async (requestId: string) => {
     try {
       setIsLoading(true);
-      const newArchivedRequests = [...archivedRequests, requestId];
-      saveArchivedRequests(newArchivedRequests);
+      await archiveEventRequestAPI(parseInt(requestId), true);
       await refreshEvents();
       setShowDeleteConfirm(null);
     } catch (error) {
@@ -339,8 +332,7 @@ export function Requests() {
   const handleUnarchiveRequest = async (requestId: string) => {
     try {
       setIsLoading(true);
-      const newArchivedRequests = archivedRequests.filter(id => id !== requestId);
-      saveArchivedRequests(newArchivedRequests);
+      await archiveEventRequestAPI(parseInt(requestId), false);
       await refreshEvents();
     } catch (error) {
       console.error('Error unarchiving request:', error);

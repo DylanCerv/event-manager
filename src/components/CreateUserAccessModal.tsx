@@ -81,10 +81,21 @@ export function CreateUserAccessModal({
     }
 
     if (!formData.username.trim()) {
-      newErrors.username = 'El nombre de usuario es requerido';
-    } else if (existingUsernames.includes(formData.username) && 
-               (!editingUserAccess || editingUserAccess.username !== formData.username)) {
-      newErrors.username = 'Este nombre de usuario ya está en uso';
+      newErrors.username = formData.accessType === 'moderador' ? 'El email es requerido' : 'El nombre de usuario es requerido';
+    } else {
+      // Moderator requires email format and uses it as username too
+      if (formData.accessType === 'moderador') {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.username.trim())) {
+          newErrors.username = 'El email no es válido';
+        }
+      }
+      if (
+        existingUsernames.includes(formData.username) &&
+        (!editingUserAccess || editingUserAccess.username !== formData.username)
+      ) {
+        newErrors.username = 'Este nombre de usuario ya está en uso';
+      }
     }
 
     if (!formData.password.trim()) {
@@ -103,10 +114,12 @@ export function CreateUserAccessModal({
 
     try {
       const role_id = formData.accessType === 'moderador' ? 4 : 3;
+      const emailForModerator = role_id === 4 ? formData.username.trim() : undefined;
       const payload: any = {
         name: formData.name,
         last_name: formData.lastName,
-        username: formData.username,
+        username: role_id === 4 ? emailForModerator : formData.username,
+        ...(role_id === 4 ? { email: emailForModerator } : {}),
         password: formData.password,
         role_id,
         status: 'active',
@@ -118,7 +131,8 @@ export function CreateUserAccessModal({
         const updatePayload: any = {
           name: formData.name,
           last_name: formData.lastName,
-          username: formData.username,
+          username: role_id === 4 ? emailForModerator : formData.username,
+          ...(role_id === 4 ? { email: emailForModerator } : {}),
           role_id,
         };
         if (formData.password && formData.password.length >= 6) {
@@ -250,16 +264,16 @@ export function CreateUserAccessModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Nombre de usuario <span className="text-red-500">*</span>
+              {formData.accessType === 'moderador' ? 'Email (usuario)' : 'Nombre de usuario'} <span className="text-red-500">*</span>
             </label>
             <input
-              type="text"
+              type={formData.accessType === 'moderador' ? 'email' : 'text'}
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
               className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm ${
                 errors.username ? 'border-red-300' : ''
               }`}
-              placeholder="Ingresa el nombre de usuario"
+              placeholder={formData.accessType === 'moderador' ? 'Ingresa el email' : 'Ingresa el nombre de usuario'}
             />
             {errors.username && (
               <p className="mt-1 text-sm text-red-600 flex items-center">

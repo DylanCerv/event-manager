@@ -51,6 +51,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // storage.setCurrentUser({ id: '', role: '' });
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('auth_token');
+    // Clear user-scoped caches to avoid leaking previous user data
+    localStorage.removeItem('events');
+    localStorage.removeItem('guests');
+    localStorage.removeItem('admin_users');
+    localStorage.removeItem('event_requests');
+    localStorage.removeItem('eventbooks');
+    localStorage.removeItem('commissions_data');
+    localStorage.removeItem('user_accesses');
+    localStorage.removeItem('prizes');
+    localStorage.removeItem('userPoints');
+    localStorage.removeItem('userTransactions');
+    localStorage.removeItem('admin_notifications');
+    localStorage.removeItem('system_updates');
     // Redirigir a la página de inicio de sesión
     window.location.href = '/';
   };

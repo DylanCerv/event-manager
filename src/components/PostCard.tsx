@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ThumbsUp, Heart, MessageCircle, Share, MoreHorizontal, Send, User, Flag, Star, Megaphone } from 'lucide-react';
 import { EventBookPost, EventBookReply } from '../types/eventbook';
 import { EventBookGuest } from '../lib/guest-storage';
@@ -46,6 +46,7 @@ export function PostCard({
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [optimisticUserReaction, setOptimisticUserReaction] = useState<string | null | undefined>(undefined);
   
   // Estados para respuestas
   const [replyingTo, setReplyingTo] = useState<{commentId: string, userName: string, isNested?: boolean} | null>(null);
@@ -131,21 +132,66 @@ export function PostCard({
     return `Hace ${diffInDays}d`;
   };
 
-  const getReactionCounts = () => {
+  const getReactionCounts = (reactionsMap: Record<string, string>) => {
     const counts: { [key: string]: number } = {};
-    Object.values(post.reactions).forEach(reaction => {
+    Object.values(reactionsMap).forEach(reaction => {
       counts[reaction] = (counts[reaction] || 0) + 1;
     });
     return counts;
   };
 
-  const getUserReaction = () => {
-    return currentGuest ? post.reactions[currentGuest.id] : null;
+  const getUserReaction = (reactionsMap: Record<string, string>) => {
+    return currentGuest ? (reactionsMap[currentGuest.id] ?? null) : null;
   };
+
+  const effectiveReactions = useMemo(() => {
+    const base = (post.reactions || {}) as Record<string, string>;
+    if (!currentGuest) return base;
+    if (optimisticUserReaction === undefined) return base;
+
+    const next = { ...base };
+    if (optimisticUserReaction === null) {
+      delete next[currentGuest.id];
+    } else {
+      next[currentGuest.id] = optimisticUserReaction;
+    }
+    return next;
+  }, [post.reactions, currentGuest, optimisticUserReaction]);
+
+  useEffect(() => {
+    if (!currentGuest) {
+      if (optimisticUserReaction !== undefined) setOptimisticUserReaction(undefined);
+      return;
+    }
+    if (optimisticUserReaction === undefined) return;
+
+    const base = (post.reactions || {}) as Record<string, string>;
+    const serverReaction = base[currentGuest.id] ?? null;
+    if (optimisticUserReaction === null) {
+      if (!base[currentGuest.id]) setOptimisticUserReaction(undefined);
+      return;
+    }
+    if (serverReaction === optimisticUserReaction) {
+      setOptimisticUserReaction(undefined);
+    }
+  }, [post.reactions, currentGuest, optimisticUserReaction]);
 
   const handleReaction = async (reactionType: string) => {
     if (!currentGuest) return;
-    await onReaction(post.id, reactionType);
+
+    const base = (post.reactions || {}) as Record<string, string>;
+    const previous = base[currentGuest.id] ?? null;
+    const optimisticNext = previous === reactionType ? null : reactionType;
+    setOptimisticUserReaction(optimisticNext);
+
+    try {
+      await onReaction(post.id, reactionType);
+      // keep optimistic state until parent refresh matches it
+    } catch (error) {
+      // rollback
+      setOptimisticUserReaction(undefined);
+      throw error;
+    }
   };
 
   const handleReport = async () => {
@@ -331,8 +377,8 @@ export function PostCard({
     );
   };
 
-  const reactionCounts = getReactionCounts();
-  const userReaction = getUserReaction();
+  const reactionCounts = getReactionCounts(effectiveReactions);
+  const userReaction = getUserReaction(effectiveReactions);
   const totalReactions = Object.values(reactionCounts).reduce((sum, count) => sum + count, 0);
   const currentReactionDisplay = getReactionDisplay(userReaction);
 
@@ -512,9 +558,7 @@ export function PostCard({
           {/* Botón de reacciones con picker */}
           <div className="relative">
             <button
-              onClick={() => userReaction ? handleReaction(userReaction) : setShowReactionPicker(!showReactionPicker)}
-              onMouseEnter={() => setShowReactionPicker(true)}
-              onMouseLeave={() => setTimeout(() => setShowReactionPicker(false), 1000)}
+              onClick={() => setShowReactionPicker((v) => !v)}
               className={`flex items-center justify-center space-x-2 py-2 rounded-lg transition-colors w-full ${
                 userReaction
                   ? `${currentReactionDisplay.color} bg-blue-50`

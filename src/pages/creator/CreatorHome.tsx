@@ -299,12 +299,12 @@ export default function CreatorHome() {
     if (!events || !users) return [];
     
     // Get users created by this creator
-    const creatorUsers = users.filter(u => u.createdBy === user?.id);
+    const creatorUsers = users.filter(u => String(u.createdBy) === String(user?.id));
     
     // Filter events created by creator's users for this specific date
     return events.filter(event => {
       const eventDate = new Date(event.date);
-      const isCreatorUserEvent = creatorUsers.some(u => u.id === event.created_by);
+      const isCreatorUserEvent = creatorUsers.some(u => String(u.id) === String(event.created_by));
       return isCreatorUserEvent && 
              eventDate.getDate() === date.getDate() &&
              eventDate.getMonth() === date.getMonth() &&

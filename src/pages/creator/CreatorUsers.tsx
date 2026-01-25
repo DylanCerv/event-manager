@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Users, FileText, CheckCircle, User, Mail, Building, Eye, X, Calendar, ClipboardList, BookOpen, UserCheck } from 'lucide-react';
+import { Users, FileText, CheckCircle, User, Mail, Building, Eye, X, Calendar, ClipboardList, BookOpen, UserCheck, Plus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { storage } from '../../lib/storage';
 import { eventBookStorage } from '../../lib/eventbook-storage';
+import { createUserAPI } from '../../endpoints/user';
+import { useUser } from '../../contexts/UserContext';
+import type { ApiUser } from '../../types/auth';
+import { useEvents } from '../../contexts/EventContext';
 
 interface CreatorStats {
   totalUsers: number;
@@ -16,9 +20,26 @@ interface UserInfo {
   firstName: string;
   lastName: string;
   email: string;
+  username?: string;
   company: string;
+  country?: string;
+  city?: string;
+  address?: string;
+  phone?: string;
   createdAt: string;
   createdBy: string;
+}
+
+interface CreateAdminFormData {
+  firstName: string;
+  lastName: string;
+  company: string;
+  country: string;
+  city: string;
+  address: string;
+  phone: string;
+  email: string;
+  password: string;
 }
 
 interface UserMetrics {
@@ -55,6 +76,8 @@ interface UserMetrics {
 
 export default function CreatorUsers() {
   const { user } = useAuth();
+  const { fetchUsers } = useUser();
+  const { events: scopedEvents } = useEvents();
   const [stats, setStats] = useState<CreatorStats>({
     totalUsers: 0,
     topUserByApprovals: null,
@@ -68,6 +91,20 @@ export default function CreatorUsers() {
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [userDateFilter, setUserDateFilter] = useState('all');
   const [userSpecificDate, setUserSpecificDate] = useState('');
+  const [showCreateAdmin, setShowCreateAdmin] = useState(false);
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+  const [createAdminError, setCreateAdminError] = useState<string | null>(null);
+  const [createAdminForm, setCreateAdminForm] = useState<CreateAdminFormData>({
+    firstName: '',
+    lastName: '',
+    company: '',
+    country: '',
+    city: '',
+    address: '',
+    phone: '',
+    email: '',
+    password: '',
+  });
 
   useEffect(() => {
     loadData();
@@ -125,22 +162,21 @@ export default function CreatorUsers() {
       // Get date range for filtering
       const dateRange = getUserDateFilterRange(dateFilter, specificDate);
       
-      // Load all data
-      const [allEvents, allRequests, allEventBooks, allGuests] = await Promise.all([
-        storage.getEvents(),
-        storage.getEventRequests(),
-        eventBookStorage.getAllEventBooks(),
-        storage.getAllGuests()
-      ]);
+      // Use backend-scoped events from EventContext (CREATOR sees events of its admins via backend rules)
+      const allEvents = scopedEvents || [];
+      const allEventBooks = await eventBookStorage.getAllEventBooks();
 
       // Filter events and requests by user
-      const userEvents = allEvents.filter(event => event.created_by === selectedUser.id);
-      const userRequests = allRequests.filter(request => request.requested_by === selectedUser.id);
-      const userEventBooks = allEventBooks.filter(book => book.created_by === selectedUser.id);
+      const userEvents = allEvents.filter(event => String(event.created_by) === String(selectedUser.id));
+      const userEventBooks = allEventBooks.filter((book: any) => String(book.created_by) === String(selectedUser.id));
 
       // Apply date filters if specified
       const filteredEvents = filterUserByDateRange(userEvents, 'created_at', dateRange);
-      const filteredRequests = filterUserByDateRange(userRequests, 'created_at', dateRange);
+      // Requests are attached to events in backend (event.request?.status)
+      const filteredRequests = filteredEvents
+        .map((e: any) => e.request)
+        .filter(Boolean)
+        .filter((r: any) => !dateRange || (new Date(r.created_at) >= dateRange.start && new Date(r.created_at) <= dateRange.end));
 
       // Calculate event metrics (based on event date vs current date)
       const now = new Date();
@@ -148,19 +184,17 @@ export default function CreatorUsers() {
       const finishedEvents = filteredEvents.filter(event => new Date(event.date) < now).length;
 
       // Calculate request metrics
-      const approvedRequests = filteredRequests.filter(req => req.status === 'approved').length;
-      const rejectedRequests = filteredRequests.filter(req => req.status === 'rejected').length;
-      const pendingRequests = filteredRequests.filter(req => req.status === 'pending').length;
+      const approvedRequests = filteredRequests.filter((req: any) => req.status === 'approved').length;
+      const rejectedRequests = filteredRequests.filter((req: any) => req.status === 'rejected').length;
+      const pendingRequests = filteredRequests.filter((req: any) => req.status === 'pending').length;
 
       // Calculate EventBook metrics
       const activeEventBooks = userEventBooks.filter(book => book.isActive).length;
       const closedEventBooks = userEventBooks.filter(book => !book.isActive).length;
 
       // Calculate participation metrics
-      const userGuestEntries = allGuests.filter(guest => 
-        filteredEvents.some(event => event.id === guest.event_id)
-      );
-      const totalGuests = userGuestEntries.length;
+      // Guests count from events (backend already has guest_count)
+      const totalGuests = filteredEvents.reduce((sum: number, e: any) => sum + Number(e.guest_count || 0), 0);
 
       // Find last event
       const sortedEvents = filteredEvents.sort((a, b) => 
@@ -169,13 +203,13 @@ export default function CreatorUsers() {
       const lastEvent = sortedEvents.length > 0 ? {
         name: sortedEvents[0].name,
         date: sortedEvents[0].created_at,
-        guests: allGuests.filter(guest => guest.event_id === sortedEvents[0].id).length
+        guests: Number(sortedEvents[0].guest_count || 0)
       } : null;
 
       // Find most successful event by guest count
       const eventsWithGuestCount = filteredEvents.map(event => ({
         ...event,
-        guestCount: allGuests.filter(guest => guest.event_id === event.id).length
+        guestCount: Number((event as any).guest_count || 0)
       }));
       const mostSuccessfulEvent = eventsWithGuestCount.length > 0 
         ? eventsWithGuestCount.reduce((max, event) => 
@@ -226,12 +260,28 @@ export default function CreatorUsers() {
     try {
       setIsLoading(true);
 
-      // Get users created by this creator
-      const allUsers = await storage.getUsers();
-      const creatorUsers = allUsers.filter(u => u.createdBy === user.id);
+      // Get users created by this creator (from API)
+      const allApiUsers = await fetchUsers();
+      const creatorUsers: UserInfo[] = (allApiUsers || [])
+        .filter((u: ApiUser) => String(u.creator_id ?? '') === String(user.id))
+        .filter((u: ApiUser) => String((u as any).role_id ?? u.role?.id) === '2') // ADMIN
+        .map((u: ApiUser) => ({
+          id: String(u.id),
+          firstName: u.name || '',
+          lastName: u.last_name || '',
+          email: u.email || '',
+          username: u.username || '',
+          company: (u.company as string) || '',
+          country: u.country || '',
+          city: u.city || '',
+          address: u.address || '',
+          phone: u.phone || '',
+          createdAt: u.created_at || new Date().toISOString(),
+          createdBy: String(u.creator_id ?? ''),
+        }));
 
       // Get all requests from users created by this creator
-      const allRequests = await storage.getEventRequests();
+      const allRequests = (await storage.getEventRequests()) as any[];
       const creatorRequests = allRequests.filter(request => 
         creatorUsers.some(u => u.id === request.requested_by)
       );
@@ -309,6 +359,61 @@ export default function CreatorUsers() {
     }
   };
 
+  const resetCreateAdmin = () => {
+    setCreateAdminForm({
+      firstName: '',
+      lastName: '',
+      company: '',
+      country: '',
+      city: '',
+      address: '',
+      phone: '',
+      email: '',
+      password: '',
+    });
+    setCreateAdminError(null);
+  };
+
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    setCreateAdminError(null);
+    setIsCreatingAdmin(true);
+    try {
+      const payload = {
+        name: createAdminForm.firstName.trim(),
+        last_name: createAdminForm.lastName.trim(),
+        email: createAdminForm.email.trim(),
+        username: createAdminForm.email.trim(),
+        password: createAdminForm.password,
+        company: createAdminForm.company.trim() || null,
+        country: createAdminForm.country.trim() || null,
+        city: createAdminForm.city.trim() || null,
+        address: createAdminForm.address.trim() || null,
+        phone: createAdminForm.phone.trim() || null,
+        role_id: 2, // ADMIN
+        status: 'active',
+      };
+
+      const response = await createUserAPI(payload);
+      const created = response?.data ?? response;
+      const isOk = response?.status === 201 || !!created?.id;
+      if (!isOk) {
+        setCreateAdminError(response?.message || 'No se pudo crear el admin');
+        return;
+      }
+
+      resetCreateAdmin();
+      setShowCreateAdmin(false);
+      await loadData();
+    } catch (err: any) {
+      setCreateAdminError(err?.message || 'No se pudo crear el admin');
+    } finally {
+      setIsCreatingAdmin(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -321,10 +426,21 @@ export default function CreatorUsers() {
     <div>
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Usuarios</h1>
-        <p className="mt-2 text-gray-600">
-          Estadísticas y usuarios creados por ti
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Usuarios</h1>
+            <p className="mt-2 text-gray-600">
+              Estadísticas y usuarios creados por ti
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreateAdmin(true)}
+            className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Crear Usuario
+          </button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -510,6 +626,125 @@ export default function CreatorUsers() {
         </div>
       </div>
 
+      {/* Modal Crear Admin */}
+      {showCreateAdmin && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Crear Admin</h3>
+              <button
+                onClick={() => {
+                  resetCreateAdmin();
+                  setShowCreateAdmin(false);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {createAdminError && (
+              <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                {createAdminError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateAdmin} className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Nombre"
+                  value={createAdminForm.firstName}
+                  onChange={(e) => setCreateAdminForm({ ...createAdminForm, firstName: e.target.value })}
+                  required
+                />
+                <input
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Apellido"
+                  value={createAdminForm.lastName}
+                  onChange={(e) => setCreateAdminForm({ ...createAdminForm, lastName: e.target.value })}
+                  required
+                />
+              </div>
+              <input
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Empresa"
+                value={createAdminForm.company}
+                onChange={(e) => setCreateAdminForm({ ...createAdminForm, company: e.target.value })}
+                required
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="País"
+                  value={createAdminForm.country}
+                  onChange={(e) => setCreateAdminForm({ ...createAdminForm, country: e.target.value })}
+                  required
+                />
+                <input
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Ciudad"
+                  value={createAdminForm.city}
+                  onChange={(e) => setCreateAdminForm({ ...createAdminForm, city: e.target.value })}
+                  required
+                />
+              </div>
+              <input
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Dirección"
+                value={createAdminForm.address}
+                onChange={(e) => setCreateAdminForm({ ...createAdminForm, address: e.target.value })}
+                required
+              />
+              <input
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Teléfono"
+                value={createAdminForm.phone}
+                onChange={(e) => setCreateAdminForm({ ...createAdminForm, phone: e.target.value })}
+                required
+              />
+              <input
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Email"
+                type="email"
+                value={createAdminForm.email}
+                onChange={(e) => setCreateAdminForm({ ...createAdminForm, email: e.target.value })}
+                required
+              />
+              <input
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Contraseña (mín. 8)"
+                type="password"
+                value={createAdminForm.password}
+                onChange={(e) => setCreateAdminForm({ ...createAdminForm, password: e.target.value })}
+                minLength={8}
+                required
+              />
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetCreateAdmin();
+                    setShowCreateAdmin(false);
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingAdmin}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {isCreatingAdmin ? 'Creando...' : 'Crear'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Métricas Detalladas */}
       {showUserDetails && userMetrics && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
@@ -520,8 +755,14 @@ export default function CreatorUsers() {
                   Métricas Detalladas - {showUserDetails.firstName} {showUserDetails.lastName}
                 </h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  {showUserDetails.email} • {showUserDetails.company}
+                  {showUserDetails.email} • @{showUserDetails.username || ''} • {showUserDetails.company}
                 </p>
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-500">
+                  <div><span className="font-medium text-gray-700">Teléfono:</span> {showUserDetails.phone || '-'}</div>
+                  <div><span className="font-medium text-gray-700">País:</span> {showUserDetails.country || '-'}</div>
+                  <div><span className="font-medium text-gray-700">Ciudad:</span> {showUserDetails.city || '-'}</div>
+                  <div className="sm:col-span-2"><span className="font-medium text-gray-700">Dirección:</span> {showUserDetails.address || '-'}</div>
+                </div>
               </div>
               <button
                 onClick={() => {

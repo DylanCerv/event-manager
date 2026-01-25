@@ -7,6 +7,7 @@ export interface Creator {
   password: string;
   phone: string;
   country: string;
+  city: string;
   status: 'active' | 'suspended';
   commissionPercentage: number;
   createdAt: string;

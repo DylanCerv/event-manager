@@ -116,3 +116,27 @@ export const deleteUserAPI = async (id: number): Promise<any> => {
     });
     return response.json();
 };
+
+/**
+ * Upload profile photo for current authenticated user
+ */
+export const uploadMyProfilePhotoAPI = async (file: File): Promise<any> => {
+    const token = sessionStorage.getItem('auth_token');
+    const form = new FormData();
+    form.append('file', file);
+
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/me/profile-photo`, {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: form,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data?.message || 'Error al subir la foto de perfil');
+    }
+    return data;
+};

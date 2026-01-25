@@ -35,6 +35,7 @@ export function CreateUserAccessModal({
 
   const [errors, setErrors] = React.useState<FormErrors>({});
   const [showPassword, setShowPassword] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   // Initialize form data when editing
   React.useEffect(() => {
@@ -110,8 +111,10 @@ export function CreateUserAccessModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!validateForm()) return;
 
+    setIsSubmitting(true);
     try {
       const role_id = formData.accessType === 'moderador' ? 4 : 3;
       const emailForModerator = role_id === 4 ? formData.username.trim() : undefined;
@@ -161,6 +164,8 @@ export function CreateUserAccessModal({
       }
     } catch (error: any) {
       setErrors({ submit: error?.message || 'Error al guardar acceso' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -189,7 +194,23 @@ export function CreateUserAccessModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+          {/* Autofill trap (keeps saved login credentials off visible inputs) */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: '-9999px',
+              top: '-9999px',
+              height: 0,
+              width: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <input tabIndex={-1} type="text" name="username" autoComplete="username" />
+            <input tabIndex={-1} type="password" name="password" autoComplete="current-password" />
+          </div>
+
           {errors.submit && (
             <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 flex items-start">
               <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -268,6 +289,8 @@ export function CreateUserAccessModal({
             </label>
             <input
               type={formData.accessType === 'moderador' ? 'email' : 'text'}
+              name="create_access_username"
+              autoComplete="off"
               value={formData.username}
               onChange={(e) => setFormData({ ...formData, username: e.target.value })}
               className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm ${
@@ -290,6 +313,8 @@ export function CreateUserAccessModal({
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="create_access_password"
+                autoComplete="new-password"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm pr-10 ${
@@ -327,10 +352,10 @@ export function CreateUserAccessModal({
             </button>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isSubmitting}
               className="inline-flex justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
-              {isLoading ? (editingUserAccess ? 'Actualizando...' : 'Creando...') : (editingUserAccess ? 'Actualizar' : 'Crear')}
+              {isSubmitting ? (editingUserAccess ? 'Actualizando...' : 'Creando...') : (editingUserAccess ? 'Actualizar' : 'Crear')}
             </button>
           </div>
         </form>

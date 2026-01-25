@@ -26,17 +26,24 @@ export default function Admin() {
   const [userGuests, setUserGuests] = React.useState<Guest[]>([]);
   // removed unused state
   // removed unused UI states
-  const [eventStatuses, setEventStatuses] = React.useState<Record<string, {
+  const [, setEventStatuses] = React.useState<Record<string, {
     qrAccessActive: boolean;
     isFinalized: boolean;
     guestCount: number;
   }>>({});
 
-  React.useEffect(() => {
-    fetchUserGuests();
-  }, [events]);
+  // Nota: esta página actualmente renderiza usando `event.qr_access_active` y `event.is_finalized`.
+  // La precarga de `eventStatuses` hace muchas peticiones y NO se usa en el UI.
+  const ENABLE_EVENT_STATUS_PREFETCH = false;
+
+  const eventsKey = React.useMemo(() => events.map(e => e.id).join('|'), [events]);
 
   React.useEffect(() => {
+    fetchUserGuests();
+  }, [eventsKey]);
+
+  React.useEffect(() => {
+    if (!ENABLE_EVENT_STATUS_PREFETCH) return;
     const loadEventStatuses = async () => {
       const statuses: Record<string, {
         qrAccessActive: boolean;
@@ -44,23 +51,25 @@ export default function Admin() {
         guestCount: number;
       }> = {};
 
-      for (const event of events) {
-        try {
-          const [accessSettings, finalization, eventGuests] = await Promise.all([
-            storage.getAccessSettings(event.id),
-            finalizationStorage.getEventFinalization(event.id),
-            storage.getGuests(event.id)
-          ]);
+      await Promise.all(
+        events.map(async (event) => {
+          try {
+            const [accessSettings, finalization, eventGuests] = await Promise.all([
+              storage.getAccessSettings(event.id),
+              finalizationStorage.getEventFinalization(event.id),
+              storage.getGuests(event.id),
+            ]);
 
-          statuses[event.id] = {
-            qrAccessActive: accessSettings?.is_active || false,
-            isFinalized: finalization?.is_finalized || false,
-            guestCount: eventGuests.length
-          };
-        } catch (error) {
-          console.error(`Error loading status for event ${event.id}:`, error);
-        }
-      }
+            statuses[event.id] = {
+              qrAccessActive: accessSettings?.is_active || false,
+              isFinalized: finalization?.is_finalized || false,
+              guestCount: eventGuests.length,
+            };
+          } catch (error) {
+            console.error(`Error loading status for event ${event.id}:`, error);
+          }
+        })
+      );
 
       setEventStatuses(statuses);
     };
@@ -68,9 +77,10 @@ export default function Admin() {
     if (events.length > 0) {
       loadEventStatuses();
     }
-  }, [events]);
+  }, [eventsKey]);
 
   React.useEffect(() => {
+    if (!ENABLE_EVENT_STATUS_PREFETCH) return;
     const handleStorageUpdate = async (evt: Event) => {
       const detail = (evt as any)?.detail as { type: string; eventId: string } | undefined;
       const eventId = detail?.eventId;
@@ -104,13 +114,8 @@ export default function Admin() {
       // For now, we'll keep using storage.getGuests since we don't have a specific API endpoint
       // to get all guests for all events at once. In a real implementation, we'd want to create
       // an endpoint that returns all guests for a user's events.
-      let allUserGuests: Guest[] = [];
-      
-      for (const event of events) {
-        const eventGuests = await storage.getGuests(event.id);
-        allUserGuests = [...allUserGuests, ...eventGuests];
-      }
-      
+      const guestLists = await Promise.all(events.map((event) => storage.getGuests(event.id)));
+      const allUserGuests = guestLists.flat();
       setUserGuests(allUserGuests);
     } catch (error) {
       console.error('Error fetching user guests:', error);
@@ -228,7 +233,7 @@ export default function Admin() {
       <div className="px-4 py-6 sm:px-0">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Gestión de Eventos</h1>
         
-        <AdminStats events={events} guests={userGuests} />
+        <AdminStats />
         
         <div className="space-y-6">
           <div className="bg-white shadow sm:rounded-lg">

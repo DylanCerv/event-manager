@@ -264,14 +264,22 @@ export function Roles() {
     }
 
     try {
-      setUserAccesses(prev => prev.map((access: any) => 
-        String(access.id) === String(userAccessId)
-          ? { ...access, assignedEvents: (access.assignedEvents || []).filter((id: string) => id !== eventId) }
-          : access
-      ));
+      setIsLoading(true);
+      await fetch(`${import.meta.env.VITE_API_URL}/access-control/assignments/${userAccessId}/${eventId}`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      // Reconsult to refresh UI (assignments + derived userAccesses)
+      await loadAccessControlAssignments();
     } catch (error) {
       console.error('Error revoking event:', error);
       alert('Error al quitar el acceso al evento');
+    } finally {
+      setIsLoading(false);
     }
   };
 

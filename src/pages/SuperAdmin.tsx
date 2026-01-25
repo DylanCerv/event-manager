@@ -84,6 +84,7 @@ export function SuperAdmin() {
       setAllUsers((data.users || []) as any);
       setCreatorNames((data.creatorNames || {}) as any);
 
+      console.log('data', data);
       if (data.userStats) setUserStats(data.userStats);
       if (data.eventStats) setEventStats(data.eventStats);
       if (data.eventBookStats) setEventBookStats(data.eventBookStats);
@@ -197,8 +198,17 @@ export function SuperAdmin() {
   };
 
   const getEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    return allEvents.filter(event => event.date.split('T')[0] === dateStr);
+    const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+      date.getDate()
+    ).padStart(2, '0')}`;
+    return allEvents.filter((event) => {
+      const eventDate = new Date(event.date);
+      if (Number.isNaN(eventDate.getTime())) return false;
+      const eventKey = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(
+        eventDate.getDate()
+      ).padStart(2, '0')}`;
+      return eventKey === dayKey;
+    });
   };
 
   const getUserById = (userId: string) => {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Camera, Upload } from 'lucide-react';
+import { uploadMyProfilePhotoAPI } from '../endpoints/user';
 
 interface PhotoUploadModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface PhotoUploadModalProps {
 export function PhotoUploadModal({ isOpen, onClose, onPhotoUpdate, currentPhoto }: PhotoUploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   if (!isOpen) return null;
 
@@ -23,18 +25,31 @@ export function PhotoUploadModal({ isOpen, onClose, onPhotoUpdate, currentPhoto 
     }
   };
 
-  const handleSave = () => {
-    if (previewUrl) {
-      onPhotoUpdate(previewUrl);
+  const handleSave = async () => {
+    if (!selectedFile) return;
+    setIsUploading(true);
+    try {
+      const resp = await uploadMyProfilePhotoAPI(selectedFile);
+      const url = String(resp?.data?.profile_photo || '');
+      if (!url) {
+        throw new Error('No se pudo obtener la URL de la foto');
+      }
+      onPhotoUpdate(url);
       onClose();
       setSelectedFile(null);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
+    } catch (e: any) {
+      alert(e?.message || 'Error al subir la foto de perfil');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleClose = () => {
     onClose();
     setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
   };
 
@@ -103,17 +118,18 @@ export function PhotoUploadModal({ isOpen, onClose, onPhotoUpdate, currentPhoto 
           <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
             <button
               onClick={handleSave}
-              disabled={!selectedFile}
+              disabled={!selectedFile || isUploading}
               className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm transition-colors ${
-                selectedFile
+                selectedFile && !isUploading
                   ? 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'
                   : 'bg-gray-300 cursor-not-allowed'
               }`}
             >
-              Guardar
+              {isUploading ? 'Subiendo...' : 'Guardar'}
             </button>
             <button
               onClick={handleClose}
+              disabled={isUploading}
               className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm transition-colors"
             >
               Cancelar

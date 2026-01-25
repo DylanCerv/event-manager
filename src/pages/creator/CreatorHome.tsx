@@ -303,12 +303,21 @@ export default function CreatorHome() {
     
     // Filter events created by creator's users for this specific date
     return events.filter(event => {
-      const eventDate = new Date(event.date);
       const isCreatorUserEvent = creatorUsers.some(u => String(u.id) === String(event.created_by));
-      return isCreatorUserEvent && 
-             eventDate.getDate() === date.getDate() &&
-             eventDate.getMonth() === date.getMonth() &&
-             eventDate.getFullYear() === date.getFullYear();
+      if (!isCreatorUserEvent) return false;
+
+      const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+        date.getDate()
+      ).padStart(2, '0')}`;
+
+      const eventDate = new Date(event.date);
+      if (Number.isNaN(eventDate.getTime())) return false;
+
+      const eventKey = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(
+        eventDate.getDate()
+      ).padStart(2, '0')}`;
+
+      return eventKey === dayKey;
     });
   };
 

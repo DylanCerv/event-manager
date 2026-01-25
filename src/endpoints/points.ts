@@ -31,6 +31,8 @@ export const getPointTransactionsAPI = async (userId: string): Promise<any> => {
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      // No mostrar overlay global para este fetch (se usa en navbar/dropdown)
+      'X-Silent-Loading': '1',
       ...getAuthHeaders(),
     },
   });

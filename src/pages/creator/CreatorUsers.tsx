@@ -649,7 +649,23 @@ export default function CreatorUsers() {
               </div>
             )}
 
-            <form onSubmit={handleCreateAdmin} className="space-y-3">
+            <form onSubmit={handleCreateAdmin} className="space-y-3" autoComplete="off">
+              {/* Autofill trap (keeps saved login credentials off visible inputs) */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: '-9999px',
+                  top: '-9999px',
+                  height: 0,
+                  width: 0,
+                  overflow: 'hidden',
+                }}
+              >
+                <input tabIndex={-1} type="text" name="username" autoComplete="username" />
+                <input tabIndex={-1} type="password" name="password" autoComplete="current-password" />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <input
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -707,6 +723,8 @@ export default function CreatorUsers() {
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 placeholder="Email"
                 type="email"
+                name="create_admin_email"
+                autoComplete="off"
                 value={createAdminForm.email}
                 onChange={(e) => setCreateAdminForm({ ...createAdminForm, email: e.target.value })}
                 required
@@ -715,6 +733,8 @@ export default function CreatorUsers() {
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                 placeholder="Contraseña (mín. 8)"
                 type="password"
+                name="create_admin_password"
+                autoComplete="new-password"
                 value={createAdminForm.password}
                 onChange={(e) => setCreateAdminForm({ ...createAdminForm, password: e.target.value })}
                 minLength={8}

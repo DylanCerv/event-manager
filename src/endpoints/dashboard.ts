@@ -29,8 +29,28 @@ export const getCreatorDashboardAPI = async (): Promise<any> => {
   return json;
 };
 
+export const getAdminDashboardAPI = async (): Promise<any> => {
+  const res = await fetch(`${API_BASE}/dashboard/admin`, {
+    method: 'GET',
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((json as any)?.message || 'Error loading admin dashboard');
+  return json;
+};
+
 export const getCreatorEventConfigAPI = async (eventId: string | number): Promise<any> => {
   const res = await fetch(`${API_BASE}/dashboard/creator/events/${encodeURIComponent(String(eventId))}/config`, {
+    method: 'GET',
+    headers: { Accept: 'application/json', ...getAuthHeaders() },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((json as any)?.message || 'Error loading event config');
+  return json;
+};
+
+export const getAdminEventConfigAPI = async (eventId: string | number): Promise<any> => {
+  const res = await fetch(`${API_BASE}/dashboard/admin/events/${encodeURIComponent(String(eventId))}/config`, {
     method: 'GET',
     headers: { Accept: 'application/json', ...getAuthHeaders() },
   });

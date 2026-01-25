@@ -7,6 +7,9 @@ import {
 } from '../endpoints/boltEvent';
 import type { Event } from '../types/event';
 
+let eventsFetchInFlight: Promise<void> | null = null;
+let eventsFetchInFlightStartedAt = 0;
+
 // Define the shape of our context
 interface EventContextType {
     events: Event[];
@@ -81,41 +84,57 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [events, setEvents] = useState<Event[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
-    const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+    const lastFetchTimeRef = React.useRef<number>(0);
 
     // Fetch all events
     const fetchEvents = useCallback(async (force = false) => {
-        // Only fetch if it's been more than 30 seconds since last fetch
         const now = Date.now();
-        if (!force && lastFetchTime > 0 && now - lastFetchTime < 30000) {
+
+        // Deduplicate concurrent (and StrictMode double-mount) calls.
+        // If a fetch is already running, await it instead of starting another request.
+        if (!force && eventsFetchInFlight && now - eventsFetchInFlightStartedAt < 15000) {
+            return eventsFetchInFlight;
+        }
+
+        // Only fetch if it's been more than 30 seconds since last fetch
+        if (!force && lastFetchTimeRef.current > 0 && now - lastFetchTimeRef.current < 30000) {
             return; // Use cached data
         }
 
-        try {
-            setLoading(true);
-            setError(null);
+        const doFetch = async () => {
+            try {
+                setLoading(true);
+                setError(null);
 
-            const response = await getBoltEventsAPI({
-                queryParams: {
-                    include_requests: true
-                }
-            });
-            const apiEvents = response?.data || [];
+                const response = await getBoltEventsAPI({
+                    queryParams: {
+                        include_requests: true
+                    }
+                });
+                const apiEvents = response?.data || [];
 
-            // Map API response to local Event format
-            const mappedEvents = apiEvents.map(mapApiEventToLocal);
+                // Map API response to local Event format
+                const mappedEvents = apiEvents.map(mapApiEventToLocal);
 
-            setEvents(mappedEvents.sort((a: Event, b: Event) =>
-                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            ));
-            setLastFetchTime(now);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch events');
-            console.error('Error fetching events:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [lastFetchTime]);
+                setEvents(mappedEvents.sort((a: Event, b: Event) =>
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                ));
+                lastFetchTimeRef.current = Date.now();
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to fetch events');
+                console.error('Error fetching events:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        eventsFetchInFlightStartedAt = now;
+        eventsFetchInFlight = doFetch().finally(() => {
+            eventsFetchInFlight = null;
+        });
+
+        return eventsFetchInFlight;
+    }, []);
 
     // Force refresh events
     const refreshEvents = useCallback(async () => {

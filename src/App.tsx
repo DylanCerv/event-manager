@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UserProvider } from './contexts/UserContext';
 import { EventProvider } from './contexts/EventContext';
 import { Navigation } from './components/Navigation';
+import { GlobalLoadingOverlay } from './components/GlobalLoadingOverlay';
 import { Login } from './pages/Login';
 import { SuperAdmin } from './pages/SuperAdmin';
 import { Home } from './pages/Home';
@@ -96,6 +97,7 @@ function AppRoutes() {
   const { role } = useAuth();
   return (
     <div className="min-h-screen bg-gray-100">
+      <GlobalLoadingOverlay />
       {role?.name !== 'CREATOR' && <Navigation />}
       <Routes>
         <Route path="/" element={<Login />} />

@@ -154,7 +154,23 @@ export default function CreateCreatorModal({ isOpen, onClose }: CreateCreatorMod
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4" autoComplete="off">
+          {/* Autofill trap (keeps saved login credentials off visible inputs) */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              left: '-9999px',
+              top: '-9999px',
+              height: 0,
+              width: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <input tabIndex={-1} type="text" name="username" autoComplete="username" />
+            <input tabIndex={-1} type="password" name="password" autoComplete="current-password" />
+          </div>
+
           {errors.submit && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
               {errors.submit}
@@ -213,6 +229,8 @@ export default function CreateCreatorModal({ isOpen, onClose }: CreateCreatorMod
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="email"
+                name="create_creator_email"
+                autoComplete="off"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
                 className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
@@ -234,6 +252,8 @@ export default function CreateCreatorModal({ isOpen, onClose }: CreateCreatorMod
               <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
+                name="create_creator_username"
+                autoComplete="off"
                 value={formData.username}
                 onChange={(e) => handleInputChange('username', e.target.value)}
                 className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
@@ -255,6 +275,8 @@ export default function CreateCreatorModal({ isOpen, onClose }: CreateCreatorMod
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="create_creator_password"
+                autoComplete="new-password"
                 value={formData.password}
                 onChange={(e) => handleInputChange('password', e.target.value)}
                 className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${

@@ -73,9 +73,9 @@ export function UserProfileDropdown({ user, isOpen, onClose, onViewRewards, onCl
           {/* Header con foto y nombre */}
           <div className="flex items-center space-x-3 mb-4">
             <div className="flex-shrink-0">
-              {user.profilePhoto ? (
+              {user.profile_photo ? (
                 <img 
-                  src={user.profilePhoto} 
+                  src={user.profile_photo} 
                   alt="Perfil" 
                   className="h-12 w-12 rounded-full object-cover"
                 />

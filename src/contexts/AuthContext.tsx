@@ -11,7 +11,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateUserPhoto = (photoUrl: string) => {
     if (user) {
-      setUser({ ...user, profile_photo: photoUrl });
+      const nextUser = { ...user, profile_photo: photoUrl };
+      setUser(nextUser);
+      sessionStorage.setItem('user', JSON.stringify(nextUser));
     }
   };
 

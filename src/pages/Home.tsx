@@ -1,15 +1,11 @@
 import React from 'react';
-import { Calendar, Users, MapPin, Building2, Bell, ExternalLink, CalendarDays, Info, X, MessageSquare, Check, BookOpen, BarChart3, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Users, MapPin, Building2, Bell, ExternalLink, CalendarDays, Info, X, MessageSquare, Check, BookOpen, BarChart3, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { storage } from '../lib/storage';
-import { finalizationStorage } from '../lib/finalization-storage';
 import { communicationsStorage } from '../lib/communications-storage';
-import { eventBookStorage } from '../lib/eventbook-storage';
+import { getAdminDashboardAPI, getAdminEventConfigAPI } from '../endpoints/dashboard';
 import type { Event } from '../types/event';
 import type { Notification, SystemUpdate } from '../types/communications';
-import type { EventBook } from '../types/eventbook';
-import type { StoredUser } from '../types/user';
 
 export function Home() {
   const { user, role } = useAuth();
@@ -17,8 +13,8 @@ export function Home() {
   const [activeTab, setActiveTab] = React.useState<'statistics' | 'calendar'>('statistics');
   const [companyName, setCompanyName] = React.useState<string>('');
   const [events, setEvents] = React.useState<Event[]>([]);
-  const [allUsers, setAllUsers] = React.useState<StoredUser[]>([]);
-  const [stats, setStats] = React.useState({
+  const [allUsers, setAllUsers] = React.useState<any[]>([]);
+  const [, setStats] = React.useState({
     total: 0,
     active: 0,
     finalized: 0
@@ -52,24 +48,29 @@ export function Home() {
   const [selectedEvent, setSelectedEvent] = React.useState<Event | null>(null);
   const [eventConfigurations, setEventConfigurations] = React.useState<{
     has_card: boolean;
-    is_finalized: boolean;
+    has_finalization: boolean;
     has_eventbook: boolean;
   }>({
     has_card: false,
-    is_finalized: false,
+    has_finalization: false,
     has_eventbook: false
   });
   const [currentDate, setCurrentDate] = React.useState(new Date());
 
   React.useEffect(() => {
-    loadEvents();
     loadCompanyName();
-    loadWeeklyRequests();
     loadCommunications();
-    loadEventBookAlerts();
-    loadUsers();
-    loadRecentActivities();
+    if (role?.name === 'ADMIN') {
+      loadDashboard();
+    }
   }, []);
+
+  const toLocalDateKey = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
 
   const loadCompanyName = async () => {
     try {
@@ -83,12 +84,46 @@ export function Home() {
     }
   };
 
-  const loadUsers = async () => {
+  const loadDashboard = async () => {
     try {
-      const users = await storage.getUsers();
-      setAllUsers(users);
+      const res = await getAdminDashboardAPI();
+      const data = res?.data || {};
+
+      setEvents((data.events || []) as any);
+      setAllUsers((data.users || []) as any);
+
+      if (data.stats) setStats(data.stats);
+      if (data.reminders) setReminders(data.reminders);
+      if (data.eventBookAlerts) setEventBookAlerts(data.eventBookAlerts);
+
+      // Adapt requests -> weeklyRequests UI shape (only show up to 5)
+      const reqs = (data.requests || []) as any[];
+      const evs = (data.events || []) as any[];
+      const weekly = reqs
+        .slice(0, 20)
+        .map((r) => {
+          const ev = evs.find((e: any) => String(e.id) === String(r.event_id));
+          return {
+            eventName: ev?.name || 'Evento',
+            status: (r.status || 'pending') as 'pending' | 'approved' | 'rejected',
+            requestDate: r.created_at || new Date().toISOString(),
+          };
+        })
+        .slice(0, 5);
+      setWeeklyRequests(weekly);
+
+      // Recent activity (backend already returns correct order)
+      const activity = (data.recentActivity || []) as { text: string; timestamp: string }[];
+      const mapped = activity.map((a, idx) => ({
+        id: `activity-${idx}`,
+        type: 'login' as const,
+        description: a.text,
+        timestamp: a.timestamp,
+        icon: '📝',
+      }));
+      setRecentActivities(mapped);
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('Error loading admin dashboard:', error);
     }
   };
 
@@ -100,283 +135,24 @@ export function Home() {
       ]);
       setNotifications(activeNotifications);
       setSystemUpdates(activeUpdates);
-      
+
       // Verificar si hay contenido realmente nuevo
       const lastVisit = localStorage.getItem('lastCommunicationsVisit');
       const lastVisitDate = lastVisit ? new Date(lastVisit) : new Date(0);
-      
-      const newNotifications = activeNotifications.filter(n => 
+
+      const newNotifications = activeNotifications.filter(n =>
         new Date(n.createdAt) > lastVisitDate
       );
-      const newUpdates = activeUpdates.filter(u => 
+      const newUpdates = activeUpdates.filter(u =>
         new Date(u.createdAt) > lastVisitDate
       );
-      
+
       // Mostrar modal solo si hay contenido realmente nuevo
       if (newNotifications.length > 0 || newUpdates.length > 0) {
         setShowWelcomeModal(true);
       }
     } catch (error) {
       console.error('Error loading communications:', error);
-    }
-  };
-
-  const loadWeeklyRequests = async () => {
-    try {
-      const allRequests = await storage.getEventRequests();
-      const allEvents = await storage.getEvents();
-      
-      // Calculate date range for this week
-      const today = new Date();
-      const weekAgo = new Date();
-      weekAgo.setDate(today.getDate() - 7);
-      
-      // Filter requests from the last 7 days
-      const weeklyRequestsData = allRequests
-        .filter(request => {
-          const requestDate = new Date(request.created_at);
-          
-          // Para solicitudes pendientes y rechazadas: mostrar de los últimos 7 días
-          if (request.status === 'pending' || request.status === 'rejected') {
-            return requestDate >= weekAgo && requestDate <= today;
-          }
-          
-          // Para solicitudes aprobadas: solo mostrar por 7 días después de ser aprobadas
-          if (request.status === 'approved') {
-            const approvedDate = new Date(request.updated_at || request.created_at);
-            const sevenDaysAfterApproval = new Date(approvedDate);
-            sevenDaysAfterApproval.setDate(approvedDate.getDate() + 7);
-            return today <= sevenDaysAfterApproval;
-          }
-          
-          return false;
-        })
-        .filter(request => {
-          // Only include requests for events that still exist
-          const event = allEvents.find(e => e.id === request.event_id);
-          return event !== undefined;
-        })
-        .map(request => {
-          const event = allEvents.find(e => e.id === request.event_id);
-          return {
-            eventName: event!.name, // We know event exists due to filter above
-            status: request.status,
-            requestDate: request.created_at
-          };
-        })
-        .sort((a, b) => new Date(b.requestDate).getTime() - new Date(a.requestDate).getTime())
-        .slice(0, 5); // Limitar a máximo 5 solicitudes
-      
-      setWeeklyRequests(weeklyRequestsData);
-    } catch (error) {
-      console.error('Error loading weekly requests:', error);
-    }
-  };
-
-  const loadEvents = async () => {
-    try {
-      const allEvents = await storage.getEvents();
-      setEvents(allEvents);
-
-      let activeCount = 0;
-      let finalizedCount = 0;
-      let eventsThisWeek = 0;
-      let eventsWithoutCards = 0;
-      let eventsWithoutFinalization = 0;
-
-      // Calculate date range for this week
-      const today = new Date();
-      const nextWeek = new Date();
-      nextWeek.setDate(today.getDate() + 7);
-
-      for (const event of allEvents) {
-        // Check if event is this week
-        const eventDate = new Date(event.date);
-        if (eventDate >= today && eventDate <= nextWeek) {
-          eventsThisWeek++;
-        }
-
-        // Check if event has invitation card
-        try {
-          const eventCard = await storage.getEventCard(event.id);
-          if (!eventCard) {
-            eventsWithoutCards++;
-          }
-        } catch (error) {
-          eventsWithoutCards++;
-        }
-
-        // Check finalization status
-        const finalization = await finalizationStorage.getEventFinalization(event.id);
-        if (finalization?.is_finalized) {
-          finalizedCount++;
-        } else {
-          activeCount++;
-          eventsWithoutFinalization++;
-        }
-      }
-
-      setStats({
-        total: allEvents.length,
-        active: activeCount,
-        finalized: finalizedCount
-      });
-
-      setReminders({
-        eventsThisWeek,
-        eventsWithoutCards,
-        eventsWithoutFinalization
-      });
-    } catch (error) {
-      console.error('Error loading events:', error);
-    }
-  };
-
-  const loadRecentActivities = async () => {
-    try {
-      const activities = [];
-      
-      // Obtener eventos reales del usuario actual
-      const userEvents = await storage.getEvents();
-      for (const event of userEvents) {
-        activities.push({
-          id: 'event-' + event.id,
-          type: 'event_created' as const,
-          description: `Evento creado: ${event.name}`,
-          timestamp: event.created_at,
-          icon: '📅'
-        });
-      }
-
-      // Obtener EventBooks reales del usuario actual
-      try {
-        const eventBooks = await eventBookStorage.getEventBooksByUser();
-        for (const eventBook of eventBooks) {
-          // Verificar que tenga los campos necesarios
-          if (eventBook && eventBook.id) {
-            activities.push({
-              id: 'eventbook-' + eventBook.id,
-              type: 'eventbook_created' as const,
-              description: `EventBook creado: ${eventBook.title || eventBook.name || 'Sin título'}`,
-              timestamp: eventBook.created_at || eventBook.createdAt || new Date().toISOString(),
-              icon: '📖'
-            });
-          }
-        }
-      } catch (error) {
-        console.log('EventBooks not available:', error);
-      }
-
-      // Obtener tarjetas interactivas reales
-      for (const event of userEvents) {
-        try {
-          const eventCard = await storage.getEventCard(event.id);
-          if (eventCard) {
-            activities.push({
-              id: 'card-' + eventCard.id,
-              type: 'card_created' as const,
-              description: `Tarjeta interactiva creada para: ${event.name}`,
-              timestamp: eventCard.created_at,
-              icon: '🎨'
-            });
-          }
-        } catch (error) {
-          // Tarjeta no existe para este evento
-        }
-      }
-
-      // Obtener finalizaciones reales
-      for (const event of userEvents) {
-        try {
-          const finalization = await finalizationStorage.getEventFinalization(event.id);
-          if (finalization) {
-            activities.push({
-              id: 'finalization-' + event.id,
-              type: 'finalization_created' as const,
-              description: `Finalización creada para: ${event.name}`,
-              timestamp: finalization.created_at || event.created_at,
-              icon: '✅'
-            });
-          }
-        } catch (error) {
-          // Finalización no existe para este evento
-        }
-      }
-
-      // Obtener configuraciones de acceso QR reales
-      for (const event of userEvents) {
-        try {
-          const accessSettings = await storage.getAccessSettings(event.id);
-          if (accessSettings) {
-            activities.push({
-              id: 'access-' + event.id,
-              type: 'access_control' as const,
-              description: `Control de acceso QR configurado para: ${event.name}`,
-              timestamp: accessSettings.created_at || event.created_at,
-              icon: '🔐'
-            });
-          }
-        } catch (error) {
-          // Configuración de acceso no existe
-        }
-      }
-
-      // Ordenar por timestamp descendente y tomar las 5 más recientes
-      const sortedActivities = activities
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 5);
-
-      setRecentActivities(sortedActivities);
-    } catch (error) {
-      console.error('Error loading recent activities:', error);
-    }
-  };
-
-  const loadEventBookAlerts = async () => {
-    try {
-      const eventBooks = await eventBookStorage.getEventBooksByUser();
-      const allEvents = await storage.getEvents();
-      const today = new Date();
-      
-      let eventsWithoutEventBook = 0;
-      let withoutConfig = 0;
-      let closingSoon = 0;
-      
-      // Calcular eventos sin EventBook asociado
-      for (const event of allEvents) {
-        const hasEventBook = eventBooks.some(eb => eb.event_id === event.id);
-        if (!hasEventBook) {
-          eventsWithoutEventBook++;
-        }
-      }
-      
-      for (const eventBook of eventBooks) {
-        // EventBooks sin configuración completa
-        if (!eventBook.settings?.isConfigured) {
-          withoutConfig++;
-        }
-        
-        // EventBooks próximos a cerrar (dentro de una semana)
-        if (eventBook.settings?.visibility?.closeDate) {
-          const closeDate = new Date(eventBook.settings.visibility.closeDate);
-          const daysUntilClose = Math.ceil((closeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysUntilClose <= 7 && daysUntilClose > 0) {
-            closingSoon++;
-          }
-        }
-      }
-      
-      setEventBookAlerts({
-        eventsWithoutEventBook,
-        withoutConfig,
-        closingSoon,
-        totalVsActive: {
-          total: eventBooks.length,
-          active: eventBooks.filter(eb => eb.isActive).length
-        }
-      });
-    } catch (error) {
-      console.error('Error loading EventBook alerts:', error);
     }
   };
 
@@ -390,30 +166,29 @@ export function Home() {
   };
 
   const getEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    return events.filter(event => event.date.split('T')[0] === dateStr);
+    const dayKey = toLocalDateKey(date);
+    return events.filter((event) => {
+      const eventDate = new Date(event.date);
+      if (Number.isNaN(eventDate.getTime())) return false;
+      return toLocalDateKey(eventDate) === dayKey;
+    });
   };
 
   const loadEventConfigurations = async (event: Event) => {
     try {
-      const [eventCard, finalization, eventBooks] = await Promise.all([
-        storage.getEventCard(event.id).catch(() => null),
-        finalizationStorage.getEventFinalization(event.id).catch(() => null),
-        eventBookStorage.getEventBooksByUser().catch(() => [])
-      ]);
-
-      const hasEventBook = eventBooks.some((eb: any) => eb.event_id === event.id);
+      const res = await getAdminEventConfigAPI(event.id);
+      const d = res?.data || {};
 
       setEventConfigurations({
-        has_card: !!eventCard,
-        is_finalized: !!finalization?.is_finalized,
-        has_eventbook: hasEventBook
+        has_card: Boolean(d.hasCard),
+        has_finalization: Boolean(d.hasFinalization),
+        has_eventbook: Boolean(d.hasEventBook)
       });
     } catch (error) {
       console.error('Error loading event configurations:', error);
       setEventConfigurations({
         has_card: false,
-        is_finalized: false,
+        has_finalization: false,
         has_eventbook: false
       });
     }
@@ -455,13 +230,11 @@ export function Home() {
       days.push(
         <div
           key={day}
-          className={`h-32 border border-gray-200 p-2 overflow-hidden ${
-            isToday ? 'bg-blue-50 border-blue-300' : 'bg-white hover:bg-gray-50'
-          }`}
+          className={`h-32 border border-gray-200 p-2 overflow-hidden ${isToday ? 'bg-blue-50 border-blue-300' : 'bg-white hover:bg-gray-50'
+            }`}
         >
-          <div className={`text-sm font-medium mb-1 ${
-            isToday ? 'text-blue-600' : 'text-gray-900'
-          }`}>
+          <div className={`text-sm font-medium mb-1 ${isToday ? 'text-blue-600' : 'text-gray-900'
+            }`}>
             {day}
           </div>
           <div className="space-y-1">
@@ -509,13 +282,13 @@ export function Home() {
                 <X className="h-6 w-6" />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-1">Nombre del Evento</h4>
                 <p className="text-sm text-gray-900">{selectedEvent.name}</p>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 mb-1">Fecha</h4>
@@ -528,7 +301,7 @@ export function Home() {
                     })}
                   </p>
                 </div>
-                
+
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 mb-1">Invitados</h4>
                   <div className="flex items-center">
@@ -537,7 +310,7 @@ export function Home() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 mb-1">Ubicación</h4>
@@ -546,13 +319,13 @@ export function Home() {
                     <p className="text-sm text-gray-900">{selectedEvent.location}</p>
                   </div>
                 </div>
-                
+
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 mb-1">Contratista</h4>
                   <p className="text-sm text-gray-900">{selectedEvent.contractor_name}</p>
                 </div>
               </div>
-              
+
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-1">Empresa</h4>
                 <div className="flex items-center">
@@ -562,7 +335,7 @@ export function Home() {
                   </p>
                 </div>
               </div>
-              
+
               {/* Estado de Configuraciones */}
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3">Estado de Configuraciones</h4>
@@ -572,33 +345,38 @@ export function Home() {
                       <MessageSquare className="h-4 w-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-600">Tarjeta de Invitación</span>
                     </div>
-                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all duration-200 hover:scale-105 ${
-                      eventConfigurations.has_card ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-white' : 'bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700'
-                    }`}>
+                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all duration-200 hover:scale-105 ${eventConfigurations.has_card ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-white' : 'bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700'
+                      }`}>
                       {eventConfigurations.has_card ? '✓ Creada' : '✗ No creada'}
                     </span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <Check className="h-4 w-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-600">Finalización</span>
                     </div>
-                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all duration-200 hover:scale-105 ${
-                      eventConfigurations.is_finalized ? 'bg-gradient-to-r from-purple-400 to-violet-500 text-white' : 'bg-gradient-to-r from-orange-300 to-amber-400 text-orange-800'
-                    }`}>
-                      {eventConfigurations.is_finalized ? '✓ Finalizado' : '⏳ Pendiente'}
+                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all duration-200 hover:scale-105 ${eventConfigurations.has_finalization
+                        ? 'bg-gradient-to-r from-purple-400 to-violet-500 text-white'
+                        : selectedEvent.is_finalized
+                          ? 'bg-gradient-to-r from-orange-300 to-amber-400 text-orange-800'
+                          : 'bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700'
+                      }`}>
+                      {eventConfigurations.has_finalization
+                        ? '✓ Creada'
+                        : selectedEvent.is_finalized
+                          ? '⏳ Pendiente'
+                          : '— No aplica'}
                     </span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <BookOpen className="h-4 w-4 text-gray-400 mr-2" />
                       <span className="text-sm text-gray-600">EventBook</span>
                     </div>
-                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all duration-200 hover:scale-105 ${
-                      eventConfigurations.has_eventbook ? 'bg-gradient-to-r from-blue-400 to-cyan-500 text-white' : 'bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700'
-                    }`}>
+                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all duration-200 hover:scale-105 ${eventConfigurations.has_eventbook ? 'bg-gradient-to-r from-blue-400 to-cyan-500 text-white' : 'bg-gradient-to-r from-gray-300 to-gray-400 text-gray-700'
+                      }`}>
                       {eventConfigurations.has_eventbook ? '✓ Creado' : '✗ No creado'}
                     </span>
                   </div>
@@ -618,10 +396,10 @@ export function Home() {
                 <Bell className="h-6 w-6 text-indigo-600" />
               </div>
             </div>
-            
+
             <div className="text-center">
               <h3 className="text-lg font-medium text-gray-900 mb-4">¡Tienes contenido nuevo!</h3>
-              
+
               <div className="space-y-3 mb-6">
                 {notifications.length > 0 && (
                   <div className="flex items-center justify-between bg-blue-50 rounded-lg p-3">
@@ -634,7 +412,7 @@ export function Home() {
                     </span>
                   </div>
                 )}
-                
+
                 {systemUpdates.length > 0 && (
                   <div className="flex items-center justify-between bg-green-50 rounded-lg p-3">
                     <div className="flex items-center">
@@ -647,7 +425,7 @@ export function Home() {
                   </div>
                 )}
               </div>
-              
+
               <div className="flex space-x-3">
                 <button
                   onClick={() => {
@@ -678,7 +456,7 @@ export function Home() {
           </div>
         </div>
       )}
-      
+
       <div className="px-4 py-6 sm:px-0">
         {/* Welcome Section */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
@@ -707,11 +485,10 @@ export function Home() {
             <nav className="-mb-px flex space-x-8 px-6">
               <button
                 onClick={() => setActiveTab('statistics')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'statistics'
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'statistics'
                     ? 'border-indigo-500 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                  }`}
               >
                 <div className="flex items-center">
                   <BarChart3 className="h-5 w-5 mr-2" />
@@ -720,11 +497,10 @@ export function Home() {
               </button>
               <button
                 onClick={() => setActiveTab('calendar')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'calendar'
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'calendar'
                     ? 'border-indigo-500 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
+                  }`}
               >
                 <div className="flex items-center">
                   <CalendarDays className="h-5 w-5 mr-2" />
@@ -741,74 +517,71 @@ export function Home() {
                 {/* Fila 1: Recordatorios Importantes / Alertas de EventBooks */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Recordatorios Importantes */}
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="px-6 py-6">
-              <h2 className="text-xl font-medium text-gray-900 mb-6">Recordatorios Importantes</h2>
-              <div className="space-y-4">
-                <div className={`p-4 rounded-lg border ${
-                  reminders.eventsThisWeek > 0 
-                    ? 'bg-amber-50 border-amber-100' 
-                    : 'bg-green-50 border-green-100'
-                }`}>
-                  <div className="flex items-start">
-                    {reminders.eventsThisWeek > 0 ? (
-                      <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
-                    ) : (
-                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
-                    )}
-                    <div className="ml-3">
-                      <h3 className={`text-sm font-medium ${
-                        reminders.eventsThisWeek > 0 ? 'text-amber-800' : 'text-green-800'
-                      }`}>
-                        {reminders.eventsThisWeek > 0 ? 'Eventos esta semana' : 'Sin eventos esta semana'}
-                      </h3>
-                      <p className={`text-sm mt-1 ${
-                        reminders.eventsThisWeek > 0 ? 'text-amber-700' : 'text-green-700'
-                      }`}>
-                        {reminders.eventsThisWeek > 0 
-                          ? `Tienes ${reminders.eventsThisWeek} eventos programados para esta semana.`
-                          : 'No hay eventos programados para esta semana.'
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                  <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                    <div className="px-6 py-6">
+                      <h2 className="text-xl font-medium text-gray-900 mb-6">Recordatorios Importantes</h2>
+                      <div className="space-y-4">
+                        <div className={`p-4 rounded-lg border ${reminders.eventsThisWeek > 0
+                            ? 'bg-amber-50 border-amber-100'
+                            : 'bg-green-50 border-green-100'
+                          }`}>
+                          <div className="flex items-start">
+                            {reminders.eventsThisWeek > 0 ? (
+                              <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+                            ) : (
+                              <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                            )}
+                            <div className="ml-3">
+                              <h3 className={`text-sm font-medium ${reminders.eventsThisWeek > 0 ? 'text-amber-800' : 'text-green-800'
+                                }`}>
+                                {reminders.eventsThisWeek > 0 ? 'Eventos esta semana' : 'Sin eventos esta semana'}
+                              </h3>
+                              <p className={`text-sm mt-1 ${reminders.eventsThisWeek > 0 ? 'text-amber-700' : 'text-green-700'
+                                }`}>
+                                {reminders.eventsThisWeek > 0
+                                  ? `Tienes ${reminders.eventsThisWeek} eventos programados para esta semana.`
+                                  : 'No hay eventos programados para esta semana.'
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        </div>
 
-                <div className="p-4 bg-red-50 rounded-lg border border-red-100">
-                  <div className="flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-red-800">Tarjetas de invitación pendientes</h3>
-                      <p className="text-sm text-red-700 mt-1">
-                        {reminders.eventsWithoutCards} eventos no tienen tarjeta de invitación.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                        <div className="p-4 bg-red-50 rounded-lg border border-red-100">
+                          <div className="flex items-start">
+                            <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
+                            <div className="ml-3">
+                              <h3 className="text-sm font-medium text-red-800">Tarjetas de invitación pendientes</h3>
+                              <p className="text-sm text-red-700 mt-1">
+                                {reminders.eventsWithoutCards} eventos no tienen tarjeta de invitación.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
 
-                <div className="p-4 bg-red-50 rounded-lg border border-red-100">
-                  <div className="flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-red-800">Finalización pendiente</h3>
-                      <p className="text-sm text-red-700 mt-1">
-                        {reminders.eventsWithoutFinalization} eventos no tienen tarjeta de finalización.
-                      </p>
+                        <div className="p-4 bg-red-50 rounded-lg border border-red-100">
+                          <div className="flex items-start">
+                            <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
+                            <div className="ml-3">
+                              <h3 className="text-sm font-medium text-red-800">Finalización pendiente</h3>
+                              <p className="text-sm text-red-700 mt-1">
+                                {reminders.eventsWithoutFinalization} eventos no tienen tarjeta de finalización.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-4 border-t border-gray-200 text-center">
+                        <Link
+                          to="/events"
+                          className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500 font-medium"
+                        >
+                          Ver todos los eventos
+                          <ExternalLink className="h-4 w-4 ml-1" />
+                        </Link>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-              <div className="pt-4 border-t border-gray-200 text-center">
-                <Link
-                  to="/events"
-                  className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500 font-medium"
-                >
-                  Ver todos los eventos
-                  <ExternalLink className="h-4 w-4 ml-1" />
-                </Link>
-              </div>
-            </div>
-          </div>
 
                   {/* Alertas de EventBooks */}
                   <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -822,7 +595,7 @@ export function Home() {
                             <div className="ml-3">
                               <h3 className="text-sm font-medium text-blue-800">EventBooks: Total vs Activos</h3>
                               <p className="text-sm text-blue-700 mt-1">
-                                {eventBookAlerts.totalVsActive.total} EventBooks creados, {eventBookAlerts.totalVsActive.active} activos 
+                                {eventBookAlerts.totalVsActive.total} EventBooks creados, {eventBookAlerts.totalVsActive.active} activos
                                 ({eventBookAlerts.totalVsActive.total > 0 ? Math.round((eventBookAlerts.totalVsActive.active / eventBookAlerts.totalVsActive.total) * 100) : 0}% activación)
                               </p>
                             </div>
@@ -830,11 +603,10 @@ export function Home() {
                         </div>
 
                         {/* Eventos sin EventBook */}
-                        <div className={`p-4 rounded-lg border ${
-                          eventBookAlerts.eventsWithoutEventBook > 0 
-                            ? 'bg-red-50 border-red-100' 
+                        <div className={`p-4 rounded-lg border ${eventBookAlerts.eventsWithoutEventBook > 0
+                            ? 'bg-red-50 border-red-100'
                             : 'bg-green-50 border-green-100'
-                        }`}>
+                          }`}>
                           <div className="flex items-start">
                             {eventBookAlerts.eventsWithoutEventBook > 0 ? (
                               <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
@@ -842,15 +614,13 @@ export function Home() {
                               <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
                             )}
                             <div className="ml-3">
-                              <h3 className={`text-sm font-medium ${
-                                eventBookAlerts.eventsWithoutEventBook > 0 ? 'text-red-800' : 'text-green-800'
-                              }`}>
+                              <h3 className={`text-sm font-medium ${eventBookAlerts.eventsWithoutEventBook > 0 ? 'text-red-800' : 'text-green-800'
+                                }`}>
                                 Eventos sin EventBook
                               </h3>
-                              <p className={`text-sm mt-1 ${
-                                eventBookAlerts.eventsWithoutEventBook > 0 ? 'text-red-700' : 'text-green-700'
-                              }`}>
-                                {eventBookAlerts.eventsWithoutEventBook > 0 
+                              <p className={`text-sm mt-1 ${eventBookAlerts.eventsWithoutEventBook > 0 ? 'text-red-700' : 'text-green-700'
+                                }`}>
+                                {eventBookAlerts.eventsWithoutEventBook > 0
                                   ? `${eventBookAlerts.eventsWithoutEventBook} eventos no tienen EventBook asociado.`
                                   : 'Todos los eventos tienen su EventBook asociado.'
                                 }
@@ -860,11 +630,10 @@ export function Home() {
                         </div>
 
                         {/* EventBooks próximos a cerrar */}
-                        <div className={`p-4 rounded-lg border ${
-                          eventBookAlerts.closingSoon > 0 
-                            ? 'bg-amber-50 border-amber-100' 
+                        <div className={`p-4 rounded-lg border ${eventBookAlerts.closingSoon > 0
+                            ? 'bg-amber-50 border-amber-100'
                             : 'bg-green-50 border-green-100'
-                        }`}>
+                          }`}>
                           <div className="flex items-start">
                             {eventBookAlerts.closingSoon > 0 ? (
                               <Clock className="h-5 w-5 text-amber-500 mt-0.5" />
@@ -872,15 +641,13 @@ export function Home() {
                               <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
                             )}
                             <div className="ml-3">
-                              <h3 className={`text-sm font-medium ${
-                                eventBookAlerts.closingSoon > 0 ? 'text-amber-800' : 'text-green-800'
-                              }`}>
+                              <h3 className={`text-sm font-medium ${eventBookAlerts.closingSoon > 0 ? 'text-amber-800' : 'text-green-800'
+                                }`}>
                                 EventBooks próximos a cerrar
                               </h3>
-                              <p className={`text-sm mt-1 ${
-                                eventBookAlerts.closingSoon > 0 ? 'text-amber-700' : 'text-green-700'
-                              }`}>
-                                {eventBookAlerts.closingSoon > 0 
+                              <p className={`text-sm mt-1 ${eventBookAlerts.closingSoon > 0 ? 'text-amber-700' : 'text-green-700'
+                                }`}>
+                                {eventBookAlerts.closingSoon > 0
                                   ? `${eventBookAlerts.closingSoon} EventBooks cerrarán en los próximos 7 días.`
                                   : 'No hay EventBooks próximos a cerrar.'
                                 }
@@ -905,67 +672,65 @@ export function Home() {
                 {/* Fila 2: Solicitudes Pendientes / Layout Nuevo */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Solicitudes Pendientes */}
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-            <div className="px-6 py-6">
-              <h2 className="text-xl font-medium text-gray-900 mb-6">Solicitudes Pendientes</h2>
-              {weeklyRequests.length > 0 ? (
-                <div className="space-y-3">
-                  {weeklyRequests.map((request, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="flex items-center space-x-3">
-                        <Bell className={`h-5 w-5 ${
-                          request.status === 'pending' ? 'text-amber-500' : 
-                          request.status === 'approved' ? 'text-green-500' : 'text-red-500'
-                        }`} />
-                        <div>
-                          <span className="text-sm font-medium text-gray-900">{request.eventName}</span>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {new Date(request.requestDate).toLocaleDateString('es-ES', {
-                              day: 'numeric',
-                              month: 'short'
-                            })}
-                          </p>
+                  <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                    <div className="px-6 py-6">
+                      <h2 className="text-xl font-medium text-gray-900 mb-6">Solicitudes Pendientes</h2>
+                      {weeklyRequests.length > 0 ? (
+                        <div className="space-y-3">
+                          {weeklyRequests.filter(request => request.status === 'pending').map((request, index) => (
+                            <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                              <div className="flex items-center space-x-3">
+                                <Bell className={`h-5 w-5 ${request.status === 'pending' ? 'text-amber-500' :
+                                    request.status === 'approved' ? 'text-green-500' : 'text-red-500'
+                                  }`} />
+                                <div>
+                                  <span className="text-sm font-medium text-gray-900">{request.eventName}</span>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    {new Date(request.requestDate).toLocaleDateString('es-ES', {
+                                      day: 'numeric',
+                                      month: 'short'
+                                    })}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${request.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : request.status === 'approved'
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                {request.status === 'pending' ? 'Solicitud pendiente' :
+                                  request.status === 'approved' ? 'Solicitud aprobada' : 'Solicitud rechazada'}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="pt-4 border-t border-gray-200">
+                            <Link
+                              to="/requests"
+                              className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500 font-medium"
+                            >
+                              Ver todas las solicitudes
+                              <ExternalLink className="h-4 w-4 ml-1" />
+                            </Link>
+                          </div>
                         </div>
-                      </div>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        request.status === 'pending' 
-                          ? 'bg-amber-100 text-amber-800' 
-                          : request.status === 'approved'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {request.status === 'pending' ? 'Solicitud pendiente' :
-                         request.status === 'approved' ? 'Solicitud aprobada' : 'Solicitud rechazada'}
-                      </span>
+                      ) : (
+                        <div className="text-center py-8">
+                          <Bell className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+                          <p className="text-gray-500">No hay solicitudes esta semana.</p>
+                          <div className="pt-4">
+                            <Link
+                              to="/requests"
+                              className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500 font-medium"
+                            >
+                              Ver todas las solicitudes
+                              <ExternalLink className="h-4 w-4 ml-1" />
+                            </Link>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                  <div className="pt-4 border-t border-gray-200">
-                    <Link
-                      to="/requests"
-                      className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500 font-medium"
-                    >
-                      Ver todas las solicitudes
-                      <ExternalLink className="h-4 w-4 ml-1" />
-                    </Link>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Bell className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                  <p className="text-gray-500">No hay solicitudes esta semana.</p>
-                  <div className="pt-4">
-                    <Link
-                      to="/requests"
-                      className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500 font-medium"
-                    >
-                      Ver todas las solicitudes
-                      <ExternalLink className="h-4 w-4 ml-1" />
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
 
                   {/* Actividad Reciente */}
                   <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -1009,55 +774,51 @@ export function Home() {
                 {/* Fila 3: Notificaciones / Actualizaciones del Sistema */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Notificaciones */}
-          <div className="bg-white rounded-xl shadow-lg overflow-hidden" data-section="notifications">
-            <div className="px-6 py-6">
-              <h2 className="text-xl font-medium text-gray-900 mb-6">Notificaciones</h2>
-              {notifications.length > 0 ? (
-                <div className="space-y-4">
-                  {notifications.map((notification) => (
-                    <div key={notification.id} className={`p-4 rounded-lg border ${
-                      notification.type === 'info' ? 'bg-blue-50 border-blue-100' :
-                      notification.type === 'warning' ? 'bg-amber-50 border-amber-100' :
-                      notification.type === 'success' ? 'bg-green-50 border-green-100' :
-                      'bg-red-50 border-red-100'
-                    }`}>
-                      <div className="flex items-start">
-                        <Bell className={`h-5 w-5 mt-0.5 ${
-                          notification.type === 'info' ? 'text-blue-500' :
-                          notification.type === 'warning' ? 'text-amber-500' :
-                          notification.type === 'success' ? 'text-green-500' :
-                          'text-red-500'
-                        }`} />
-                        <div className="ml-3">
-                          <h3 className={`text-sm font-medium ${
-                            notification.type === 'info' ? 'text-blue-800' :
-                            notification.type === 'warning' ? 'text-amber-800' :
-                            notification.type === 'success' ? 'text-green-800' :
-                            'text-red-800'
-                          }`}>
-                            {notification.title}
-                          </h3>
-                          <p className={`text-sm mt-1 ${
-                            notification.type === 'info' ? 'text-blue-700' :
-                            notification.type === 'warning' ? 'text-amber-700' :
-                            notification.type === 'success' ? 'text-green-700' :
-                            'text-red-700'
-                          }`}>
-                            {notification.message}
-                          </p>
+                  <div className="bg-white rounded-xl shadow-lg overflow-hidden" data-section="notifications">
+                    <div className="px-6 py-6">
+                      <h2 className="text-xl font-medium text-gray-900 mb-6">Notificaciones</h2>
+                      {notifications.length > 0 ? (
+                        <div className="space-y-4">
+                          {notifications.map((notification) => (
+                            <div key={notification.id} className={`p-4 rounded-lg border ${notification.type === 'info' ? 'bg-blue-50 border-blue-100' :
+                                notification.type === 'warning' ? 'bg-amber-50 border-amber-100' :
+                                  notification.type === 'success' ? 'bg-green-50 border-green-100' :
+                                    'bg-red-50 border-red-100'
+                              }`}>
+                              <div className="flex items-start">
+                                <Bell className={`h-5 w-5 mt-0.5 ${notification.type === 'info' ? 'text-blue-500' :
+                                    notification.type === 'warning' ? 'text-amber-500' :
+                                      notification.type === 'success' ? 'text-green-500' :
+                                        'text-red-500'
+                                  }`} />
+                                <div className="ml-3">
+                                  <h3 className={`text-sm font-medium ${notification.type === 'info' ? 'text-blue-800' :
+                                      notification.type === 'warning' ? 'text-amber-800' :
+                                        notification.type === 'success' ? 'text-green-800' :
+                                          'text-red-800'
+                                    }`}>
+                                    {notification.title}
+                                  </h3>
+                                  <p className={`text-sm mt-1 ${notification.type === 'info' ? 'text-blue-700' :
+                                      notification.type === 'warning' ? 'text-amber-700' :
+                                        notification.type === 'success' ? 'text-green-700' :
+                                          'text-red-700'
+                                    }`}>
+                                    {notification.message}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <Bell className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+                          <p className="text-gray-500">No hay notificaciones nuevas</p>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Bell className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                  <p className="text-gray-500">No hay notificaciones nuevas</p>
-                </div>
-              )}
-            </div>
-          </div>
+                  </div>
 
                   {/* Actualizaciones del Sistema */}
                   <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -1066,9 +827,8 @@ export function Home() {
                       <div className="space-y-4">
                         {systemUpdates.map((update) => (
                           <div key={update.id} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
-                            <Info className={`h-5 w-5 ${
-                              update.type === 'feature' ? 'text-indigo-500' : 'text-amber-500'
-                            }`} />
+                            <Info className={`h-5 w-5 ${update.type === 'feature' ? 'text-indigo-500' : 'text-amber-500'
+                              }`} />
                             <div>
                               <h3 className="text-sm font-medium text-gray-900">{update.title}</h3>
                               <p className="text-sm text-gray-500">{update.message}</p>
@@ -1094,9 +854,9 @@ export function Home() {
                 {/* Calendar Header */}
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-medium text-gray-900">
-                    {currentDate.toLocaleDateString('es-ES', { 
-                      month: 'long', 
-                      year: 'numeric' 
+                    {currentDate.toLocaleDateString('es-ES', {
+                      month: 'long',
+                      year: 'numeric'
                     })}
                   </h2>
                   <div className="flex space-x-2">
@@ -1158,7 +918,7 @@ export function Home() {
                       </div>
                     ))}
                   </div>
-                  
+
                   {/* Calendar Days */}
                   <div className="grid grid-cols-7">
                     {renderCalendar()}

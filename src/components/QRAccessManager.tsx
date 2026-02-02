@@ -3,8 +3,8 @@ import { Video, MessageSquare, UserX, Upload, Check, X, AlertTriangle } from 'lu
 import type { Guest, GuestAccessSettings, GuestAccessVideo } from '../types/event';
 import { QRAccessPreview } from './QRAccessPreview';
 import { storage } from '../lib/storage';
-import { updateBoltEventAPI, getBoltEventByIdAPI } from '../endpoints/boltEvent';
-import { uploadEventGuestVideoAPI } from '../endpoints/eventGuest';
+import { updateBoltEventSilentAPI, getBoltEventByIdSilentAPI } from '../endpoints/boltEvent';
+import { uploadEventGuestVideoWithProgressAPI } from '../endpoints/eventGuest';
 
 interface QRAccessManagerProps {
   eventId: string;
@@ -19,6 +19,7 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
   const [isAccessActive, setIsAccessActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isVideoUploadingByGuestId, setIsVideoUploadingByGuestId] = useState<Record<string, boolean>>({});
+  const [videoUploadProgressByGuestId, setVideoUploadProgressByGuestId] = useState<Record<string, number>>({});
   const [rejectionMessage, setRejectionMessage] = useState('Lo sentimos, pero tu acceso no está autorizado para este evento. Si crees que esto es un error, por favor contacta al organizador.');
   const [previewType, setPreviewType] = useState<'welcome' | 'rejection' | 'pre-activation'>('welcome');
   const [search, setSearch] = useState('');
@@ -78,7 +79,7 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
     try {
       // Primero intentamos cargar desde el backend
       try {
-        const response = await getBoltEventByIdAPI(Number(eventId));
+        const response = await getBoltEventByIdSilentAPI(Number(eventId));
         const eventData = response?.data;
         
         if (eventData) {
@@ -149,7 +150,7 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
             qr_access_active: isActive
           };
           
-          await updateBoltEventAPI(Number(eventId), updateData);
+          await updateBoltEventSilentAPI(Number(eventId), updateData);
           
           // Actualizar los datos guardados
           if (lastEventDataRef.current) {
@@ -209,7 +210,7 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
           const currentWelcomeMessage = eventData?.welcome_message || '';
           
           if (currentWelcomeMessage !== welcomeMessage) {
-            await updateBoltEventAPI(Number(eventId), {
+            await updateBoltEventSilentAPI(Number(eventId), {
               welcome_message: welcomeMessage
             });
             
@@ -263,7 +264,7 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
         
         // Solo actualizar si el mensaje ha cambiado
         if (!eventData || eventData.welcome_message !== message) {
-          await updateBoltEventAPI(Number(eventId), {
+          await updateBoltEventSilentAPI(Number(eventId), {
             welcome_message: message
           });
           
@@ -319,7 +320,7 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
         
         // Solo actualizar si el mensaje ha cambiado
         if (!eventData || eventData.rejection_message !== message) {
-          await updateBoltEventAPI(Number(eventId), {
+          await updateBoltEventSilentAPI(Number(eventId), {
             rejection_message: message
           });
           
@@ -352,10 +353,16 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
   const handleVideoUpload = async (guestId: string, file: File) => {
     try {
       setIsVideoUploadingByGuestId(prev => ({ ...prev, [guestId]: true }));
+      setVideoUploadProgressByGuestId(prev => ({ ...prev, [guestId]: 0 }));
       const guest = guests.find(g => g.id === guestId);
       if (!guest) return;
 
-      const response = await uploadEventGuestVideoAPI(Number(eventId), guest.guest_number, file);
+      const response = await uploadEventGuestVideoWithProgressAPI(
+        Number(eventId),
+        guest.guest_number,
+        file,
+        (percent) => setVideoUploadProgressByGuestId(prev => ({ ...prev, [guestId]: percent }))
+      );
       const apiGuest = response?.data;
 
       const uploadedVideoUrl: string | undefined = apiGuest?.video_url;
@@ -380,6 +387,7 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
       console.error('Error uploading video:', error);
     } finally {
       setIsVideoUploadingByGuestId(prev => ({ ...prev, [guestId]: false }));
+      setVideoUploadProgressByGuestId(prev => ({ ...prev, [guestId]: 0 }));
     }
   };
 
@@ -408,7 +416,9 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
       if (accessType === 'video') {
         // video_status controla el acceso en "Video de Recepción"
         const currentStatus = guest.video_status === undefined ? true : guest.video_status;
-        const updatedGuest = { ...guest, video_status: !currentStatus };
+        const nextStatus = !currentStatus;
+        // Si se quita acceso en video, también se quita en QR (y viceversa)
+        const updatedGuest = { ...guest, video_status: nextStatus, qr_code_status: nextStatus };
         updateLocalGuest(updatedGuest);
 
         const guestId = guest.id;
@@ -424,7 +434,9 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
 
       // qr_code_status controla el acceso en "Mensaje Interactivo"
       const currentStatus = guest.qr_code_status === undefined ? true : guest.qr_code_status;
-      const updatedGuest = { ...guest, qr_code_status: !currentStatus };
+      const nextStatus = !currentStatus;
+      // Si se quita acceso en QR, también se quita en video (y viceversa)
+      const updatedGuest = { ...guest, qr_code_status: nextStatus, video_status: nextStatus };
       
       // Actualizar inmediatamente en la UI
       updateLocalGuest(updatedGuest);
@@ -760,7 +772,8 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
                                 <span>Video cargado</span>
                               </div>
                             ) : (
-                              <label className={`inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer ${
+                              <div className="flex flex-col gap-2">
+                                <label className={`inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer ${
                                 isVideoUploadingByGuestId[guest.id] ? 'opacity-60 cursor-not-allowed' : 'hover:bg-gray-50'
                               }`}>
                                 <Upload className="h-4 w-4 mr-2" />
@@ -775,7 +788,21 @@ export function QRAccessManager({ eventId, guests, onUpdateGuest }: QRAccessMana
                                     if (file && !isVideoUploadingByGuestId[guest.id]) handleVideoUpload(guest.id, file);
                                   }}
                                 />
-                              </label>
+                                </label>
+                                {isVideoUploadingByGuestId[guest.id] && (
+                                  <div className="w-48">
+                                    <div className="h-2 w-full bg-gray-200 rounded">
+                                      <div
+                                        className="h-2 bg-indigo-600 rounded transition-all"
+                                        style={{ width: `${videoUploadProgressByGuestId[guest.id] || 0}%` }}
+                                      />
+                                    </div>
+                                    <div className="mt-1 text-xs text-gray-500">
+                                      {videoUploadProgressByGuestId[guest.id] || 0}%
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>

@@ -113,6 +113,36 @@ export const getBoltEventByIdAPI = async (id: number, includeRequests: boolean =
 };
 
 /**
+ * Get a Bolt Event by ID without triggering global loading overlay
+ */
+export const getBoltEventByIdSilentAPI = async (id: number, includeRequests: boolean = false): Promise<any> => {
+    try {
+        const urlParams = new URLSearchParams();
+        if (includeRequests) urlParams.append('include_requests', 'true');
+        
+        const url = `${import.meta.env.VITE_API_URL}/bolt-events/${id}?${urlParams.toString()}`;
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Silent-Loading': '1',
+                ...getAuthHeaders(),
+            },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || `Error al obtener evento con ID ${id}`);
+        }
+        return data;
+    } catch (error) {
+        console.error(`Error en getBoltEventByIdSilentAPI (ID: ${id}):`, error);
+        throw error;
+    }
+};
+
+/**
  * Update an existing Bolt Event
  */
 export const updateBoltEventAPI = async (id: number, body: object): Promise<any> => {
@@ -133,6 +163,32 @@ export const updateBoltEventAPI = async (id: number, body: object): Promise<any>
         return data;
     } catch (error) {
         console.error(`Error en updateBoltEventAPI (ID: ${id}):`, error);
+        throw error;
+    }
+};
+
+/**
+ * Update an existing Bolt Event without triggering global loading overlay
+ */
+export const updateBoltEventSilentAPI = async (id: number, body: object): Promise<any> => {
+    try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/bolt-events/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-Silent-Loading': '1',
+                ...getAuthHeaders(),
+            },
+            body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || `Error al actualizar evento con ID ${id}`);
+        }
+        return data;
+    } catch (error) {
+        console.error(`Error en updateBoltEventSilentAPI (ID: ${id}):`, error);
         throw error;
     }
 };

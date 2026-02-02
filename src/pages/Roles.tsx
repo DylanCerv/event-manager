@@ -7,6 +7,8 @@ import { eventBookStorage } from '../lib/eventbook-storage';
 import { deleteUserAPI } from '../endpoints/user';
 import { CreateUserAccessModal } from '../components/CreateUserAccessModal';
 import { UserAccessCard } from '../components/UserAccessCard';
+import { notify } from '../lib/notify';
+import { appConfirm } from '../lib/dialogs';
 import type { UserAccess } from '../types/roles';
 import type { ApiUser } from '../types/auth';
 import type { EventBook } from '../types/eventbook';
@@ -166,7 +168,13 @@ export function Roles() {
   };
 
   const handleDeleteUserAccess = async (id: string) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este acceso? Esta acción no se puede deshacer.')) {
+    const confirmed = await appConfirm({
+      title: 'Eliminar acceso',
+      message: '¿Estás seguro de que deseas eliminar este acceso? Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -177,7 +185,7 @@ export function Roles() {
       loadUserAccesses();
     } catch (error) {
       console.error('Error deleting user access:', error);
-      alert('Error al eliminar el acceso de usuario');
+      notify.error('Error al eliminar el acceso de usuario');
     } finally {
       setIsLoading(false);
     }
@@ -218,7 +226,7 @@ export function Roles() {
       await loadAccessControlAssignments();
     } catch (error) {
       console.error('Error assigning/revoking event:', error);
-      alert('Error al gestionar la asignación del evento');
+      notify.error('Error al gestionar la asignación del evento');
     } finally {
       setIsLoading(false);
     }
@@ -241,7 +249,7 @@ export function Roles() {
       await loadModeratorAssignments();
     } catch (error) {
       console.error('Error assigning/revoking EventBook:', error);
-      alert('Error al gestionar la asignación del EventBook');
+      notify.error('Error al gestionar la asignación del EventBook');
     } finally {
       setIsLoading(false);
     }
@@ -253,13 +261,25 @@ export function Roles() {
 
     // For moderators, handle EventBook revocation
     if (userAccess.accessType === 'moderador') {
-      if (!window.confirm('¿Estás seguro de que deseas quitar el acceso a este EventBook?')) {
+      const confirmed = await appConfirm({
+        title: 'Quitar acceso',
+        message: '¿Estás seguro de que deseas quitar el acceso a este EventBook?',
+        confirmText: 'Quitar',
+        cancelText: 'Cancelar',
+      });
+      if (!confirmed) {
         return;
       }
       return handleRevokeEventBook(userAccessId, eventId); // eventId is actually eventBookId for moderators
     }
 
-    if (!window.confirm('¿Estás seguro de que deseas quitar el acceso a este evento?')) {
+    const confirmed = await appConfirm({
+      title: 'Quitar acceso',
+      message: '¿Estás seguro de que deseas quitar el acceso a este evento?',
+      confirmText: 'Quitar',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -277,7 +297,7 @@ export function Roles() {
       await loadAccessControlAssignments();
     } catch (error) {
       console.error('Error revoking event:', error);
-      alert('Error al quitar el acceso al evento');
+      notify.error('Error al quitar el acceso al evento');
     } finally {
       setIsLoading(false);
     }
@@ -290,7 +310,7 @@ export function Roles() {
       await loadModeratorAssignments();
     } catch (error) {
       console.error('Error revoking EventBook:', error);
-      alert('Error al quitar el acceso al EventBook');
+      notify.error('Error al quitar el acceso al EventBook');
     } finally {
       setIsLoading(false);
     }

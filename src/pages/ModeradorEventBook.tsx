@@ -33,6 +33,7 @@ import type { EventBook, EventBookPost } from '../types/eventbook';
 import type { EventBookGuest } from '../lib/guest-storage';
 import { ParticipantBlockModal } from '../components/ParticipantBlockModal';
 import { FeelingPicker, type Feeling } from '../components/FeelingPicker';
+import { appConfirm } from '../lib/dialogs';
 
 type TabType = 'info' | 'posts' | 'participants';
 type PostFilter = 'all' | 'pending' | 'reported';
@@ -460,7 +461,12 @@ export function ModeradorEventBook() {
   const handleBlockUser = async (participantId: string) => {
     if (!eventBook) return;
     
-    const confirmed = window.confirm('¿Estás seguro de que quieres bloquear a este usuario?');
+    const confirmed = await appConfirm({
+      title: 'Bloquear usuario',
+      message: '¿Estás seguro de que quieres bloquear a este usuario?',
+      confirmText: 'Bloquear',
+      cancelText: 'Cancelar',
+    });
     if (!confirmed) return;
     
     try {
@@ -1867,8 +1873,6 @@ export function ModeradorEventBook() {
 
                                   {/* Ver más button */}
                                   {(() => {
-                                    const currentPage = participantPostsPage[participant.id] || 1;
-                                    const postsPerPage = 4;
                                     const totalUserPosts = participant.postCount;
                                     const loadedPosts = participantPosts[participant.id].length;
                                     const hasMore = loadedPosts < totalUserPosts;
@@ -1975,6 +1979,13 @@ export function ModeradorEventBook() {
         return null;
     }
   };
+
+  // Silenciar warnings TS para handlers reservados (pueden activarse en futuras mejoras del UI)
+  void handleBlockUser;
+  void handleUnblockUser;
+  void handleViewUserPosts;
+  void tabs;
+  void handleUpdateEventBook;
 
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">

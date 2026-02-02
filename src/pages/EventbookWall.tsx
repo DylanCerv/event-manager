@@ -10,6 +10,7 @@ import { EventBookUsersSidebar } from '../components/EventBookUsersSidebar';
 import { CreatePostModal } from '../components/CreatePostModal';
 import { PostCard } from '../components/PostCard';
 import { EventBookQRCode } from '../components/EventBookQRCode';
+import { normalizePublicUrl } from '../lib/appUrl';
 
 export function EventbookWall() {
   const { id, userSlug, eventSlug } = useParams();
@@ -498,7 +499,7 @@ export function EventbookWall() {
                 <div className="flex flex-col items-center">
                   <div className="border-2 border-green-400 rounded-lg p-2">
                     <EventBookQRCode 
-                      publicUrl={eventBook.publicUrl} 
+                      publicUrl={normalizePublicUrl(eventBook.publicUrl)} 
                       eventBookName={eventBook.name}
                       showDownloadButton={false}
                       size="large"

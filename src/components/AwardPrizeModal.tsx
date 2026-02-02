@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Gift, Star, X } from 'lucide-react';
+import { notify } from '../lib/notify';
 
 interface AwardPrizeModalProps {
   isOpen: boolean;
@@ -17,7 +18,7 @@ export function AwardPrizeModal({ isOpen, onClose, user, currentPoints, prizes, 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPrize) {
-      alert('Por favor selecciona un premio');
+      notify.info('Por favor selecciona un premio');
       return;
     }
 
@@ -25,7 +26,7 @@ export function AwardPrizeModal({ isOpen, onClose, user, currentPoints, prizes, 
     if (!prize) return;
 
     if (currentPoints < prize.points) {
-      alert('El usuario no tiene suficientes puntos para este premio');
+      notify.info('El usuario no tiene suficientes puntos para este premio');
       return;
     }
 
@@ -41,7 +42,7 @@ export function AwardPrizeModal({ isOpen, onClose, user, currentPoints, prizes, 
       setSelectedPrize('');
     } catch (error) {
       console.error('Error awarding prize:', error);
-      alert('Error al otorgar premio');
+      notify.error('Error al otorgar premio');
     } finally {
       setIsSubmitting(false);
     }

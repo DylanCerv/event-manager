@@ -1,10 +1,12 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { UserProvider } from './contexts/UserContext';
 import { EventProvider } from './contexts/EventContext';
 import { Navigation } from './components/Navigation';
 import { GlobalLoadingOverlay } from './components/GlobalLoadingOverlay';
+import { AppToasts } from './components/AppToasts';
+import { AppDialogs } from './components/AppDialogs';
 import { Login } from './pages/Login';
 import { SuperAdmin } from './pages/SuperAdmin';
 import { Home } from './pages/Home';
@@ -28,6 +30,7 @@ import CreatorDashboard from './pages/creator/CreatorDashboard';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, role, isAuthInitialized } = useAuth();
+  const location = useLocation();
 
   if (!isAuthInitialized) {
     return null;
@@ -36,30 +39,31 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!user) {
     return <Navigate to="/" replace />;
   }
+  const pathname = location.pathname || '/';
   
   // Handle CREATOR user routing
   if (role?.name === 'CREATOR') {
-    if (!window.location.pathname.startsWith('/creator')) {
+    if (!pathname.startsWith('/creator')) {
       return <Navigate to="/creator" replace />;
     }
   }
   
   // Handle ACCESS_CONTROL user routing
   if (role?.name === 'ACCESS_CONTROL') {
-    if (!window.location.pathname.startsWith('/access-control')) {
+    if (!pathname.startsWith('/access-control')) {
       return <Navigate to="/access-control" replace />;
     }
   }
   
   // Handle MODERATOR user routing
   if (role?.name === 'MODERATOR') {
-    if (!window.location.pathname.startsWith('/moderador')) {
+    if (!pathname.startsWith('/moderador')) {
       return <Navigate to="/moderador" replace />;
     }
   }
   
   // Redirect other users away from CREATOR dashboard
-  if (role?.name !== 'CREATOR' && window.location.pathname.startsWith('/creator')) {
+  if (role?.name !== 'CREATOR' && pathname.startsWith('/creator')) {
     const redirectPath = role?.name === 'SUPER_ADMIN' ? '/super-admin' : 
                         role?.name === 'ACCESS_CONTROL' ? '/access-control' :
                         role?.name === 'MODERATOR' ? '/moderador' : '/home';
@@ -67,7 +71,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
   
   // Redirect other users away from ACCESS_CONTROL dashboard
-  if (role?.name !== 'ACCESS_CONTROL' && window.location.pathname.startsWith('/access-control')) {
+  if (role?.name !== 'ACCESS_CONTROL' && pathname.startsWith('/access-control')) {
     const redirectPath = role?.name === 'SUPER_ADMIN' ? '/super-admin' : 
                         role?.name === 'CREATOR' ? '/creator' :
                         role?.name === 'MODERATOR' ? '/moderador' : '/home';
@@ -75,7 +79,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
   
   // Redirect other users away from MODERATOR dashboard
-  if (role?.name !== 'MODERATOR' && window.location.pathname.startsWith('/moderador')) {
+  if (role?.name !== 'MODERATOR' && pathname.startsWith('/moderador')) {
     const redirectPath = role?.name === 'SUPER_ADMIN' ? '/super-admin' : 
                         role?.name === 'CREATOR' ? '/creator' :
                         role?.name === 'ACCESS_CONTROL' ? '/access-control' : '/home';
@@ -83,7 +87,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
   
   // Redirect other users away from ACCESS_CONTROL management page
-  if (role?.name !== 'ACCESS_CONTROL' && window.location.pathname === '/access-control/gestionar') {
+  if (role?.name !== 'ACCESS_CONTROL' && pathname === '/access-control/gestionar') {
     const redirectPath = role?.name === 'SUPER_ADMIN' ? '/super-admin' : 
                         role?.name === 'CREATOR' ? '/creator' :
                         role?.name === 'MODERATOR' ? '/moderador' : '/home';
@@ -97,6 +101,8 @@ function AppRoutes() {
   const { role } = useAuth();
   return (
     <div className="min-h-screen bg-gray-100">
+      <AppToasts />
+      <AppDialogs />
       <GlobalLoadingOverlay />
       {role?.name !== 'CREATOR' && <Navigation />}
       <Routes>
@@ -267,8 +273,9 @@ function AppRoutes() {
 }
 
 function App() {
+  const Router = import.meta.env.PROD ? HashRouter : BrowserRouter;
   return (
-    <BrowserRouter>
+    <Router>
       <AuthProvider>
         <UserProvider>
           <EventProvider>
@@ -276,7 +283,7 @@ function App() {
           </EventProvider>
         </UserProvider>
       </AuthProvider>
-    </BrowserRouter>
+    </Router>
   );
 }
 

@@ -3,6 +3,7 @@ import { X, Gift, Star, Lock, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getPrizesAPI } from '../endpoints/prize';
 import { createPrizeRedemptionAPI, getPrizeRedemptionsAPI } from '../endpoints/prizeRedemption';
+import { notify } from '../lib/notify';
 
 interface Reward {
   id: string;
@@ -185,7 +186,7 @@ export function RewardsModal({ isOpen, onClose, userPoints, userType = 'Administ
     // Verificar restricción de 90 días
     const redemptionCheck = canRedeemProduct(reward.id);
     if (!redemptionCheck.canRedeem) {
-      alert(redemptionCheck.message);
+      notify.info(redemptionCheck.message || 'No puedes canjear este producto en este momento.');
       return;
     }
 
@@ -195,11 +196,11 @@ export function RewardsModal({ isOpen, onClose, userPoints, userType = 'Administ
         .then(() => {
           loadUserPendingRequests();
           window.dispatchEvent(new CustomEvent('localStorageUpdate', { detail: { type: 'prizeRequest', userId: user?.id } }));
-          alert(`¡Solicitud de canje de ${reward.title} enviada!`);
+          notify.success(`¡Solicitud de canje de ${reward.title} enviada!`);
         })
         .catch((error) => {
           console.error('Error creating prize redemption:', error);
-          alert(error instanceof Error ? error.message : 'Error al enviar la solicitud. Inténtalo de nuevo.');
+          notify.error(error instanceof Error ? error.message : 'Error al enviar la solicitud. Inténtalo de nuevo.');
         });
     }
   };

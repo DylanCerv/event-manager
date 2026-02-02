@@ -10,6 +10,8 @@ import { QRAccessVideoModal } from './QRAccessVideoModal';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import type { UserOptions } from 'jspdf-autotable';
+import { notify } from '../lib/notify';
+import { appConfirm } from '../lib/dialogs';
 
 // Extender el tipo jsPDF para incluir autoTable
 declare module 'jspdf' {
@@ -841,17 +843,22 @@ export function QRAccessScanner({
     }
   };
 
-  const clearScanHistory = () => {
-    if (confirm('¿Estás seguro de que quieres limpiar todo el historial de escaneos? Esta acción no se puede deshacer.')) {
-      (async () => {
-        try {
-          await clearAccessControlScansAPI(Number(eventId));
-        } catch (e) {
-          console.error('Error clearing scan history in API:', e);
-        } finally {
-          setRecentScans([]);
-        }
-      })();
+  const clearScanHistory = async () => {
+    const confirmed = await appConfirm({
+      title: 'Limpiar historial',
+      message: '¿Estás seguro de que quieres limpiar todo el historial de escaneos? Esta acción no se puede deshacer.',
+      confirmText: 'Limpiar',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmed) return;
+
+    try {
+      await clearAccessControlScansAPI(Number(eventId));
+      setRecentScans([]);
+      notify.success('Historial de escaneos limpiado correctamente');
+    } catch (e) {
+      console.error('Error clearing scan history in API:', e);
+      notify.error('Error al limpiar el historial de escaneos');
     }
   };
 
@@ -891,7 +898,7 @@ export function QRAccessScanner({
       doc.save(fileName);
     } catch (error) {
       console.error('Error exporting scan history:', error);
-      alert('Error al exportar el historial. Por favor, intente nuevamente.');
+      notify.error('Error al exportar el historial. Por favor, intente nuevamente.');
     }
   };
 

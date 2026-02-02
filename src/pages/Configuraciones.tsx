@@ -1,15 +1,16 @@
 import React from 'react';
-import { Settings, Mail, Plus, Edit, Trash2, CheckCircle, XCircle, Palette, DollarSign, Star, Users, Crown, Shield } from 'lucide-react';
+import { Settings, Mail, Plus, Edit, Trash2, CheckCircle, XCircle, DollarSign, Star, Users, Crown, Shield } from 'lucide-react';
 import { SMTPConfigModal } from '../components/SMTPConfigModal';
 import { EmailTemplateSelector } from '../components/EmailTemplateSelector';
 import { configStorage, type SMTPConfig } from '../lib/config-storage';
+import { notify } from '../lib/notify';
+import { appConfirm } from '../lib/dialogs';
 
 export function Configuraciones() {
   const [activeConfigTab, setActiveConfigTab] = React.useState<'emails' | 'finances' | 'puntos'>('emails');
   const [showSMTPModal, setShowSMTPModal] = React.useState(false);
   const [editingSMTP, setEditingSMTP] = React.useState<SMTPConfig | null>(null);
   const [smtpConfigs, setSMTPConfigs] = React.useState<SMTPConfig[]>([]);
-  const [isLoading, setIsLoading] = React.useState(false);
   const [pricePerGuest, setPricePerGuest] = React.useState<number>(1);
   const [isSavingPrice, setIsSavingPrice] = React.useState(false);
   
@@ -35,7 +36,7 @@ export function Configuraciones() {
     }
   };
 
-  const handleSMTPSave = (config: SMTPConfig) => {
+  const handleSMTPSave = (_config: SMTPConfig) => {
     loadSMTPConfigs();
     setEditingSMTP(null);
   };
@@ -46,13 +47,21 @@ export function Configuraciones() {
   };
 
   const handleDeleteSMTP = async (id: string) => {
-    if (confirm('¿Estás seguro de eliminar esta configuración SMTP?')) {
-      try {
-        await configStorage.deleteSMTPConfig(id);
-        loadSMTPConfigs();
-      } catch (error) {
-        console.error('Error deleting SMTP config:', error);
-      }
+    const confirmed = await appConfirm({
+      title: 'Eliminar configuración SMTP',
+      message: '¿Estás seguro de eliminar esta configuración SMTP? Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmed) return;
+
+    try {
+      await configStorage.deleteSMTPConfig(id);
+      loadSMTPConfigs();
+      notify.success('Configuración SMTP eliminada correctamente');
+    } catch (error) {
+      console.error('Error deleting SMTP config:', error);
+      notify.error('Error al eliminar la configuración SMTP');
     }
   };
 
@@ -94,10 +103,10 @@ export function Configuraciones() {
     try {
       setIsSavingPrice(true);
       await configStorage.setPricePerGuest(pricePerGuest);
-      alert('Precio por invitado actualizado correctamente');
+      notify.success('Precio por invitado actualizado correctamente');
     } catch (error) {
       console.error('Error saving price per guest:', error);
-      alert('Error al guardar el precio por invitado');
+      notify.error('Error al guardar el precio por invitado');
     } finally {
       setIsSavingPrice(false);
     }
@@ -112,10 +121,10 @@ export function Configuraciones() {
         moderator: moderatorPoints,
         accessControl: accessControlPoints
       });
-      alert('Configuración de puntos actualizada correctamente');
+      notify.success('Configuración de puntos actualizada correctamente');
     } catch (error) {
       console.error('Error saving points configuration:', error);
-      alert('Error al guardar la configuración de puntos');
+      notify.error('Error al guardar la configuración de puntos');
     } finally {
       setIsSavingPoints(false);
     }

@@ -4,6 +4,8 @@ import type { Event, EventFinalization, EventCard } from '../types/event';
 import { finalizationStorage } from '../lib/finalization-storage';
 import { storage } from '../lib/storage';
 import { getTemplateById } from '../lib/event-templates';
+import { notify } from '../lib/notify';
+import { appConfirm } from '../lib/dialogs';
 
 interface EventFinalizationProps {
   event: Event;
@@ -106,7 +108,7 @@ export function EventFinalization({ event }: EventFinalizationProps) {
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
       console.error('Error toggling finalization:', error);
-      alert('Error al cambiar el estado del evento');
+      notify.error('Error al cambiar el estado del evento');
       setIsFinalized(!isFinalized); // Revertir el cambio
     } finally {
       setIsLoading(false);
@@ -119,7 +121,7 @@ export function EventFinalization({ event }: EventFinalizationProps) {
       setIsLoading(true);
 
       if (videoUrl && !whatsappNumber) {
-        alert('El número de WhatsApp es requerido cuando se sube un video');
+        notify.info('El número de WhatsApp es requerido cuando se sube un video');
         return;
       }
 
@@ -154,7 +156,7 @@ export function EventFinalization({ event }: EventFinalizationProps) {
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
       console.error('Error saving finalization card:', error);
-      alert('Error al guardar la tarjeta. Por favor, intenta de nuevo.');
+      notify.error('Error al guardar la tarjeta. Por favor, intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -165,7 +167,13 @@ export function EventFinalization({ event }: EventFinalizationProps) {
   };
 
   const handleDeleteCard = async () => {
-    if (!confirm('¿Estás seguro de que deseas eliminar la tarjeta de finalización?')) {
+    const confirmed = await appConfirm({
+      title: 'Eliminar tarjeta',
+      message: '¿Estás seguro de que deseas eliminar la tarjeta de finalización?',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -185,7 +193,7 @@ export function EventFinalization({ event }: EventFinalizationProps) {
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
       console.error('Error deleting finalization card:', error);
-      alert('Error al eliminar la tarjeta');
+      notify.error('Error al eliminar la tarjeta');
     } finally {
       setIsLoading(false);
     }
@@ -195,14 +203,14 @@ export function EventFinalization({ event }: EventFinalizationProps) {
     // Validar tamaño (10MB = 10 * 1024 * 1024 bytes)
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      alert(`La imagen es demasiado grande.\n\n📏 Tamaño de tu archivo: ${(file.size / 1024 / 1024).toFixed(1)}MB\n✅ Tamaño máximo: 10MB\n\n💡 Tip: Comprime la imagen antes de subirla.`);
+      notify.info(`La imagen es demasiado grande.\n\n📏 Tamaño de tu archivo: ${(file.size / 1024 / 1024).toFixed(1)}MB\n✅ Tamaño máximo: 10MB\n\n💡 Tip: Comprime la imagen antes de subirla.`);
       return;
     }
 
     // Validar tipo de archivo
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
     if (!allowedTypes.includes(file.type.toLowerCase())) {
-      alert(`Formato de imagen no soportado: ${file.type}\n\n✅ Formatos permitidos:\n• JPEG/JPG (recomendado)\n• PNG (para transparencias)\n• WebP (mejor compresión)\n• GIF (para animaciones)`);
+      notify.info(`Formato de imagen no soportado: ${file.type}\n\n✅ Formatos permitidos:\n• JPEG/JPG (recomendado)\n• PNG (para transparencias)\n• WebP (mejor compresión)\n• GIF (para animaciones)`);
       return;
     }
 
@@ -215,7 +223,7 @@ export function EventFinalization({ event }: EventFinalizationProps) {
     };
     
     reader.onerror = () => {
-      alert('❌ Error al cargar la imagen. Por favor, intenta de nuevo.');
+      notify.error('❌ Error al cargar la imagen. Por favor, intenta de nuevo.');
       console.error('Error reading image file:', file.name);
     };
     
@@ -230,7 +238,7 @@ export function EventFinalization({ event }: EventFinalizationProps) {
     // Validar tamaño (15MB = 15 * 1024 * 1024 bytes)
     const maxSize = 15 * 1024 * 1024;
     if (file.size > maxSize) {
-      alert(`El video es demasiado grande.\n\n📏 Tamaño de tu archivo: ${(file.size / 1024 / 1024).toFixed(1)}MB\n✅ Tamaño máximo: 15MB\n\n💡 Tips para reducir tamaño:\n• Usar MP4 con H.264\n• Resolución máxima 1080p\n• Duración recomendada: 1-3 minutos\n• Comprimir con HandBrake o similar`);
+      notify.info(`El video es demasiado grande.\n\n📏 Tamaño de tu archivo: ${(file.size / 1024 / 1024).toFixed(1)}MB\n✅ Tamaño máximo: 15MB\n\n💡 Tips para reducir tamaño:\n• Usar MP4 con H.264\n• Resolución máxima 1080p\n• Duración recomendada: 1-3 minutos\n• Comprimir con HandBrake o similar`);
       return;
     }
 
@@ -257,7 +265,7 @@ export function EventFinalization({ event }: EventFinalizationProps) {
     const isValidExtension = fileExtension && allowedExtensions.includes(fileExtension);
 
     if (!isValidType && !isValidExtension) {
-      alert(`Formato de video no soportado.\n\n🎬 Tipo detectado: ${file.type || 'Desconocido'}\n📁 Extensión: .${fileExtension || 'Desconocida'}\n\n✅ Formatos permitidos:\n• MP4 (recomendado - mejor compatibilidad)\n• WebM (buena compresión)\n• MOV (QuickTime)\n• AVI (amplio soporte)\n• WMV (Windows Media)\n• 3GP (móviles)\n• OGG, FLV, TS\n\n🎥 Calidad recomendada:\n• Resolución: 720p-1080p\n• Bitrate: 1-5 Mbps\n• Duración: 1-3 minutos\n• Códec: H.264 (MP4)`);
+      notify.info(`Formato de video no soportado.\n\n🎬 Tipo detectado: ${file.type || 'Desconocido'}\n📁 Extensión: .${fileExtension || 'Desconocida'}\n\n✅ Formatos permitidos:\n• MP4 (recomendado - mejor compatibilidad)\n• WebM (buena compresión)\n• MOV (QuickTime)\n• AVI (amplio soporte)\n• WMV (Windows Media)\n• 3GP (móviles)\n• OGG, FLV, TS\n\n🎥 Calidad recomendada:\n• Resolución: 720p-1080p\n• Bitrate: 1-5 Mbps\n• Duración: 1-3 minutos\n• Códec: H.264 (MP4)`);
       return;
     }
 
@@ -288,13 +296,13 @@ export function EventFinalization({ event }: EventFinalizationProps) {
         }
       } catch (error) {
         console.error('❌ Error procesando el video:', error);
-        alert('❌ Error al procesar el video. El archivo podría estar corrupto.');
+        notify.error('❌ Error al procesar el video. El archivo podría estar corrupto.');
       }
     };
     
     reader.onerror = (error) => {
       console.error('❌ Error leyendo el archivo:', error);
-      alert(`❌ Error al cargar el video.\n\n💡 Posibles soluciones:\n• Verificar que el archivo no esté corrupto\n• Intentar con un archivo más pequeño\n• Usar formato MP4 si tienes problemas\n• Reintentar la subida\n\nDetalles técnicos: ${error}`);
+      notify.error(`❌ Error al cargar el video.\n\n💡 Posibles soluciones:\n• Verificar que el archivo no esté corrupto\n• Intentar con un archivo más pequeño\n• Usar formato MP4 si tienes problemas\n• Reintentar la subida\n\nDetalles técnicos: ${error}`);
     };
     
     reader.readAsDataURL(file);

@@ -671,13 +671,26 @@ export function Home() {
 
                 {/* Fila 2: Solicitudes Pendientes / Layout Nuevo */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Solicitudes Pendientes */}
+                  {/* Solicitudes */}
                   <div className="bg-white rounded-xl shadow-lg overflow-hidden">
                     <div className="px-6 py-6">
-                      <h2 className="text-xl font-medium text-gray-900 mb-6">Solicitudes Pendientes</h2>
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-medium text-gray-900">Solicitudes</h2>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                            Pendientes: {weeklyRequests.filter(r => r.status === 'pending').length}
+                          </span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Aceptadas: {weeklyRequests.filter(r => r.status === 'approved').length}
+                          </span>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Rechazadas: {weeklyRequests.filter(r => r.status === 'rejected').length}
+                          </span>
+                        </div>
+                      </div>
                       {weeklyRequests.length > 0 ? (
                         <div className="space-y-3">
-                          {weeklyRequests.filter(request => request.status === 'pending').map((request, index) => (
+                          {weeklyRequests.map((request, index) => (
                             <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
                               <div className="flex items-center space-x-3">
                                 <Bell className={`h-5 w-5 ${request.status === 'pending' ? 'text-amber-500' :

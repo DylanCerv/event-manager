@@ -12,6 +12,8 @@ import { HistoryModal } from '../components/HistoryModal';
 import type { Creator } from '../types/creator';
 import { deleteUserAPI } from '../endpoints/user';
 import { getPrizesAPI, createPrizeAPI, deletePrizeAPI } from '../endpoints/prize';
+import { notify } from '../lib/notify';
+import { appConfirm } from '../lib/dialogs';
 
 interface User {
   id: string;
@@ -187,18 +189,24 @@ export function Usuarios() {
       setPrizes((prev) => [response.data, ...prev]);
     } catch (error) {
       console.error('Error saving prize:', error);
-      alert('Error al guardar el premio');
+      notify.error('Error al guardar el premio');
     }
   };
 
   const handleDeletePrize = async (prizeId: string) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar este premio?')) {
+    const confirmed = await appConfirm({
+      title: 'Eliminar premio',
+      message: '¿Estás seguro de que deseas eliminar este premio?',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+    });
+    if (confirmed) {
       try {
         await deletePrizeAPI(prizeId);
         setPrizes((prev) => prev.filter(prize => prize.id !== prizeId));
       } catch (error) {
         console.error('Error deleting prize:', error);
-        alert('Error al eliminar el premio');
+        notify.error('Error al eliminar el premio');
       }
     }
   };
@@ -382,6 +390,7 @@ export function Usuarios() {
     
     return { startDate, endDate: now };
   };
+  void getDateFilterRange;
 
   const getFilterDate = (filter: string, specificDate: string): Date | null => {
     const now = new Date();
@@ -524,7 +533,7 @@ export function Usuarios() {
       setShowUserDetails(user);
     } catch (error) {
       console.error('Error calculating user metrics:', error);
-      alert('Error al cargar las métricas del usuario');
+      notify.error('Error al cargar las métricas del usuario');
     } finally {
       setIsLoading(false);
     }
@@ -614,7 +623,7 @@ export function Usuarios() {
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting user and related data:', error);
-      alert('Error al eliminar el usuario');
+      notify.error('Error al eliminar el usuario');
     }
     finally {
       setIsLoading(false);
@@ -676,7 +685,7 @@ export function Usuarios() {
     const currentPoints = userPoints[userId] || 0;
     
     if (currentPoints < prizeCost) {
-      alert('El usuario no tiene suficientes puntos para este premio');
+      notify.info('El usuario no tiene suficientes puntos para este premio');
       return;
     }
     
@@ -1840,7 +1849,7 @@ function CreatePrizeModal({ isOpen, onClose, onSubmit }: CreatePrizeModalProps) 
   const [points, setPoints] = React.useState<string>('');
   const [targetAudience, setTargetAudience] = React.useState('Administradores');
   const [image, setImage] = React.useState('');
-  const [imageFile, setImageFile] = React.useState<File | null>(null);
+  const [, setImageFile] = React.useState<File | null>(null);
   const [imagePreview, setImagePreview] = React.useState<string>('');
   const [imageSource, setImageSource] = React.useState<'url' | 'file'>('url');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -1850,7 +1859,7 @@ function CreatePrizeModal({ isOpen, onClose, onSubmit }: CreatePrizeModalProps) 
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        alert('La imagen debe ser menor a 5MB');
+        notify.info('La imagen debe ser menor a 5MB');
         return;
       }
       
@@ -1868,7 +1877,7 @@ function CreatePrizeModal({ isOpen, onClose, onSubmit }: CreatePrizeModalProps) 
     e.preventDefault();
     const pointsValue = parseInt(points) || 0;
     if (!title.trim() || !description.trim() || pointsValue < 1) {
-      alert('Por favor completa todos los campos obligatorios y asegúrate de que los puntos sean mayor a 0');
+      notify.info('Por favor completa todos los campos obligatorios y asegúrate de que los puntos sean mayor a 0');
       return;
     }
 
@@ -1906,7 +1915,7 @@ function CreatePrizeModal({ isOpen, onClose, onSubmit }: CreatePrizeModalProps) 
       onClose();
     } catch (error) {
       console.error('Error creating prize:', error);
-      alert('Error al crear el premio');
+      notify.error('Error al crear el premio');
     } finally {
       setIsSubmitting(false);
     }
@@ -2107,12 +2116,12 @@ function PointsAdjustModal({ isOpen, onClose, user, currentPoints, onSubmit }: P
     e.preventDefault();
     const pointsValue = parseInt(points) || 0;
     if (pointsValue < 1) {
-      alert('Por favor ingresa una cantidad válida de puntos (mayor a 0)');
+      notify.info('Por favor ingresa una cantidad válida de puntos (mayor a 0)');
       return;
     }
 
     if (!reason.trim()) {
-      alert('Por favor proporciona una razón para el ajuste');
+      notify.info('Por favor proporciona una razón para el ajuste');
       return;
     }
 
@@ -2132,7 +2141,7 @@ function PointsAdjustModal({ isOpen, onClose, user, currentPoints, onSubmit }: P
       setReason('');
     } catch (error) {
       console.error('Error adjusting points:', error);
-      alert('Error al ajustar puntos');
+      notify.error('Error al ajustar puntos');
     } finally {
       setIsSubmitting(false);
     }

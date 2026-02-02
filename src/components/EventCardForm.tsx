@@ -4,6 +4,7 @@ import type { EventCard, CronogramaItem, RecommendationItem } from '../types/eve
 import { EVENT_TEMPLATES, getTemplateById } from '../lib/event-templates';
 import { RECOMMENDATION_CATEGORIES, CUSTOM_CATEGORY_ICONS, getCategoryById } from '../lib/recommendation-categories';
 import { createInteractiveCard } from '../endpoints/interactiveCard';
+import { notify } from '../lib/notify';
 
 interface FormErrors {
   main_image?: string;
@@ -439,7 +440,7 @@ export function EventCardForm({ isLoading: externalIsLoading, initialData, event
       }
     } catch (error) {
       console.error('Error saving event card:', error);
-      alert('Error al guardar la tarjeta del evento. Por favor, inténtalo de nuevo.');
+      notify.error('Error al guardar la tarjeta del evento. Por favor, inténtalo de nuevo.');
     } finally {
       setIsLoading(false);
     }

@@ -67,12 +67,16 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
   }, [updateLocalGuest, sendUpdateToAPI]);
 
   const filteredGuests = React.useMemo(() => {
+    const normalizeStatus = (s: any): Guest['confirmation_status'] => {
+      if (s === 'attended' || s === 'confirmed') return s;
+      return 'not confirmed';
+    };
     return mergedGuests.filter(guest =>
       guest.name?.toLowerCase().includes(search.toLowerCase()) ||
       guest.guest_number?.toString().includes(search) ||
       guest.email?.toLowerCase().includes(search.toLowerCase()) ||
-      (guest.confirmation_status === 'confirmed' && 'confirmed'.includes(search.toLowerCase())) ||
-      (guest.confirmation_status === 'not confirmed' && 'not confirmed'.includes(search.toLowerCase()))
+      (normalizeStatus((guest as any).confirmation_status) === 'confirmed' && 'confirmed'.includes(search.toLowerCase())) ||
+      (normalizeStatus((guest as any).confirmation_status) === 'not confirmed' && 'not confirmed'.includes(search.toLowerCase()))
     ).sort((a, b) => (a.guest_number || 0) - (b.guest_number || 0));
   }, [mergedGuests, search]);
 
@@ -91,6 +95,10 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
   };
 
   const stats = React.useMemo(() => {
+    const normalizeStatus = (s: any): Guest['confirmation_status'] => {
+      if (s === 'attended' || s === 'confirmed') return s;
+      return 'not confirmed';
+    };
     const isGuestComplete = (guest: any) => {
       // Campos básicos que todos los invitados deben tener
       const hasName = !!guest.name && guest.name.trim() !== '';
@@ -126,8 +134,11 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
     return {
       complete: mergedGuests.filter(isGuestComplete).length,
       incomplete: mergedGuests.filter(guest => !isGuestComplete(guest)).length,
-      confirmed: mergedGuests.filter(guest => guest.confirmation_status === 'confirmed').length,
-      notConfirmed: mergedGuests.filter(guest => guest.confirmation_status === 'not confirmed').length,
+      confirmed: mergedGuests.filter(guest => normalizeStatus((guest as any).confirmation_status) === 'confirmed').length,
+      notConfirmed: mergedGuests.filter(guest => {
+        const s = normalizeStatus((guest as any).confirmation_status);
+        return s !== 'confirmed' && s !== 'attended';
+      }).length,
     };
   }, [mergedGuests]);
 
@@ -191,7 +202,7 @@ export function GuestList({ guests, onUpdateGuest, onSelectionChange }: GuestLis
                   </th>
                   <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                     Invitado #
-                    <span className="text-xs text-gray-500 block">Empieza en 001</span>
+                    {/* <span className="text-xs text-gray-500 block">Empieza en 001</span> */}
                   </th>
                   <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6 w-48">
                     Invitado

@@ -6,6 +6,7 @@ import 'jspdf-autotable';
 import { useAuth } from '../contexts/AuthContext';
 import type { Event, Guest } from '../types/event';
 import { useEvents } from '../contexts/EventContext';
+import { notify } from '../lib/notify';
 
 export function Feedback() {
   const { user } = useAuth();
@@ -118,7 +119,7 @@ export function Feedback() {
       }
     } catch (error) {
       console.error('Error exporting data:', error);
-      alert('Error al exportar los datos');
+      notify.error('Error al exportar los datos');
     }
   };
 

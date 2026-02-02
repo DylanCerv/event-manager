@@ -2,6 +2,7 @@ import QRCode from 'qrcode';
 import { jsPDF } from 'jspdf';
 import JSZip from 'jszip';
 import type { Guest } from '../types/event';
+import { buildInvitationUrl } from './appUrl';
 
 export async function generateQRCodeDataURL(text: string): Promise<string> {
   return QRCode.toDataURL(text, {
@@ -99,7 +100,7 @@ async function generateSingleGuestPDF(guest: Guest, eventName: string): Promise<
   currentY += 15;
 
   // d. Link con fondo destacado
-  const link = `http://localhost:5173/invitation/${guest.qr_code}`;
+  const link = buildInvitationUrl(String(guest.qr_code));
   
   // Fondo para el enlace
   const linkBoxY = currentY - 4;

@@ -226,15 +226,15 @@ export function ThemeStyles({ eventType = 'wedding', themeColors, children }: Th
             text-transform: ${(getTitleStyles() as any).textTransform || 'none'};
             text-shadow: ${(getTitleStyles() as any).textShadow};
             transform: ${(getTitleStyles() as any).transform || 'none'};
-            word-break: normal;
+            word-break: break-word;
             hyphens: none;
             line-height: 1.2;
             text-align: center;
             max-width: 100%;
-            overflow-wrap: normal;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            overflow-wrap: anywhere;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
           }
           
           /* Auto-resize for long titles */

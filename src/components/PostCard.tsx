@@ -3,6 +3,8 @@ import { ThumbsUp, Heart, MessageCircle, Share, MoreHorizontal, Send, User, Flag
 import { EventBookPost, EventBookReply } from '../types/eventbook';
 import { EventBookGuest } from '../lib/guest-storage';
 import { ReactionPicker, getReactionDisplay } from './ReactionPicker';
+import { appPrompt } from '../lib/dialogs';
+import { notify } from '../lib/notify';
 
 // Configuraciones para visibilidad de comentarios y respuestas
 const INITIAL_COMMENTS_VISIBLE = 3;
@@ -197,16 +199,23 @@ export function PostCard({
   const handleReport = async () => {
     if (!currentGuest) return;
     
-    const reason = prompt('¿Por qué quieres reportar esta publicación?');
+    const reason = await appPrompt({
+      title: 'Reportar publicación',
+      message: '¿Por qué quieres reportar esta publicación?',
+      placeholder: 'Escribe el motivo...',
+      confirmText: 'Reportar',
+      cancelText: 'Cancelar',
+      multiline: true,
+    });
     
     // Validar que el motivo tenga al menos 4 caracteres (sin espacios iniciales/finales)
     if (!reason || reason.trim().length < 4) {
-      alert('Por favor, escribe un motivo válido de al menos 4 letras.');
+      notify.info('Por favor, escribe un motivo válido de al menos 4 letras.');
       return;
     }
     
     await onReport(post.id, reason.trim());
-    alert('Publicación reportada. El moderador la revisará.');
+    notify.success('Publicación reportada. El moderador la revisará.');
   };
 
   const handleComment = async () => {

@@ -67,6 +67,8 @@ export const updateEventGuestAPI = async (eventId: number, guestNumber: string |
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
+                // Evita el overlay global en edición inline (lista invitados / QR access)
+                'X-Silent-Loading': '1',
                 ...getAuthHeaders(),
             },
             body: JSON.stringify(body),
@@ -108,6 +110,52 @@ export const uploadEventGuestVideoAPI = async (eventId: number, guestNumber: str
         console.error(`Error en uploadEventGuestVideoAPI (EventID: ${eventId}, GuestNumber: ${guestNumber}):`, error);
         throw error;
     }
+};
+
+/**
+ * Upload guest video with progress (XHR)
+ */
+export const uploadEventGuestVideoWithProgressAPI = (
+    eventId: number,
+    guestNumber: string | number,
+    file: File,
+    onProgress?: (percent: number) => void
+): Promise<any> => {
+    const token = sessionStorage.getItem('auth_token');
+    return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('video', file);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${import.meta.env.VITE_API_URL}/event-guests/${eventId}/${guestNumber}/video`);
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.setRequestHeader('X-Silent-Loading', '1');
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        xhr.upload.onprogress = (evt) => {
+            if (!evt.lengthComputable) return;
+            const percent = Math.max(0, Math.min(100, Math.round((evt.loaded / evt.total) * 100)));
+            onProgress?.(percent);
+        };
+
+        xhr.onload = () => {
+            try {
+                const data = JSON.parse(xhr.responseText || '{}');
+                if (xhr.status < 200 || xhr.status >= 300) {
+                    reject(new Error(data?.message || `Error al subir video del invitado ${guestNumber} del evento ${eventId}`));
+                    return;
+                }
+                resolve(data);
+            } catch (e) {
+                reject(e);
+            }
+        };
+
+        xhr.onerror = () => reject(new Error('Error de red al subir el video'));
+        xhr.onabort = () => reject(new Error('Subida de video cancelada'));
+
+        xhr.send(formData);
+    });
 };
 
 /**

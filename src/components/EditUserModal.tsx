@@ -3,6 +3,7 @@ import { X, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { updateUserAPI } from '../endpoints/user';
 import type { Creator } from '../types/creator';
 import { useUser } from '../contexts/UserContext';
+import { notify } from '../lib/notify';
 
 interface User {
   id: string;
@@ -181,11 +182,11 @@ export function EditUserModal({ isOpen, creators, onClose, editingUser, onUpdate
         try { onUpdated?.(updatedUser); } catch {}
         onClose();
       } else {
-        alert(response?.message || 'Error al actualizar el usuario');
+        notify.error(response?.message || 'Error al actualizar el usuario');
       }
     } catch (error) {
       console.error('Error updating user:', error);
-      alert('Error al actualizar el usuario');
+      notify.error('Error al actualizar el usuario');
     } finally {
       setIsLoading(false);
     }

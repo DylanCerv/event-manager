@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ApiUser, Role } from '../types/auth';
 import { getUsersAPI } from '../endpoints/user';
 import { useAuth } from './AuthContext';
@@ -17,12 +17,12 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-    const { user: authUser } = useAuth();
+    const { user: authUser, isAuthInitialized } = useAuth();
     const [users, setUsers] = useState<ApiUser[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchUsers = async (): Promise<ApiUser[]> => {
+    const fetchUsers = useCallback(async (): Promise<ApiUser[]> => {
         setLoading(true);
         setError(null);
         try {
@@ -37,11 +37,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchUsers();
     }, []);
+
+    // Si el primer fetch ocurrió sin token (401) al montar la app,
+    // re-intentar automáticamente cuando el usuario ya está autenticado.
+    useEffect(() => {
+        if (!isAuthInitialized) return;
+        if (!authUser?.id) return;
+        if (loading) return;
+        if (users.length > 0) return;
+        fetchUsers();
+    }, [isAuthInitialized, authUser?.id, loading, users.length, fetchUsers]);
 
     const filterByRoleId = (role: Role) => {
         let role_id = 0;

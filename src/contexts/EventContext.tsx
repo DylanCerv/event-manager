@@ -6,6 +6,7 @@ import {
     deleteBoltEventAPI,
 } from '../endpoints/boltEvent';
 import type { Event } from '../types/event';
+import { useAuth } from './AuthContext';
 
 let eventsFetchInFlight: Promise<void> | null = null;
 let eventsFetchInFlightStartedAt = 0;
@@ -85,6 +86,7 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const lastFetchTimeRef = React.useRef<number>(0);
+    const { user, isAuthInitialized } = useAuth();
 
     // Fetch all events
     const fetchEvents = useCallback(async (force = false) => {
@@ -224,6 +226,17 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     useEffect(() => {
         fetchEvents();
     }, [fetchEvents]);
+
+    // Si el primer fetch ocurrió sin token (401) al montar la app,
+    // re-intentar automáticamente cuando el usuario ya está autenticado.
+    useEffect(() => {
+        if (!isAuthInitialized) return;
+        if (!user?.id) return;
+        if (loading) return;
+        if (events.length > 0) return;
+        // Forzamos para evitar quedarse con pantalla vacía hasta recargar.
+        fetchEvents(true);
+    }, [isAuthInitialized, user?.id, loading, events.length, fetchEvents]);
 
     const contextValue: EventContextType = {
         events,

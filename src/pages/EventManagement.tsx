@@ -14,6 +14,8 @@ import type { Event, Guest, EventCard } from '../types/event';
 import { updateEventGuestAPI, getEventGuestsByEventIdAPI } from '../endpoints/eventGuest';
 import { useEvents } from '../contexts/EventContext';
 import { InvitationCard } from '../components/InvitationCard';
+import { notify } from '../lib/notify';
+import { appConfirm } from '../lib/dialogs';
 
 export function EventManagement() {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +40,48 @@ export function EventManagement() {
       loadEvent();
     }
   }, [id]);
+
+  // Re-consultar datos al cambiar de tab (evita pantallas vacías sin recargar).
+  useEffect(() => {
+    if (!event) return;
+    if (isLoading) return;
+
+    const run = async () => {
+      try {
+        if (activeTab === 'guests') {
+          await fetchGuests(event.id);
+          return;
+        }
+        if (activeTab === 'cards') {
+          try {
+            const card = await getInteractiveCardByEventId(event.id);
+            setEventCard(card);
+          } catch (error) {
+            // Si no existe la tarjeta, continuamos sin error al usuario
+            console.error('Error fetching event card:', error);
+            setEventCard(null);
+          }
+          return;
+        }
+        if (activeTab === 'qr-access') {
+          await refreshEvents();
+          const next = getEventById(event.id);
+          if (next) setEvent(next);
+          return;
+        }
+        if (activeTab === 'finalization') {
+          await refreshEvents();
+          const next = getEventById(event.id);
+          if (next) setEvent(next);
+        }
+      } catch (e) {
+        console.error('Error refreshing tab data:', e);
+      }
+    };
+
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Event status is now handled by the EventContext
 
@@ -91,6 +135,11 @@ export function EventManagement() {
       const actualGuests = response?.data || [];
       console.log('actualGuests', actualGuests);
       
+      const normalizeConfirmationStatus = (s: any): Guest['confirmation_status'] => {
+        if (s === 'attended' || s === 'confirmed') return s;
+        return 'not confirmed';
+      };
+
       // Map API guests to our Guest interface
       const mappedGuests = actualGuests.map((apiGuest: any): Guest => ({
         id: String(apiGuest.id),
@@ -105,7 +154,7 @@ export function EventManagement() {
         video_status: apiGuest.video_status,
         video_url: apiGuest.video_url || undefined,
         status: apiGuest.status || undefined,
-        confirmation_status: (apiGuest.confirmation_status as Guest['confirmation_status']) || 'not confirmed',
+        confirmation_status: normalizeConfirmationStatus(apiGuest.confirmation_status),
         created_at: apiGuest.created_at || new Date().toISOString(),
         health_info: apiGuest.health_information || '',
         mobility_restrictions: apiGuest.transportation_status || '',
@@ -196,6 +245,10 @@ export function EventManagement() {
       // Actualizar el invitado en la lista local con los datos de la respuesta
       const apiGuest = response.data;
       if (apiGuest) {
+        const normalizeConfirmationStatus = (s: any): Guest['confirmation_status'] => {
+          if (s === 'attended' || s === 'confirmed') return s;
+          return 'not confirmed';
+        };
         // Mapear la respuesta del API al formato Guest
         const updatedGuest: Guest = {
           id: String(apiGuest.id),
@@ -214,7 +267,7 @@ export function EventManagement() {
           qr_code_status: apiGuest.qr_code_status,
           video_status: apiGuest.video_status,
           video_url: apiGuest.video_url || undefined,
-          confirmation_status: (apiGuest.confirmation_status as Guest['confirmation_status']) || 'not confirmed',
+          confirmation_status: normalizeConfirmationStatus(apiGuest.confirmation_status),
           created_at: apiGuest.created_at || new Date().toISOString(),
           health_form_submitted: !!apiGuest.health_information,
           mobility_form_submitted: !!apiGuest.transportation_status,
@@ -256,7 +309,7 @@ export function EventManagement() {
       ];
 
       if (recipients.length === 0) {
-        alert('No hay destinatarios con emails válidos.');
+        notify.info('No hay destinatarios con emails válidos.');
         return;
       }
 
@@ -266,16 +319,16 @@ export function EventManagement() {
 
       // Mostrar resultados
       if (results.failed === 0) {
-        alert(`¡Emails enviados exitosamente a ${results.success} destinatario${results.success !== 1 ? 's' : ''}! 🎉`);
+        notify.success(`¡Emails enviados exitosamente a ${results.success} destinatario${results.success !== 1 ? 's' : ''}!`);
       } else {
-        alert(`Envío completado:\n✅ ${results.success} exitosos\n❌ ${results.failed} fallidos\n\nRevisa la consola para más detalles.`);
+        notify.info(`Envío completado:\n✅ ${results.success} exitosos\n❌ ${results.failed} fallidos\n\nRevisa la consola para más detalles.`);
       }
 
       setShowNotificationForm(false);
       setSelectedGuestIds([]);
     } catch (error) {
       console.error('Error enviando emails:', error);
-      alert('Error al enviar emails. Inténtalo de nuevo.');
+      notify.error('Error al enviar emails. Inténtalo de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -291,7 +344,13 @@ export function EventManagement() {
   const handleDeleteEventCard = async () => {
     if (!event || !eventCard) return;
     
-    if (!window.confirm('¿Estás seguro de que deseas eliminar esta tarjeta? Esta acción no se puede deshacer.')) {
+    const confirmed = await appConfirm({
+      title: 'Eliminar tarjeta',
+      message: '¿Estás seguro de que deseas eliminar esta tarjeta? Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmed) {
       return;
     }
     
@@ -303,7 +362,7 @@ export function EventManagement() {
       setTimeout(() => setShowSuccessMessage(false), 3000);
     } catch (error) {
       console.error('Error deleting event card:', error);
-      alert('Error al eliminar la tarjeta interactiva');
+      notify.error('Error al eliminar la tarjeta interactiva');
     } finally {
       setIsLoading(false);
     }

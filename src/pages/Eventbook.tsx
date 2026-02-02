@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import type { EventBook } from '../types/eventbook';
 import { isEventBookClosed, generateEventBookPDF } from '../lib/eventbook-backup';
+import { normalizePublicUrl } from '../lib/appUrl';
+import { notify } from '../lib/notify';
 import type { Event } from '../types/event';
 import { eventBookStorage } from '../lib/eventbook-storage';
 import { EventBookQRCode } from '../components/EventBookQRCode';
@@ -126,14 +128,14 @@ export function Eventbook() {
     e.preventDefault();
     
     if (!newEventBook.event_id) {
-      alert('Por favor selecciona un evento');
+      notify.info('Por favor selecciona un evento');
       return;
     }
 
     // Validación adicional: verificar que no existe ya un EventBook para este evento
     const existingEventBook = eventBooks.find(book => book.event_id === newEventBook.event_id);
     if (existingEventBook) {
-      alert(`Ya existe un EventBook para este evento: "${existingEventBook.name}"`);
+      notify.info(`Ya existe un EventBook para este evento: "${existingEventBook.name}"`);
       return;
     }
 
@@ -382,7 +384,15 @@ export function Eventbook() {
                     <div className="space-y-2 text-sm text-gray-600 mb-4">
                       <div className="flex items-center">
                         <Clock className="h-4 w-4 mr-2" />
-                        {book.eventDate}
+                        {book.eventDate
+                          ? (() => {
+                              const date = new Date(book.eventDate);
+                              const month = date.getMonth() + 1;
+                              const day = date.getDate();
+                              const year = date.getFullYear();
+                              return `${month}/${day}/${year}`;
+                            })()
+                          : ''}
                       </div>
                       <div className="flex items-center">
                         <Users className="h-4 w-4 mr-2" />
@@ -950,34 +960,41 @@ export function Eventbook() {
                           </div>
                         ) : (
                           <>
-                            <div className="flex items-center space-x-3">
-                              <input
-                                type="text"
-                                readOnly
-                                value={selectedEventBook.publicUrl}
-                                onClick={(e) => e.currentTarget.select()}
-                                className="flex-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                              />
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(selectedEventBook.publicUrl);
-                                  const successMessage = document.createElement('div');
-                                  successMessage.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
-                                  successMessage.innerHTML = '✅ URL copiada al portapapeles';
-                                  document.body.appendChild(successMessage);
-                                  setTimeout(() => {
-                                    document.body.removeChild(successMessage);
-                                  }, 3000);
-                                }}
-                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                              >
-                                <Clipboard className="h-4 w-4 mr-2" />
-                                Copiar
-                              </button>
-                            </div>
-                            <p className="mt-2 text-sm text-gray-500">
-                              Comparte esta URL con los invitados para que puedan acceder al muro del evento
-                            </p>
+                            {(() => {
+                              const publicUrl = normalizePublicUrl(selectedEventBook.publicUrl);
+                              return (
+                                <>
+                                  <div className="flex items-center space-x-3">
+                                    <input
+                                      type="text"
+                                      readOnly
+                                      value={publicUrl}
+                                      onClick={(e) => e.currentTarget.select()}
+                                      className="flex-1 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(publicUrl);
+                                        const successMessage = document.createElement('div');
+                                        successMessage.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
+                                        successMessage.innerHTML = '✅ URL copiada al portapapeles';
+                                        document.body.appendChild(successMessage);
+                                        setTimeout(() => {
+                                          document.body.removeChild(successMessage);
+                                        }, 3000);
+                                      }}
+                                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                    >
+                                      <Clipboard className="h-4 w-4 mr-2" />
+                                      Copiar
+                                    </button>
+                                  </div>
+                                  <p className="mt-2 text-sm text-gray-500">
+                                    Comparte esta URL con los invitados para que puedan acceder al muro del evento
+                                  </p>
+                                </>
+                              );
+                            })()}
                           </>
                         )}
                       </div>
@@ -995,7 +1012,7 @@ export function Eventbook() {
 
                         <div className="bg-gray-50 p-6 rounded-lg">
                           <EventBookQRCode
-                            publicUrl={selectedEventBook.publicUrl}
+                            publicUrl={normalizePublicUrl(selectedEventBook.publicUrl)}
                             eventBookName={selectedEventBook.name}
                             showDownloadButton={true}
                             size="large"
@@ -1018,7 +1035,8 @@ export function Eventbook() {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <button
                           onClick={() => {
-                            window.open(`https://wa.me/?text=${encodeURIComponent(`¡Te invito al muro del evento! ${selectedEventBook.publicUrl}`)}`, '_blank');
+                            const publicUrl = normalizePublicUrl(selectedEventBook.publicUrl);
+                            window.open(`https://wa.me/?text=${encodeURIComponent(`¡Te invito al muro del evento! ${publicUrl}`)}`, '_blank');
                           }}
                           className="flex items-center justify-center px-4 py-3 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200"
                         >
@@ -1027,7 +1045,8 @@ export function Eventbook() {
                         </button>
                         <button
                           onClick={() => {
-                            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(selectedEventBook.publicUrl)}`, '_blank');
+                            const publicUrl = normalizePublicUrl(selectedEventBook.publicUrl);
+                            window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}`, '_blank');
                           }}
                           className="flex items-center justify-center px-4 py-3 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200"
                         >
@@ -1036,7 +1055,8 @@ export function Eventbook() {
                         </button>
                           <button
                           onClick={() => {
-                            window.location.href = `mailto:?subject=Muro del Evento&body=${encodeURIComponent(`¡Te invito al muro del evento! ${selectedEventBook.publicUrl}`)}`;
+                            const publicUrl = normalizePublicUrl(selectedEventBook.publicUrl);
+                            window.location.href = `mailto:?subject=Muro del Evento&body=${encodeURIComponent(`¡Te invito al muro del evento! ${publicUrl}`)}`;
                           }}
                           className="flex items-center justify-center px-4 py-3 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200"
                         >
@@ -1045,7 +1065,8 @@ export function Eventbook() {
                           </button>
                           <button
                           onClick={() => {
-                            window.open(`https://www.instagram.com/direct/new?text=${encodeURIComponent(`¡Te invito al muro del evento! ${selectedEventBook.publicUrl}`)}`, '_blank');
+                            const publicUrl = normalizePublicUrl(selectedEventBook.publicUrl);
+                            window.open(`https://www.instagram.com/direct/new?text=${encodeURIComponent(`¡Te invito al muro del evento! ${publicUrl}`)}`, '_blank');
                             }}
                           className="flex items-center justify-center px-4 py-3 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200"
                           >

@@ -11,19 +11,19 @@ import { NotificationForm } from '../components/NotificationForm';
 import { storage } from '../lib/storage';
 import { finalizationStorage } from '../lib/finalization-storage';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { notify } from '../lib/notify';
 import type { Event, EventFormData, Guest } from '../types/event';
 import { useEvents } from '../contexts/EventContext';
 
 export default function Admin() {
   const navigate = useNavigate();
-  const { events, createEvent, updateEvent, deleteEvent } = useEvents();
+  const { events, createEvent, updateEvent, deleteEvent, refreshEvents } = useEvents();
   const [showEventForm, setShowEventForm] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const [showNotificationForm, setShowNotificationForm] = React.useState(false);
   const [selectedGuestIds, setSelectedGuestIds] = React.useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<string | null>(null);
   const [editingEvent, setEditingEvent] = React.useState<Event | null>(null);
-  const [userGuests, setUserGuests] = React.useState<Guest[]>([]);
   // removed unused state
   // removed unused UI states
   const [, setEventStatuses] = React.useState<Record<string, {
@@ -39,8 +39,9 @@ export default function Admin() {
   const eventsKey = React.useMemo(() => events.map(e => e.id).join('|'), [events]);
 
   React.useEffect(() => {
-    fetchUserGuests();
-  }, [eventsKey]);
+    // Forzar refresh al entrar a /events para evitar data vieja/incompleta.
+    refreshEvents();
+  }, [refreshEvents]);
 
   React.useEffect(() => {
     if (!ENABLE_EVENT_STATUS_PREFETCH) return;
@@ -109,21 +110,6 @@ export default function Admin() {
     return () => window.removeEventListener('storage_update', handleStorageUpdate as unknown as EventListener);
   }, []);
 
-  const fetchUserGuests = async () => {
-    try {
-      // For now, we'll keep using storage.getGuests since we don't have a specific API endpoint
-      // to get all guests for all events at once. In a real implementation, we'd want to create
-      // an endpoint that returns all guests for a user's events.
-      const guestLists = await Promise.all(events.map((event) => storage.getGuests(event.id)));
-      const allUserGuests = guestLists.flat();
-      setUserGuests(allUserGuests);
-    } catch (error) {
-      console.error('Error fetching user guests:', error);
-    }
-  };
-
-  // removed unused fetchGuests
-
   const handleCreateEvent = async (data: EventFormData) => {
     try {
       setIsLoading(true);
@@ -142,7 +128,7 @@ export default function Admin() {
       setShowEventForm(false);
     } catch (error) {
       console.error('Error creating event:', error);
-      alert('Error al crear el evento: ' + (error as Error).message);
+      notify.error('Error al crear el evento: ' + (error as Error).message);
     } finally {
       setIsLoading(false);
     }
@@ -179,7 +165,7 @@ export default function Admin() {
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting event:', error);
-      alert(`Error al eliminar el evento: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      notify.error(`Error al eliminar el evento: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     }
   };
 

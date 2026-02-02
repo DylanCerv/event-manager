@@ -2,6 +2,8 @@ import React from 'react';
 import { Plus, Edit, Trash2, Bell, Info, AlertTriangle, CheckCircle, X, Save } from 'lucide-react';
 import { communicationsStorage } from '../lib/communications-storage';
 import type { Notification, SystemUpdate, CommunicationFormData } from '../types/communications';
+import { appConfirm } from '../lib/dialogs';
+import { notify } from '../lib/notify';
 
 export function CommunicationsCenter() {
   const [activeTab, setActiveTab] = React.useState<'notifications' | 'updates'>('notifications');
@@ -107,7 +109,13 @@ export function CommunicationsCenter() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este elemento?')) return;
+    const confirmed = await appConfirm({
+      title: 'Eliminar elemento',
+      message: '¿Estás seguro de que deseas eliminar este elemento? Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+    });
+    if (!confirmed) return;
 
     try {
       setIsLoading(true);
@@ -119,6 +127,7 @@ export function CommunicationsCenter() {
       await loadData();
     } catch (error) {
       console.error('Error deleting communication:', error);
+      notify.error('Error al eliminar el elemento');
     } finally {
       setIsLoading(false);
     }

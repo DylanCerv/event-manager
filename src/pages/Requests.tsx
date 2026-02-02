@@ -6,6 +6,7 @@ import { generateGuestQRPDF } from '../lib/qr';
 import { getEventGuestsByEventIdAPI } from '../endpoints/eventGuest';
 import { createEventRequestAPI, updateEventRequestStatusAPI, deleteEventRequestAPI, archiveEventRequestAPI } from '../endpoints/eventRequest';
 import { getPrizeRedemptionsAPI, updatePrizeRedemptionStatusAPI } from '../endpoints/prizeRedemption';
+import { notify } from '../lib/notify';
 
 // Definir interfaces para trabajar con la respuesta del API
 interface Creator {
@@ -171,10 +172,10 @@ export function Requests() {
       await loadPrizeRequests();
 
       const actionText = action === 'approved' ? 'aprobada' : 'rechazada';
-      alert(`Solicitud ${actionText} exitosamente.`);
+      notify.success(`Solicitud ${actionText} exitosamente.`);
     } catch (error) {
       console.error('Error processing prize request:', error);
-      alert(error instanceof Error ? error.message : 'Error al procesar la solicitud');
+      notify.error(error instanceof Error ? error.message : 'Error al procesar la solicitud');
     } finally {
       setIsLoading(false);
     }
@@ -208,10 +209,10 @@ export function Requests() {
       await refreshEvents();
       
       // Mostrar mensaje de éxito
-      alert('Solicitud enviada correctamente');
+      notify.success('Solicitud enviada correctamente');
     } catch (error) {
       console.error('Error requesting access:', error);
-      alert('Error al solicitar acceso al evento');
+      notify.error('Error al solicitar acceso al evento');
     } finally {
       setIsLoading(false);
     }
@@ -228,7 +229,7 @@ export function Requests() {
       await refreshEvents();
     } catch (error) {
       console.error('Error processing request:', error);
-      alert('Error al procesar la solicitud');
+      notify.error('Error al procesar la solicitud');
     } finally {
       setIsLoading(false);
     }
@@ -305,7 +306,7 @@ export function Requests() {
       
     } catch (error) {
       console.error('Error generating QR codes:', error);
-      alert('Error al generar los códigos QR');
+      notify.error('Error al generar los códigos QR');
     } finally {
       setIsLoading(false);
     }
@@ -322,7 +323,7 @@ export function Requests() {
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error archiving request:', error);
-      alert('Error al archivar la solicitud');
+      notify.error('Error al archivar la solicitud');
     } finally {
       setIsLoading(false);
     }
@@ -336,7 +337,7 @@ export function Requests() {
       await refreshEvents();
     } catch (error) {
       console.error('Error unarchiving request:', error);
-      alert('Error al desarchivar la solicitud');
+      notify.error('Error al desarchivar la solicitud');
     } finally {
       setIsLoading(false);
     }
@@ -476,7 +477,7 @@ export function Requests() {
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting request:', error);
-      alert('Error al eliminar la solicitud');
+      notify.error('Error al eliminar la solicitud');
     } finally {
       setIsLoading(false);
     }
@@ -489,7 +490,7 @@ export function Requests() {
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Solicitudes</h1>
           
           {/* Estadísticas de eventos */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {/* <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <div className="bg-white overflow-hidden shadow-sm rounded-lg border">
               <div className="p-3 sm:p-4">
                 <div className="flex items-center">
@@ -569,7 +570,7 @@ export function Requests() {
                 </div>
               </div>
             </div>
-          </div>
+          </div> */}
           
           {/* Pestañas principales: Eventos / Canjes */}
           <div className="border-b border-gray-200 mb-8">
@@ -800,118 +801,8 @@ export function Requests() {
             </div>
             
             <div className="border-t border-gray-200">
-              {/* Sección de eventos desde el contexto */}
-              <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-                <h3 className="text-lg font-medium leading-6 text-gray-900">Eventos Disponibles</h3>
-                <p className="mt-1 text-sm text-gray-500">Eventos que puedes gestionar como solicitudes</p>
-              </div>
-              
-              {events.length === 0 ? (
-                <div className="text-center py-12">
-                  <Calendar className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">
-                    No hay eventos disponibles
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    No se encontraron eventos en el sistema.
-                  </p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-gray-200">
-                  {events.slice(0, 5).map((event) => {
-                    const isPastEvent = new Date(event.date) < new Date();
-                    const daysRemaining = (() => {
-                      const eventDate = new Date(event.date);
-                      const today = new Date();
-                      const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-                      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                      const diffTime = eventDateOnly.getTime() - todayOnly.getTime();
-                      return Math.round(diffTime / (1000 * 60 * 60 * 24));
-                    })();
-                    
-                    return (
-                      <li key={event.id} className="px-3 py-4 sm:px-6">
-                        <div className={`bg-gray-50 rounded-lg p-4 ${isPastEvent ? 'opacity-60' : ''}`}>
-                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
-                            <div className="flex-1">
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
-                                <h4 className="text-base sm:text-lg font-medium text-gray-900">{event.name}</h4>
-                                <div className="flex items-center space-x-2">
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    {(() => {
-                                      if (isPastEvent) {
-                                        return (
-                                          <>
-                                            <Calendar className="w-3 h-3 mr-1" />
-                                            Evento finalizado
-                                          </>
-                                        );
-                                      } else if (daysRemaining === 0) {
-                                        return (
-                                          <>
-                                            <Calendar className="w-3 h-3 mr-1" />
-                                            ¡HOY!
-                                          </>
-                                        );
-                                      } else {
-                                        return (
-                                          <>
-                                            <Calendar className="w-3 h-3 mr-1" />
-                                            {daysRemaining} días restantes
-                                          </>
-                                        );
-                                      }
-                                    })()}
-                                  </span>
-                                  {event.is_finalized && (
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                      <Check className="w-3 h-3 mr-1" />
-                                      Finalizado
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              
-                              <div className="mt-2 text-xs sm:text-sm text-gray-600">
-                                <span className="font-medium">Fecha:</span> {new Date(event.date).toLocaleDateString('es-ES')}
-                                <span className="mx-2">•</span>
-                                <span className="font-medium">Ubicación:</span> {event.location || 'No especificada'}
-                                <span className="mx-2">•</span>
-                                <span className="font-medium">Invitados:</span> {event.guest_count}
-                              </div>
-                              
-                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-                                <span className={`inline-flex items-center px-2 py-1 rounded-md ${
-                                  event.request?.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                                  event.request?.status === 'rejected' ? 'bg-red-100 text-red-800' : 
-                                  'bg-yellow-100 text-yellow-800'
-                                }`}>
-                                  {event.request?.status === 'approved' ? (
-                                    <><CheckCircle className="h-3 w-3 mr-1" /> Aprobado</>
-                                  ) : event.request?.status === 'rejected' ? (
-                                    <><XCircle className="h-3 w-3 mr-1" /> Rechazado</>
-                                  ) : (
-                                    <><Clock className="h-3 w-3 mr-1" /> Pendiente</>
-                                  )}
-                                </span>
-                                <span className={`inline-flex items-center px-2 py-1 rounded-md ${
-                                  event.qr_access_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                }`}>
-                                  <QrCode className="h-3 w-3 mr-1" />
-                                  QR Access {event.qr_access_active ? 'Activo' : 'Inactivo'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              
               {/* Sección de solicitudes existentes */}
-              <div className="px-4 py-5 sm:px-6 border-t border-b border-gray-200 mt-6">
+              <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
                 <h3 className="text-lg font-medium leading-6 text-gray-900">Solicitudes de Eventos</h3>
                 <p className="mt-1 text-sm text-gray-500">Solicitudes de acceso a eventos</p>
               </div>
@@ -1065,6 +956,118 @@ export function Requests() {
                   })}
                 </ul>
               )}
+
+              {/* Sección de eventos desde el contexto */}
+              <div className="px-4 py-5 sm:px-6 border-t border-b border-gray-200 mt-6">
+                <h3 className="text-lg font-medium leading-6 text-gray-900">Eventos Disponibles</h3>
+                <p className="mt-1 text-sm text-gray-500">Eventos que puedes gestionar como solicitudes</p>
+              </div>
+              
+              {events.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">
+                    No hay eventos disponibles
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    No se encontraron eventos en el sistema.
+                  </p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-200">
+                  {events.slice(0, 5).map((event) => {
+                    const isPastEvent = new Date(event.date) < new Date();
+                    const daysRemaining = (() => {
+                      const eventDate = new Date(event.date);
+                      const today = new Date();
+                      const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+                      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                      const diffTime = eventDateOnly.getTime() - todayOnly.getTime();
+                      return Math.round(diffTime / (1000 * 60 * 60 * 24));
+                    })();
+                    
+                    return (
+                      <li key={event.id} className="px-3 py-4 sm:px-6">
+                        <div className={`bg-gray-50 rounded-lg p-4 ${isPastEvent ? 'opacity-60' : ''}`}>
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
+                            <div className="flex-1">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
+                                <h4 className="text-base sm:text-lg font-medium text-gray-900">{event.name}</h4>
+                                <div className="flex items-center space-x-2">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    {(() => {
+                                      if (isPastEvent) {
+                                        return (
+                                          <>
+                                            <Calendar className="w-3 h-3 mr-1" />
+                                            Evento finalizado
+                                          </>
+                                        );
+                                      } else if (daysRemaining === 0) {
+                                        return (
+                                          <>
+                                            <Calendar className="w-3 h-3 mr-1" />
+                                            ¡HOY!
+                                          </>
+                                        );
+                                      } else {
+                                        return (
+                                          <>
+                                            <Calendar className="w-3 h-3 mr-1" />
+                                            {daysRemaining} días restantes
+                                          </>
+                                        );
+                                      }
+                                    })()}
+                                  </span>
+                                  {event.is_finalized && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                      <Check className="w-3 h-3 mr-1" />
+                                      Finalizado
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="mt-2 text-xs sm:text-sm text-gray-600">
+                                <span className="font-medium">Fecha:</span> {new Date(event.date).toLocaleDateString('es-ES')}
+                                <span className="mx-2">•</span>
+                                <span className="font-medium">Ubicación:</span> {event.location || 'No especificada'}
+                                <span className="mx-2">•</span>
+                                <span className="font-medium">Invitados:</span> {event.guest_count}
+                              </div>
+                              
+                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                                <span className={`inline-flex items-center px-2 py-1 rounded-md ${
+                                  event.request?.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                                  event.request?.status === 'rejected' ? 'bg-red-100 text-red-800' : 
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {event.request?.status === 'approved' ? (
+                                    <><CheckCircle className="h-3 w-3 mr-1" /> Aprobado</>
+                                  ) : event.request?.status === 'rejected' ? (
+                                    <><XCircle className="h-3 w-3 mr-1" /> Rechazado</>
+                                  ) : (
+                                    <><Clock className="h-3 w-3 mr-1" /> Pendiente</>
+                                  )}
+                                </span>
+                                <span className={`inline-flex items-center px-2 py-1 rounded-md ${
+                                  event.qr_access_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  <QrCode className="h-3 w-3 mr-1" />
+                                  QR Access {event.qr_access_active ? 'Activo' : 'Inactivo'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              
+              {/* (Reordenado) Solicitudes arriba, Eventos abajo */}
             </div>
           </div>
             </>

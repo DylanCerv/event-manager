@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, Plus, Users, Shield, DollarSign, BarChart3, Check, Eye, X, Calendar, CheckCircle, XCircle, Clock, BookOpen, UserCheck, Edit, Trash2 } from 'lucide-react';
 import { creatorsStorage } from '../lib/creators-storage';
 import { deleteUserAPI } from '../endpoints/user';
@@ -9,10 +9,12 @@ import CreateCreatorModal from '../components/CreateCreatorModal';
 import { useUser } from '../contexts/UserContext';
 import type { ApiUser } from '../types/auth';
 import EditCreatorModal from '../components/EditCreatorModal';
-import type { Creator, CreateCreatorData } from '../types/creator';
+import type { Creator } from '../types/creator';
 import type { CommissionSummary } from '../types/commission';
 import type { Event as CustomEvent } from '../types/event';
 import { getBoltEventsAPI } from '../endpoints/boltEvent';
+import { notify } from '../lib/notify';
+import { appConfirm } from '../lib/dialogs';
 
 export default function Creadores() {
   const { filterByRoleId, users: apiUsers, fetchUsers } = useUser();
@@ -23,8 +25,8 @@ export default function Creadores() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedCreator, setSelectedCreator] = useState<ApiUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [commissionSummaries, setCommissionSummaries] = useState<CommissionSummary[]>([]);
+  const [, setIsLoading] = useState(true);
+  const [, setCommissionSummaries] = useState<CommissionSummary[]>([]);
   const [globalStats, setGlobalStats] = useState({
     totalRevenue: 0,
     totalCommissions: 0,
@@ -162,9 +164,16 @@ export default function Creadores() {
       console.error('Error marking commissions as paid:', error);
     }
   };
+  void handleMarkAsPaid;
 
   const handleDeleteCreator = async (id: string | number) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este creador?')) {
+    const confirmed = await appConfirm({
+      title: 'Eliminar creador',
+      message: '¿Estás seguro de que quieres eliminar este creador?',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+    });
+    if (confirmed) {
       try {
         const response = await deleteUserAPI(Number(id));
         if (response && (response.id || response.status === 200 || response.message)) {
@@ -172,7 +181,7 @@ export default function Creadores() {
         }
       } catch (error) {
         console.error('Error deleting creator:', error);
-        alert('Error al eliminar el creador');
+        notify.error('Error al eliminar el creador');
       }
     }
   };
@@ -353,24 +362,12 @@ export default function Creadores() {
       setShowCreatorDetails(creator);
     } catch (error) {
       console.error('Error calculating creator metrics:', error);
-      alert('Error al cargar las métricas del creador');
+      notify.error('Error al cargar las métricas del creador');
     } finally {
       setIsLoadingMetrics(false);
     }
   };
 
-
-  const filteredCreators = React.useMemo(() => {
-    return creators.filter(creator => {
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        creator.firstName.toLowerCase().includes(searchLower) ||
-        creator.lastName.toLowerCase().includes(searchLower) ||
-        creator.email.toLowerCase().includes(searchLower) ||
-        creator.country.toLowerCase().includes(searchLower)
-      );
-    });
-  }, [creators, searchTerm]);
 
   const loadEvents = async () => {
     try {
@@ -1103,7 +1100,7 @@ export default function Creadores() {
                     <div><span className="font-medium text-gray-700">Teléfono:</span> {showCreatorDetails.phone || '-'}</div>
                     <div><span className="font-medium text-gray-700">País:</span> {showCreatorDetails.country || '-'}</div>
                     <div><span className="font-medium text-gray-700">Ciudad:</span> {showCreatorDetails.city || '-'}</div>
-                    <div className="sm:col-span-2"><span className="font-medium text-gray-700">Dirección:</span> {showCreatorDetails.address || '-'}</div>
+                    <div className="sm:col-span-2"><span className="font-medium text-gray-700">Dirección:</span> {(showCreatorDetails as any).address || '-'}</div>
                   </div>
                 </div>
               </div>

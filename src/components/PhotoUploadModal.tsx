@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Camera, Upload } from 'lucide-react';
 import { uploadMyProfilePhotoAPI } from '../endpoints/user';
+import { notify } from '../lib/notify';
 
 interface PhotoUploadModalProps {
   isOpen: boolean;
@@ -40,7 +41,7 @@ export function PhotoUploadModal({ isOpen, onClose, onPhotoUpdate, currentPhoto 
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
     } catch (e: any) {
-      alert(e?.message || 'Error al subir la foto de perfil');
+      notify.error(e?.message || 'Error al subir la foto de perfil');
     } finally {
       setIsUploading(false);
     }

@@ -39,7 +39,16 @@ export function EventbookWall() {
 
   // Obtener el tema del EventBook
   const isDarkTheme = eventBook?.settings?.customization?.theme === 'dark';
-  
+
+  // Título de la pestaña: nombre del evento | Eventos Manager (como Panel | Hostinger)
+  React.useEffect(() => {
+    if (eventBook?.name) {
+      const prev = document.title;
+      document.title = `${eventBook.name} | Eventos Manager`;
+      return () => { document.title = prev; };
+    }
+  }, [eventBook?.name]);
+
   React.useEffect(() => {
     loadEventBook();
   }, [id, userSlug, eventSlug]);
@@ -547,7 +556,7 @@ export function EventbookWall() {
                 </div>
                 
                 {/* Botones de acción - Estilo Facebook */}
-                <div className={`flex items-center justify-between pt-3 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className={`flex flex-wrap items-center justify-between pt-3 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                   <button
                     onClick={isBlocked && blockType === 'partial' ? () => showToast('info', 'No puedes publicar debido a restricciones de moderación') : () => setShowCreatePostModal(true)}
                     disabled={isBlocked && blockType === 'partial'}

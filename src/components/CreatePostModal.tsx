@@ -86,8 +86,8 @@ export function CreatePostModal({ isOpen, onClose, onSubmit, guest, eventBook }:
   const canUploadVideos = eventBook.settings?.functionality?.allowVideoUploads === true;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-t-xl sm:rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">Crear publicación</h2>
@@ -183,45 +183,42 @@ export function CreatePostModal({ isOpen, onClose, onSubmit, guest, eventBook }:
             </div>
           )}
 
-          {/* Media buttons */}
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-            <div className="flex space-x-4">
+          {/* Media buttons: wrap en mobile para que no se desborde */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-4 border-t border-gray-200">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               {canUploadImages && (
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isSubmitting}
-                  className="flex items-center space-x-2 px-3 py-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                  className="flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-3 py-1.5 sm:py-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50 text-sm sm:text-base"
                 >
-                  <Image className="w-5 h-5" />
-                  <span className="font-medium">Foto</span>
+                  <Image className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                  <span className="font-medium truncate">Foto</span>
                 </button>
               )}
-              
               {canUploadVideos && (
                 <button
                   onClick={() => videoInputRef.current?.click()}
                   disabled={isSubmitting}
-                  className="flex items-center space-x-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                  className="flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-3 py-1.5 sm:py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 text-sm sm:text-base"
                 >
-                  <Video className="w-5 h-5" />
-                  <span className="font-medium">Video</span>
+                  <Video className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                  <span className="font-medium truncate">Video</span>
                 </button>
               )}
-              
               <button
                 onClick={() => setShowFeelingPicker(true)}
                 disabled={isSubmitting}
-                className="flex items-center space-x-2 px-3 py-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors disabled:opacity-50"
+                className="flex items-center space-x-1.5 sm:space-x-2 px-2 sm:px-3 py-1.5 sm:py-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors disabled:opacity-50 text-sm sm:text-base"
               >
-                <Smile className="w-5 h-5" />
-                <span className="font-medium">Sentimiento</span>
+                <Smile className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="font-medium truncate">Sentimiento</span>
               </button>
             </div>
-
             <button
               onClick={handleSubmit}
               disabled={(!content.trim() && mediaFiles.length === 0) || isSubmitting}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+              className="bg-blue-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2 shrink-0 w-full sm:w-auto justify-center"
             >
               <Send className="w-4 h-4" />
               <span>{isSubmitting ? 'Publicando...' : 'Publicar'}</span>

@@ -68,10 +68,11 @@ export function InvitationView() {
     qr_code: String(apiGuest.qr_code || ''),
     created_at: apiGuest.created_at || new Date().toISOString(),
     confirmation_status: (apiGuest.confirmation_status as any) || 'not confirmed',
-    // Keep compatibility: InvitationCard uses dietary_restrictions, GuestList uses health_info
     health_info: apiGuest.health_information || '',
     dietary_restrictions: apiGuest.health_information || '',
     mobility_restrictions: apiGuest.transportation_status || '',
+    health_form_submitted: !!(apiGuest.health_information != null && apiGuest.health_information !== ''),
+    mobility_form_submitted: !!(apiGuest.transportation_status != null && apiGuest.transportation_status !== ''),
     qr_code_status: apiGuest.qr_code_status ?? undefined,
     video_status: apiGuest.video_status ?? undefined,
     video_url: apiGuest.video_url || undefined,

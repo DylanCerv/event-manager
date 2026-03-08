@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ThumbsUp, Heart, MessageCircle, Share, MoreHorizontal, Send, User, Flag, Star, Megaphone } from 'lucide-react';
 import { EventBookPost, EventBookReply } from '../types/eventbook';
 import { EventBookGuest } from '../lib/guest-storage';
-import { ReactionPicker, getReactionDisplay } from './ReactionPicker';
+import { ReactionPicker, getReactionDisplay, ReactionsSummary } from './ReactionPicker';
 import { appPrompt } from '../lib/dialogs';
 import { notify } from '../lib/notify';
 
@@ -297,55 +297,27 @@ export function PostCard({
                 <span className="text-blue-600 font-medium">@{reply.replyingTo}</span> {reply.content}
               </p>
             </div>
-            <div className="flex items-center space-x-4 mt-1 ml-3 text-xs text-gray-500">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 ml-3 text-xs text-gray-500">
               <span>{formatTimeAgo(reply.createdAt)}</span>
-              
-              {/* Reacciones de la respuesta */}
               {reply.reactions && Object.keys(reply.reactions).length > 0 && (
-                <div className="flex items-center space-x-1">
-                  {(() => {
-                    const reactionCounts = Object.entries(reply.reactions).reduce((acc, [guestId, reactionType]) => {
-                      if (!acc[reactionType]) acc[reactionType] = [];
-                      acc[reactionType].push(guestId);
-                      return acc;
-                    }, {} as Record<string, string[]>);
-
-                    return Object.entries(reactionCounts).map(([reactionType, guestIds]) => {
-                      const reactionDisplay = getReactionDisplay(reactionType);
-                      const hasUserReacted = currentGuest && guestIds.includes(currentGuest.id);
-                      return (
-                        <button
-                          key={reactionType}
-                          onClick={() => onReplyReaction(post.id, reply.id, reactionType)}
-                          className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs transition-colors ${
-                            hasUserReacted 
-                              ? 'bg-blue-100 text-blue-600' 
-                              : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                          }`}
-                        >
-                          <span>{reactionDisplay.emoji}</span>
-                          <span>{guestIds.length}</span>
-                        </button>
-                      );
-                    });
-                  })()}
-                </div>
+                <ReactionsSummary
+                  reactionsMap={reply.reactions}
+                  allGuests={allGuests}
+                  clickToShowUsers
+                  className="shrink-0"
+                />
               )}
-              
-              {/* Botón para agregar reacción con picker */}
               {currentGuest && (
-                <div className="relative">
+                <div className="relative flex items-center gap-2">
                   <button
                     onClick={() => setShowReplyReactionPicker(
                       showReplyReactionPicker === reply.id ? null : reply.id
                     )}
-                    className="hover:underline font-semibold text-blue-500 flex items-center space-x-1"
+                    className="hover:underline font-semibold text-blue-500 flex items-center space-x-1 shrink-0"
                   >
                     <span>😊</span>
                     <span>Reaccionar</span>
                   </button>
-                  
-                  
                   <ReactionPicker
                     isVisible={showReplyReactionPicker === reply.id}
                     onReaction={(reactionType) => {
@@ -355,20 +327,17 @@ export function PostCard({
                     currentReaction={currentGuest ? reply.reactions?.[currentGuest.id] : null}
                     onClose={() => setShowReplyReactionPicker(null)}
                   />
+                  <button
+                    onClick={() => setReplyingTo({
+                      commentId: reply.id,
+                      userName: `${replyAuthor.firstName} ${replyAuthor.lastName}`,
+                      isNested: true
+                    })}
+                    className="hover:underline font-semibold shrink-0"
+                  >
+                    Responder
+                  </button>
                 </div>
-              )}
-              
-              {currentGuest && (
-                <button
-                  onClick={() => setReplyingTo({
-                    commentId: reply.id,
-                    userName: `${replyAuthor.firstName} ${replyAuthor.lastName}`,
-                    isNested: true
-                  })}
-                  className="hover:underline font-semibold"
-                >
-                  Responder
-                </button>
               )}
             </div>
           </div>
@@ -424,15 +393,6 @@ export function PostCard({
       {/* Header del post */}
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          {(() => {
-            console.log('🖼️ PostCard - Author info:', {
-              name: `${author.firstName} ${author.lastName}`,
-              hasPhoto: !!author.profilePhoto,
-              photoLength: author.profilePhoto?.length,
-              isModerator: (post as any).authorType === 'moderator'
-            });
-            return null;
-          })()}
           {author.profilePhoto ? (
             <img
               src={author.profilePhoto}
@@ -528,35 +488,25 @@ export function PostCard({
         </div>
       )}
 
-      {/* Estadísticas (likes, comentarios) */}
+      {/* Estadísticas: reacciones agrupadas (click = ver quién), comentarios */}
       {(totalReactions > 0 || post.comments.length > 0) && (
         <div className="px-4 py-2 border-b border-gray-200">
-          <div className="flex items-center justify-between text-gray-500 text-sm">
-            <div className="flex items-center space-x-1">
-              {totalReactions > 0 && (
-                <>
-                  <div className="flex items-center -space-x-1">
-                    {reactionCounts.like && <span className="text-lg">👍</span>}
-                    {reactionCounts.love && <span className="text-lg">❤️</span>}
-                    {reactionCounts.haha && <span className="text-lg">😂</span>}
-                    {reactionCounts.wow && <span className="text-lg">😮</span>}
-                    {reactionCounts.sad && <span className="text-lg">😢</span>}
-                    {reactionCounts.angry && <span className="text-lg">😡</span>}
-                  </div>
-                  <span>{totalReactions}</span>
-                </>
-              )}
-            </div>
-            <div className="flex space-x-4">
-              {getTotalCommentsCount > 0 && (
-                <button
-                  onClick={() => setShowAllComments(!showAllComments)}
-                  className="hover:underline"
-                >
-                  {getTotalCommentsCount} comentario{getTotalCommentsCount > 1 ? 's' : ''}
-                </button>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-gray-500 text-sm">
+            {totalReactions > 0 && (
+              <ReactionsSummary
+                reactionsMap={effectiveReactions}
+                allGuests={allGuests}
+                clickToShowUsers
+              />
+            )}
+            {getTotalCommentsCount > 0 && (
+              <button
+                onClick={() => setShowAllComments(!showAllComments)}
+                className="hover:underline"
+              >
+                {getTotalCommentsCount} comentario{getTotalCommentsCount > 1 ? 's' : ''}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -641,54 +591,27 @@ export function PostCard({
                           </p>
                           <p className="text-gray-800">{comment.content}</p>
                         </div>
-                        {/* Acciones del comentario */}
-                        <div className="flex items-center space-x-4 mt-1 ml-3 text-xs text-gray-500">
+                        {/* Acciones del comentario: reacciones agrupadas + Reaccionar + Responder */}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 ml-3 text-xs text-gray-500">
                           <span>{formatTimeAgo(comment.createdAt)}</span>
-                          
-                          {/* Reacciones del comentario */}
                           {comment.reactions && Object.keys(comment.reactions).length > 0 && (
-                            <div className="flex items-center space-x-1">
-                              {(() => {
-                                const reactionCounts = Object.entries(comment.reactions).reduce((acc, [guestId, reactionType]) => {
-                                  if (!acc[reactionType]) acc[reactionType] = [];
-                                  acc[reactionType].push(guestId);
-                                  return acc;
-                                }, {} as Record<string, string[]>);
-
-                                return Object.entries(reactionCounts).map(([reactionType, guestIds]) => {
-                                  const reactionDisplay = getReactionDisplay(reactionType);
-                                  const hasUserReacted = currentGuest && guestIds.includes(currentGuest.id);
-                                  return (
-                                    <button
-                                      key={reactionType}
-                                      onClick={() => onCommentReaction(post.id, comment.id, reactionType)}
-                                      className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs transition-colors ${
-                                        hasUserReacted 
-                                          ? 'bg-blue-100 text-blue-600' 
-                                          : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                                      }`}
-                                    >
-                                      <span>{reactionDisplay.emoji}</span>
-                                      <span>{guestIds.length}</span>
-                                    </button>
-                                  );
-                                });
-                              })()}
-                            </div>
+                            <ReactionsSummary
+                              reactionsMap={comment.reactions}
+                              allGuests={allGuests}
+                              clickToShowUsers
+                              className="shrink-0"
+                            />
                           )}
-                          
-                          {/* Botón para agregar reacción con picker */}
-                          <div className="relative">
+                          <div className="relative flex items-center gap-2">
                             <button
                               onClick={() => setShowCommentReactionPicker(
                                 showCommentReactionPicker === comment.id ? null : comment.id
                               )}
-                              className="hover:underline font-semibold text-blue-500 flex items-center space-x-1"
+                              className="hover:underline font-semibold text-blue-500 flex items-center space-x-1 shrink-0"
                             >
                               <span>😊</span>
                               <span>Reaccionar</span>
                             </button>
-                            
                             <ReactionPicker
                               isVisible={showCommentReactionPicker === comment.id}
                               onReaction={(reactionType) => {
@@ -698,17 +621,16 @@ export function PostCard({
                               currentReaction={currentGuest ? comment.reactions?.[currentGuest.id] : null}
                               onClose={() => setShowCommentReactionPicker(null)}
                             />
+                            <button
+                              onClick={() => setReplyingTo({
+                                commentId: comment.id,
+                                userName: `${commentAuthor.firstName} ${commentAuthor.lastName}`
+                              })}
+                              className="hover:underline font-semibold shrink-0"
+                            >
+                              Responder
+                            </button>
                           </div>
-                          
-                          <button
-                            onClick={() => setReplyingTo({
-                              commentId: comment.id,
-                              userName: `${commentAuthor.firstName} ${commentAuthor.lastName}`
-                            })}
-                            className="hover:underline font-semibold"
-                          >
-                            Responder
-                          </button>
                         </div>
                       </div>
                     </div>

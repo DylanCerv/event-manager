@@ -317,6 +317,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
       <ThemeStyles 
         eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
         themeColors={themeColors}
+        singleFont
       >
         <div 
           className="max-w-4xl mx-auto shadow-2xl overflow-hidden border border-gray-100 relative rounded-lg"
@@ -591,7 +592,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
               >
                 <div className="flex items-center justify-center space-x-2 text-sm">
                   <Sparkles className="w-4 h-4" style={{ color: themeColors.primary }} />
-                  <span className="font-serif tracking-wider theme-text font-bold" style={{ 
+                  <span className="tracking-wider theme-text font-bold" style={{ 
                     color: themeColors.primary
                   }}>
                     Invitación Especial
@@ -897,10 +898,10 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
             {/* Forms Section - Usando la misma estructura que circular/galería */}
             {(eventCard.include_health_form || eventCard.include_mobility_form) && (
-              <div className="px-4 md:px-6 pb-4 md:pb-6">
-                <div className="space-y-4">
+              <div className="px-4 md:px-6 pb-4 md:pb-6 text-center">
+                <div className="space-y-4 flex flex-col items-center">
                   {eventCard.include_health_form && (
-                    <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
+                    <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                       backgroundColor: 'rgba(255, 255, 255, 0.02)',
                       backdropFilter: 'blur(2px)',
                       borderColor: 'rgba(255, 255, 255, 0.1)'
@@ -919,17 +920,17 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     } : {
                       backgroundSize: '100% 100%'
                     }}>
-                      <div className="flex items-center space-x-2 mb-3">
+                      <div className="flex items-center justify-center space-x-2 mb-3">
                         <Utensils className="w-4 h-4 text-indigo-600" />
                         <h3 className="text-base font-medium text-gray-900">Información de Salud</h3>
                       </div>
                       {showHealthForm ? (
-                        <div className="space-y-3">
+                        <div className="space-y-3 flex flex-col items-center">
                           <div className="space-y-1">
                             <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                            <div className="space-y-2">
+                            <div className="space-y-2 flex flex-col items-center">
                               {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
-                                <label key={option} className="flex items-center">
+                                <label key={option} className="flex items-center cursor-pointer">
                                   <input
                                     type="radio"
                                     name="dietary"
@@ -960,10 +961,8 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         </div>
                       ) : (
                         <div className="text-center">
-                          <div className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium">
-                            <Check className="w-4 h-4 mr-2" />
-                            Enviado
-                          </div>
+                          <p className="text-sm text-gray-600">Tu respuesta</p>
+                          <p className="font-medium text-gray-900 mt-1">{guest.dietary_restrictions || 'Ninguna'}</p>
                         </div>
                       )}
                     </div>
@@ -989,17 +988,17 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     } : {
                       backgroundSize: '100% 100%'
                     }}>
-                      <div className="flex items-center space-x-2 mb-4">
+                      <div className="flex items-center justify-center space-x-2 mb-4">
                         <Accessibility className="w-5 h-5 text-indigo-600" />
                         <h3 className="text-lg font-medium text-gray-900">Información de Movilidad</h3>
                       </div>
                       {showMobilityForm ? (
-                        <div className="space-y-4">
+                        <div className="space-y-4 flex flex-col items-center">
                           <div className="space-y-2">
                             <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                            <div className="space-y-2">
+                            <div className="space-y-2 flex flex-col items-center">
                               {['Ninguna', 'Silla de Ruedas'].map((option) => (
-                                <label key={option} className="flex items-center">
+                                <label key={option} className="flex items-center cursor-pointer">
                                   <input
                                     type="radio"
                                     name="mobility"
@@ -1030,10 +1029,8 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         </div>
                       ) : (
                         <div className="text-center">
-                          <div className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium">
-                            <Check className="w-4 h-4 mr-2" />
-                            Enviado
-                          </div>
+                          <p className="text-sm text-gray-600">Tu respuesta</p>
+                          <p className="font-medium text-gray-900 mt-1">{guest.mobility_restrictions || 'Ninguna'}</p>
                         </div>
                       )}
                     </div>
@@ -1052,7 +1049,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
               } : {}}>
                 <div className="text-center space-y-6">
                   {eventCard.contact_message && (
-                    <p className="text-gray-600 italic font-serif text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
+                    <p className="text-gray-600 italic text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
                   )}
 
                   <div className="flex justify-center space-x-4">
@@ -1125,6 +1122,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
       <ThemeStyles 
         eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
         themeColors={themeColors}
+        singleFont
       >
         <div 
           className="max-w-4xl mx-auto shadow-2xl overflow-hidden border border-gray-100 relative rounded-lg"
@@ -1417,7 +1415,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
               )}
               <div className="flex items-center justify-center space-x-2 text-sm">
                 <Sparkles className="w-4 h-4" style={{ color: themeColors.primary }} />
-                <span className="font-serif tracking-wider theme-text font-bold" style={{ 
+                <span className="tracking-wider theme-text font-bold" style={{ 
                   color: themeColors.primary
                 }}>
                   Invitación Especial
@@ -1708,9 +1706,9 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
              </div>
 
             {/* Forms Section */}
-            <div className="space-y-4">
+            <div className="space-y-4 text-center flex flex-col items-center">
               {eventCard.include_health_form && (
-                <div className={`bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-gray-200 shadow-sm transition-all duration-300 ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
+                <div className={`bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   backdropFilter: 'blur(2px)',
                   borderColor: 'rgba(255, 255, 255, 0.1)'
@@ -1729,17 +1727,17 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 } : {
                   backgroundSize: '100% 100%'
                 }}>
-                  <div className="flex items-center space-x-2 mb-3">
+                  <div className="flex items-center justify-center space-x-2 mb-3">
                     <Utensils className="w-4 h-4 text-indigo-600" />
                     <h3 className="text-base font-medium text-gray-900">Información de Salud</h3>
                   </div>
                   {showHealthForm ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3 flex flex-col items-center">
                       <div className="space-y-1">
                         <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex flex-col items-center">
                           {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
-                            <label key={option} className="flex items-center">
+                            <label key={option} className="flex items-center cursor-pointer">
                               <input
                                 type="radio"
                                 name="dietary"
@@ -1770,17 +1768,15 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     </div>
                   ) : (
                     <div className="text-center">
-                      <div className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium">
-                        <Check className="w-4 h-4 mr-2" />
-                        Enviado
-                      </div>
+                      <p className="text-sm text-gray-600">Tu respuesta</p>
+                      <p className="font-medium text-gray-900 mt-1">{guest.dietary_restrictions || 'Ninguna'}</p>
                     </div>
                   )}
                 </div>
               )}
 
               {eventCard.include_mobility_form && (
-                <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showMobilityForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
+                <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showMobilityForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   backdropFilter: 'blur(2px)',
                   borderColor: 'rgba(255, 255, 255, 0.1)'
@@ -1799,17 +1795,17 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 } : {
                   backgroundSize: '100% 100%'
                 }}>
-                  <div className="flex items-center space-x-2 mb-4">
+                  <div className="flex items-center justify-center space-x-2 mb-4">
                     <Accessibility className="w-5 h-5 text-indigo-600" />
                     <h3 className="text-lg font-medium text-gray-900">Información de Movilidad</h3>
                   </div>
                   {showMobilityForm ? (
-                    <div className="space-y-4">
+                    <div className="space-y-4 flex flex-col items-center">
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex flex-col items-center">
                           {['Ninguna', 'Silla de Ruedas'].map((option) => (
-                            <label key={option} className="flex items-center">
+                            <label key={option} className="flex items-center cursor-pointer">
                               <input
                                 type="radio"
                                 name="mobility"
@@ -1840,10 +1836,8 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     </div>
                   ) : (
                     <div className="text-center">
-                      <div className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium">
-                        <Check className="w-4 h-4 mr-2" />
-                        Enviado
-                      </div>
+                      <p className="text-sm text-gray-600">Tu respuesta</p>
+                      <p className="font-medium text-gray-900 mt-1">{guest.mobility_restrictions || 'Ninguna'}</p>
                     </div>
                   )}
                 </div>
@@ -1860,7 +1854,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
               } : {}}>
                 <div className="text-center space-y-6">
                   {eventCard.contact_message && (
-                    <p className="text-gray-600 italic font-serif text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
+                    <p className="text-gray-600 italic text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
                   )}
 
                   <div className="flex justify-center space-x-4">
@@ -1938,7 +1932,8 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
           accent: themeColors.accent,
           background: themeColors.background,
           text: themeColors.text
-        }} 
+        }}
+        singleFont
       >
         <div 
           className="max-w-4xl mx-auto shadow-2xl overflow-hidden relative rounded-2xl border border-gray-100"
@@ -2367,7 +2362,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
             >
               <div className="flex items-center justify-center space-x-2 text-sm">
                 <Sparkles className="w-4 h-4" style={{ color: themeColors.primary }} />
-                <span className="font-serif tracking-wider theme-text font-bold" style={{ 
+                <span className="tracking-wider theme-text font-bold" style={{ 
                   color: themeColors.primary
                 }}>
                   Invitación Especial
@@ -2658,9 +2653,9 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
               </div>
 
             {/* Forms Section */}
-            <div className="space-y-4">
+            <div className="space-y-4 text-center flex flex-col items-center">
               {eventCard.include_health_form && (
-                <div className={`bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-gray-200 shadow-sm transition-all duration-300 ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
+                <div className={`bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showHealthForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   backdropFilter: 'blur(2px)',
                   borderColor: 'rgba(255, 255, 255, 0.1)'
@@ -2679,17 +2674,17 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 } : {
                   backgroundSize: '100% 100%'
                 }}>
-                  <div className="flex items-center space-x-2 mb-3">
+                  <div className="flex items-center justify-center space-x-2 mb-3">
                     <Utensils className="w-4 h-4 text-indigo-600" />
                     <h3 className="text-base font-medium text-gray-900">Información de Salud</h3>
                   </div>
                   {showHealthForm ? (
-                    <div className="space-y-3">
+                    <div className="space-y-3 flex flex-col items-center">
                       <div className="space-y-1">
                         <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex flex-col items-center">
                           {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
-                            <label key={option} className="flex items-center">
+                            <label key={option} className="flex items-center cursor-pointer">
                               <input
                                 type="radio"
                                 name="dietary"
@@ -2720,17 +2715,15 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     </div>
                   ) : (
                     <div className="text-center">
-                      <div className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium">
-                        <Check className="w-4 h-4 mr-2" />
-                        Enviado
-                      </div>
+                      <p className="text-sm text-gray-600">Tu respuesta</p>
+                      <p className="font-medium text-gray-900 mt-1">{guest.dietary_restrictions || 'Ninguna'}</p>
                     </div>
                   )}
                 </div>
               )}
 
               {eventCard.include_mobility_form && (
-                <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showMobilityForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
+                <div className={`bg-cover bg-center bg-no-repeat rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showMobilityForm ? 'opacity-75' : ''}`} style={eventCard.event_type === 'wedding' ? {
                   backgroundColor: 'rgba(255, 255, 255, 0.02)',
                   backdropFilter: 'blur(2px)',
                   borderColor: 'rgba(255, 255, 255, 0.1)'
@@ -2749,17 +2742,17 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 } : {
                   backgroundSize: '100% 100%'
                 }}>
-                  <div className="flex items-center space-x-2 mb-4">
+                  <div className="flex items-center justify-center space-x-2 mb-4">
                     <Accessibility className="w-5 h-5 text-indigo-600" />
                     <h3 className="text-lg font-medium text-gray-900">Información de Movilidad</h3>
                   </div>
                   {showMobilityForm ? (
-                    <div className="space-y-4">
+                    <div className="space-y-4 flex flex-col items-center">
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex flex-col items-center">
                           {['Ninguna', 'Silla de Ruedas'].map((option) => (
-                            <label key={option} className="flex items-center">
+                            <label key={option} className="flex items-center cursor-pointer">
                               <input
                                 type="radio"
                                 name="mobility"
@@ -2790,10 +2783,8 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     </div>
                   ) : (
                     <div className="text-center">
-                      <div className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-md text-sm font-medium">
-                        <Check className="w-4 h-4 mr-2" />
-                        Enviado
-                      </div>
+                      <p className="text-sm text-gray-600">Tu respuesta</p>
+                      <p className="font-medium text-gray-900 mt-1">{guest.mobility_restrictions || 'Ninguna'}</p>
                     </div>
                   )}
                 </div>
@@ -2810,7 +2801,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
               } : {}}>
                 <div className="text-center space-y-6">
                   {eventCard.contact_message && (
-                    <p className="text-gray-600 italic font-serif text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
+                    <p className="text-gray-600 italic text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
                   )}
 
                   <div className="flex justify-center space-x-4">
@@ -2883,6 +2874,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
       <ThemeStyles 
         eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
         themeColors={themeColors}
+        singleFont
       >
         <div className="relative h-screen overflow-hidden">
           {/* Imagen de fondo fija - altura fija del viewport */}
@@ -2925,7 +2917,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 <div className="text-center space-y-2">
                   <div className="flex items-center justify-center space-x-2 text-xs">
                     <Sparkles className="w-3 h-3" style={{ color: themeColors.primary }} />
-                    <span className="font-serif tracking-wider" style={{ color: themeColors.text }}>
+                    <span className="tracking-wider" style={{ color: themeColors.text }}>
                       Invitación Especial
                     </span>
                   </div>
@@ -3196,8 +3188,8 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         </div>
                       ) : (
                         <div className="text-center py-2">
-                          <Check className="w-5 h-5 mx-auto mb-1" style={{ color: themeColors.primary }} />
-                          <p className="text-xs" style={{ color: themeColors.text }}>Respuesta Guardada</p>
+                          <p className="text-xs" style={{ color: themeColors.text }}>Tu respuesta</p>
+                          <p className="text-xs font-medium mt-1" style={{ color: themeColors.primary }}>{guest.dietary_restrictions || 'Ninguna'}</p>
                         </div>
                       )}
                     </div>
@@ -3250,8 +3242,8 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         </div>
                       ) : (
                         <div className="text-center py-2">
-                          <Check className="w-5 h-5 mx-auto mb-1" style={{ color: themeColors.primary }} />
-                          <p className="text-xs" style={{ color: themeColors.text }}>Respuesta Guardada</p>
+                          <p className="text-xs" style={{ color: themeColors.text }}>Tu respuesta</p>
+                          <p className="text-xs font-medium mt-1" style={{ color: themeColors.primary }}>{guest.mobility_restrictions || 'Ninguna'}</p>
                         </div>
                       )}
                     </div>
@@ -3350,6 +3342,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
     <ThemeStyles 
               eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"}
       themeColors={themeColors}
+      singleFont
     >
       <div className="max-w-4xl mx-auto shadow-2xl overflow-hidden border border-gray-100 relative rounded-lg">
         {/* Theme-specific Decorative Elements */}
@@ -3429,7 +3422,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
           >
             <div className="flex items-center justify-center space-x-2 text-sm">
               <Sparkles className="w-4 h-4" style={{ color: themeColors.primary }} />
-              <span className="font-serif tracking-wider theme-text font-bold" style={{ 
+              <span className="tracking-wider theme-text font-bold" style={{ 
                 color: themeColors.primary
               }}>
                 Invitación Especial
@@ -3743,7 +3736,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
           <div className="p-8 space-y-8">
             {/* Título del evento */}
             <div className="text-center">
-              <h1 className="text-2xl font-serif text-gray-900 mb-2 tracking-wide">
+              <h1 className="text-2xl text-gray-900 mb-2 tracking-wide">
                 {eventCard.event_name}
               </h1>
               <div className="flex items-center justify-center space-x-4 text-gray-600">
@@ -3765,7 +3758,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
             {/* Confirmación de asistencia */}
             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-100/50">
-              <h3 className="text-xl font-serif text-gray-900 mb-4 text-center">Confirmación de Asistencia</h3>
+              <h3 className="text-xl text-gray-900 mb-4 text-center">Confirmación de Asistencia</h3>
               <div className="flex justify-center space-x-4">
                 <button
                   onClick={() => onConfirmAttendance(guest.id, true)}
@@ -3794,7 +3787,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
             {/* Formularios de salud y movilidad */}
             {eventCard.include_health_form && showHealthForm && (
               <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-100/50">
-                <h3 className="text-xl font-serif text-gray-900 mb-4 flex items-center">
+                <h3 className="text-xl text-gray-900 mb-4 flex items-center">
                   <Utensils className="w-6 h-6 mr-2 text-green-600" />
                   Formulario de Salud
                 </h3>
@@ -3830,7 +3823,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
             {eventCard.include_mobility_form && showMobilityForm && (
               <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-6 border border-blue-100/50">
-                <h3 className="text-xl font-serif text-gray-900 mb-4 flex items-center">
+                <h3 className="text-xl text-gray-900 mb-4 flex items-center">
                   <Accessibility className="w-6 h-6 mr-2 text-blue-600" />
                   Formulario de Movilidad
                 </h3>
@@ -3866,7 +3859,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
             {/* Google Maps */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100/50">
-              <h3 className="text-2xl font-serif text-gray-900 mb-4 flex items-center justify-center">
+              <h3 className="text-2xl text-gray-900 mb-4 flex items-center justify-center">
                 <MapPin className="w-7 h-7 mr-3 text-blue-600" />
                 Ubicación del Evento
               </h3>
@@ -3891,7 +3884,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 background: 'linear-gradient(to right, rgb(255 251 235), rgb(254 249 195))',
                 borderColor: 'rgba(245 158 11, 0.5)'
               }}>
-                <h3 className="text-2xl font-serif text-gray-900 mb-6 flex items-center justify-center">
+                <h3 className="text-2xl text-gray-900 mb-6 flex items-center justify-center">
                   <Timer className="w-7 h-7 mr-3 text-amber-600" />
                   Cronograma del Evento
                 </h3>
@@ -3944,7 +3937,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 background: 'linear-gradient(to right, rgb(249 250 251), rgb(248 250 252))',
                 borderColor: 'rgba(156 163 175, 0.5)'
               }}>
-                <h3 className="text-2xl font-serif text-gray-900 mb-4 text-center">Contacto</h3>
+                <h3 className="text-2xl text-gray-900 mb-4 text-center">Contacto</h3>
                 
                 {eventCard.contact_message && (
                   <div className="text-center mb-6">
@@ -4008,20 +4001,20 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
         )
 
           {/* Forms Section */}
-          <div className="space-y-6">
+          <div className="space-y-6 text-center flex flex-col items-center">
             {eventCard.include_health_form && (
-              <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showHealthForm ? 'opacity-75' : ''}`}>
-                <div className="flex items-center space-x-2 mb-4">
+              <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showHealthForm ? 'opacity-75' : ''}`}>
+                <div className="flex items-center justify-center space-x-2 mb-4">
                   <Utensils className="w-5 h-5 text-indigo-600" />
                   <h3 className="text-lg font-medium text-gray-900">Información de Salud</h3>
                 </div>
                 {showHealthForm ? (
-                  <div className="space-y-4">
+                  <div className="space-y-4 flex flex-col items-center">
                     <div className="space-y-2">
                       <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                      <div className="space-y-2">
+                      <div className="space-y-2 flex flex-col items-center">
                         {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
-                          <label key={option} className="flex items-center">
+                          <label key={option} className="flex items-center cursor-pointer">
                             <input
                               type="radio"
                               name="dietary"
@@ -4037,7 +4030,6 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     </div>
                     <button
                       onClick={() => {
-                        // Asegurar que se guarde "Ninguna" si está seleccionado
                         const finalDietaryRestrictions = dietaryRestrictions || 'Ninguna';
                         onUpdateGuest({
                           ...guest,
@@ -4052,27 +4044,27 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     </button>
                   </div>
                 ) : (
-                  <div className="text-center text-green-600">
-                    <Check className="w-6 h-6 mx-auto mb-2" />
-                    <p className="text-sm">Respuesta Guardada</p>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">Tu respuesta</p>
+                    <p className="font-medium text-gray-900 mt-1">{guest.dietary_restrictions || 'Ninguna'}</p>
                   </div>
                 )}
               </div>
             )}
 
             {eventCard.include_mobility_form && (
-              <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 ${!showMobilityForm ? 'opacity-75' : ''}`}>
-                <div className="flex items-center space-x-2 mb-4">
+              <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showMobilityForm ? 'opacity-75' : ''}`}>
+                <div className="flex items-center justify-center space-x-2 mb-4">
                   <Accessibility className="w-5 h-5 text-indigo-600" />
                   <h3 className="text-lg font-medium text-gray-900">Información de Movilidad</h3>
                 </div>
                 {showMobilityForm ? (
-                  <div className="space-y-4">
+                  <div className="space-y-4 flex flex-col items-center">
                     <div className="space-y-2">
                       <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                      <div className="space-y-2">
+                      <div className="space-y-2 flex flex-col items-center">
                         {['Ninguna', 'Silla de Ruedas'].map((option) => (
-                          <label key={option} className="flex items-center">
+                          <label key={option} className="flex items-center cursor-pointer">
                             <input
                               type="radio"
                               name="mobility"
@@ -4103,9 +4095,9 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     </button>
                   </div>
                 ) : (
-                  <div className="text-center text-green-600">
-                    <Check className="w-6 h-6 mx-auto mb-2" />
-                    <p className="text-sm">Respuesta Guardada</p>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">Tu respuesta</p>
+                    <p className="font-medium text-gray-900 mt-1">{guest.mobility_restrictions || 'Ninguna'}</p>
                   </div>
                 )}
               </div>
@@ -4118,7 +4110,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
           <div className="mt-8 pt-8 pb-12 border-t border-gray-200 bg-gradient-to-b from-white to-gray-50">
             <div className="text-center space-y-6">
               {eventCard.contact_message && (
-                <p className="text-gray-600 italic font-serif text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
+                <p className="text-gray-600 italic text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
               )}
 
               <div className="flex justify-center space-x-4">

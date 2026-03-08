@@ -10,9 +10,13 @@ interface ThemeStylesProps {
     text: string;
   };
   children: React.ReactNode;
+  /** Una sola fuente para toda la tarjeta (ej. invitación) */
+  singleFont?: boolean;
 }
 
-export function ThemeStyles({ eventType = 'wedding', themeColors, children }: ThemeStylesProps) {
+const SINGLE_FONT = { fontFamily: '"Playfair Display", "Times New Roman", serif'};
+
+export function ThemeStyles({ eventType = 'wedding', themeColors, children, singleFont }: ThemeStylesProps) {
   const getContainerStyles = () => {
     const baseStyles = {
       background: `linear-gradient(135deg, ${themeColors.background} 0%, ${themeColors.secondary} 20%, ${themeColors.accent} 40%, ${themeColors.background} 100%)`
@@ -97,6 +101,7 @@ export function ThemeStyles({ eventType = 'wedding', themeColors, children }: Th
   };
 
   const getTextStyles = () => {
+    if (singleFont) return SINGLE_FONT;
     switch (eventType) {
       case 'wedding':
         return {
@@ -143,7 +148,7 @@ export function ThemeStyles({ eventType = 'wedding', themeColors, children }: Th
 
   const getTitleStyles = () => {
     const baseTextStyles = getTextStyles();
-    
+    if (singleFont) return { ...SINGLE_FONT, fontSize: '2.25rem', mobileFontSize: '1.75rem', smallMobileFontSize: '1.5rem', extraSmallMobileFontSize: '1.35rem' };
     switch (eventType) {
       case 'wedding':
         return {
@@ -305,7 +310,7 @@ export function ThemeStyles({ eventType = 'wedding', themeColors, children }: Th
           .theme-text {
             font-family: ${getTextStyles().fontFamily};
             font-weight: ${getTextStyles().fontWeight};
-            letter-spacing: ${getTextStyles().letterSpacing};
+            letter-spacing: ${(getTextStyles() as { letterSpacing?: string }).letterSpacing ?? '0'};
           }
         `}
       </style>

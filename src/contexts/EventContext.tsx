@@ -222,21 +222,14 @@ export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
     }, []);
 
-    // Fetch events on component mount
-    useEffect(() => {
-        fetchEvents();
-    }, [fetchEvents]);
-
     // Si el primer fetch ocurrió sin token (401) al montar la app,
     // re-intentar automáticamente cuando el usuario ya está autenticado.
     useEffect(() => {
         if (!isAuthInitialized) return;
         if (!user?.id) return;
-        if (loading) return;
-        if (events.length > 0) return;
         // Forzamos para evitar quedarse con pantalla vacía hasta recargar.
         fetchEvents(true);
-    }, [isAuthInitialized, user?.id, loading, events.length, fetchEvents]);
+    }, [isAuthInitialized, user?.id, fetchEvents]);
 
     const contextValue: EventContextType = {
         events,

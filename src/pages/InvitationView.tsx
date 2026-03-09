@@ -268,36 +268,47 @@ export function InvitationView() {
     }
   };
 
-  const handleUpdateGuest = async (guestData: Partial<Guest>) => {
+  const handleUpdateGuest = async (guestData: Partial<Guest>): Promise<void> => {
     if (!qrCode || !guest) return;
 
-    try {
-      // Only sync known public fields to backend
-      const payload: Record<string, any> = {};
-      if (guestData.name !== undefined) payload.name = guestData.name;
-      if (guestData.email !== undefined) payload.email = guestData.email;
-      if (guestData.phone !== undefined) payload.phone = guestData.phone;
-      // Keep shape compatible with GuestList: "health_info" + "mobility_restrictions"
-      if (guestData.health_info !== undefined) payload.health_info = guestData.health_info;
-      if (guestData.dietary_restrictions !== undefined) payload.health_info = guestData.dietary_restrictions;
-      if (guestData.mobility_restrictions !== undefined) payload.mobility_restrictions = guestData.mobility_restrictions;
-      if (guestData.confirmation_status !== undefined) {
-        payload.confirmation_status = guestData.confirmation_status;
-      } else if (guest.confirmation_status !== 'attended') {
-        // Any interaction completing forms implies "confirmed"
-        payload.confirmation_status = 'confirmed';
-      }
-
-      const response = Object.keys(payload).length > 0
-        ? await updateInvitationGuestByQrCodeAPI(qrCode, payload)
-        : null;
-
-      const apiGuest = response?.guest;
-      const merged = apiGuest && event ? mapApiGuestToLocal(apiGuest, event.id) : { ...guest, ...guestData };
-      setGuest(merged);
-    } catch (error) {
-      console.error('Error updating guest:', error);
+    const payload: Record<string, any> = {};
+    if (guestData.name !== undefined) payload.name = guestData.name;
+    if (guestData.email !== undefined) payload.email = guestData.email;
+    if (guestData.phone !== undefined) payload.phone = guestData.phone;
+    if (guestData.health_info !== undefined) payload.health_info = guestData.health_info;
+    if (guestData.dietary_restrictions !== undefined) payload.health_info = guestData.dietary_restrictions;
+    if (guestData.mobility_restrictions !== undefined) payload.mobility_restrictions = guestData.mobility_restrictions;
+    if (guestData.confirmation_status !== undefined) {
+      payload.confirmation_status = guestData.confirmation_status;
+    } else if (guest.confirmation_status !== 'attended') {
+      payload.confirmation_status = 'confirmed';
     }
+
+    if (Object.keys(payload).length === 0) return;
+
+    const response = await updateInvitationGuestByQrCodeAPI(qrCode, payload);
+    const apiGuest = response?.guest;
+    if (!apiGuest || !event) return;
+
+    const mapped = mapApiGuestToLocal(apiGuest, event.id);
+    setGuest((prev) => {
+      if (!prev) return prev;
+      const next: Guest = { ...prev };
+      if (payload.health_info !== undefined) {
+        next.dietary_restrictions = mapped.dietary_restrictions ?? prev.dietary_restrictions;
+        next.health_info = mapped.health_info ?? prev.health_info;
+        next.health_form_submitted = mapped.health_form_submitted ?? prev.health_form_submitted;
+      }
+      if (payload.mobility_restrictions !== undefined) {
+        next.mobility_restrictions = mapped.mobility_restrictions ?? prev.mobility_restrictions;
+        next.mobility_form_submitted = mapped.mobility_form_submitted ?? prev.mobility_form_submitted;
+      }
+      if (payload.name !== undefined) next.name = mapped.name ?? prev.name;
+      if (payload.email !== undefined) next.email = mapped.email ?? prev.email;
+      if (payload.phone !== undefined) next.phone = mapped.phone ?? prev.phone;
+      if (payload.confirmation_status !== undefined) next.confirmation_status = (mapped.confirmation_status ?? prev.confirmation_status) as Guest['confirmation_status'];
+      return next;
+    });
   };
 
   return (

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Calendar, Clock, MapPin, Phone, Mail, Facebook, Instagram, Sparkles, Heart, Check, Utensils, Music, Gift, Timer, Accessibility, Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, MapPin, Phone, Mail, Facebook, Instagram, Sparkles, Heart, Check, Utensils, Music, Gift, Timer, Accessibility, Star, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 // Importar todas las opciones de fondos disponibles
 // Bodas
@@ -37,7 +37,7 @@ interface InvitationCardProps {
   guest: Guest;
   eventCard: EventCard;
   onConfirmAttendance: (guestId: string, confirmed: boolean) => void;
-  onUpdateGuest: (guest: Partial<Guest>) => void;
+  onUpdateGuest: (guest: Partial<Guest>) => Promise<void>;
 }
 
 function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdateGuest }: InvitationCardProps) {
@@ -65,7 +65,9 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
   const [showMobilityForm, setShowMobilityForm] = useState(!guest.mobility_form_submitted);
   const [dietaryRestrictions, setDietaryRestrictions] = useState(guest.dietary_restrictions || '');
   const [mobilityRestrictions, setMobilityRestrictions] = useState(guest.mobility_restrictions || '');
-  
+  const [isSubmittingHealth, setIsSubmittingHealth] = useState(false);
+  const [isSubmittingMobility, setIsSubmittingMobility] = useState(false);
+
   // Actualizar estados cuando cambia el invitado
   useEffect(() => {
     setShowHealthForm(!guest.health_form_submitted);
@@ -928,7 +930,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         <div className="space-y-3 flex flex-col items-center">
                           <div className="space-y-1">
                             <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                            <div className="space-y-2 flex flex-col items-center">
+                            <div className="space-y-2 flex flex-col">
                               {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
                                 <label key={option} className="flex items-center cursor-pointer">
                                   <input
@@ -945,18 +947,26 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                             </div>
                           </div>
                           <button
-                            onClick={() => {
-                              const finalDietaryRestrictions = dietaryRestrictions || 'Ninguna';
-                              onUpdateGuest({
-                                ...guest,
-                                dietary_restrictions: finalDietaryRestrictions,
-                                health_form_submitted: true
-                              });
-                              setShowHealthForm(false);
+                            onClick={async () => {
+                              setIsSubmittingHealth(true);
+                              try {
+                                const finalDietaryRestrictions = dietaryRestrictions || 'Ninguna';
+                                await onUpdateGuest({
+                                  ...guest,
+                                  dietary_restrictions: finalDietaryRestrictions,
+                                  health_form_submitted: true
+                                });
+                                setShowHealthForm(false);
+                              } catch {
+                                // Solo ocultar en success; estado se actualiza desde backend
+                              } finally {
+                                setIsSubmittingHealth(false);
+                              }
                             }}
-                            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                            disabled={isSubmittingHealth}
+                            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                           >
-                            Enviar
+                            {isSubmittingHealth ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
                           </button>
                         </div>
                       ) : (
@@ -996,7 +1006,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         <div className="space-y-4 flex flex-col items-center">
                           <div className="space-y-2">
                             <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                            <div className="space-y-2 flex flex-col items-center">
+                            <div className="space-y-2 flex flex-col">
                               {['Ninguna', 'Silla de Ruedas'].map((option) => (
                                 <label key={option} className="flex items-center cursor-pointer">
                                   <input
@@ -1013,18 +1023,26 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                             </div>
                           </div>
                           <button
-                            onClick={() => {
-                              const finalMobilityRestrictions = mobilityRestrictions || 'Ninguna';
-                              onUpdateGuest({
-                                ...guest,
-                                mobility_restrictions: finalMobilityRestrictions,
-                                mobility_form_submitted: true
-                              });
-                              setShowMobilityForm(false);
+                            onClick={async () => {
+                              setIsSubmittingMobility(true);
+                              try {
+                                const finalMobilityRestrictions = mobilityRestrictions || 'Ninguna';
+                                await onUpdateGuest({
+                                  ...guest,
+                                  mobility_restrictions: finalMobilityRestrictions,
+                                  mobility_form_submitted: true
+                                });
+                                setShowMobilityForm(false);
+                              } catch {
+                                // Solo ocultar en success
+                              } finally {
+                                setIsSubmittingMobility(false);
+                              }
                             }}
-                            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                            disabled={isSubmittingMobility}
+                            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                           >
-                            Enviar
+                            {isSubmittingMobility ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
                           </button>
                         </div>
                       ) : (
@@ -1735,7 +1753,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     <div className="space-y-3 flex flex-col items-center">
                       <div className="space-y-1">
                         <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                        <div className="space-y-2 flex flex-col items-center">
+                        <div className="space-y-2 flex flex-col">
                           {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
                             <label key={option} className="flex items-center cursor-pointer">
                               <input
@@ -1752,18 +1770,23 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         </div>
                       </div>
                       <button
-                        onClick={() => {
-                          const finalDietaryRestrictions = dietaryRestrictions || 'Ninguna';
-                          onUpdateGuest({
-                            ...guest,
-                            dietary_restrictions: finalDietaryRestrictions,
-                            health_form_submitted: true
-                          });
-                          setShowHealthForm(false);
+                        onClick={async () => {
+                          setIsSubmittingHealth(true);
+                          try {
+                            const finalDietaryRestrictions = dietaryRestrictions || 'Ninguna';
+                            await onUpdateGuest({
+                              ...guest,
+                              dietary_restrictions: finalDietaryRestrictions,
+                              health_form_submitted: true
+                            });
+                            setShowHealthForm(false);
+                          } catch {}
+                          finally { setIsSubmittingHealth(false); }
                         }}
-                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                        disabled={isSubmittingHealth}
+                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                       >
-                        Enviar
+                        {isSubmittingHealth ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
                       </button>
                     </div>
                   ) : (
@@ -1803,7 +1826,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     <div className="space-y-4 flex flex-col items-center">
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                        <div className="space-y-2 flex flex-col items-center">
+                        <div className="space-y-2 flex flex-col">
                           {['Ninguna', 'Silla de Ruedas'].map((option) => (
                             <label key={option} className="flex items-center cursor-pointer">
                               <input
@@ -1820,18 +1843,23 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         </div>
                       </div>
                       <button
-                        onClick={() => {
-                          const finalMobilityRestrictions = mobilityRestrictions || 'Ninguna';
-                          onUpdateGuest({
-                            ...guest,
-                            mobility_restrictions: finalMobilityRestrictions,
-                            mobility_form_submitted: true
-                          });
-                          setShowMobilityForm(false);
+                        onClick={async () => {
+                          setIsSubmittingMobility(true);
+                          try {
+                            const finalMobilityRestrictions = mobilityRestrictions || 'Ninguna';
+                            await onUpdateGuest({
+                              ...guest,
+                              mobility_restrictions: finalMobilityRestrictions,
+                              mobility_form_submitted: true
+                            });
+                            setShowMobilityForm(false);
+                          } catch {}
+                          finally { setIsSubmittingMobility(false); }
                         }}
-                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                        disabled={isSubmittingMobility}
+                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                       >
-                        Enviar
+                        {isSubmittingMobility ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
                       </button>
                     </div>
                   ) : (
@@ -2682,7 +2710,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     <div className="space-y-3 flex flex-col items-center">
                       <div className="space-y-1">
                         <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                        <div className="space-y-2 flex flex-col items-center">
+                        <div className="space-y-2 flex flex-col">
                           {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
                             <label key={option} className="flex items-center cursor-pointer">
                               <input
@@ -2699,18 +2727,23 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         </div>
                       </div>
                       <button
-                        onClick={() => {
-                          const finalDietaryRestrictions = dietaryRestrictions || 'Ninguna';
-                          onUpdateGuest({
-                            ...guest,
-                            dietary_restrictions: finalDietaryRestrictions,
-                            health_form_submitted: true
-                          });
-                          setShowHealthForm(false);
+                        onClick={async () => {
+                          setIsSubmittingHealth(true);
+                          try {
+                            const finalDietaryRestrictions = dietaryRestrictions || 'Ninguna';
+                            await onUpdateGuest({
+                              ...guest,
+                              dietary_restrictions: finalDietaryRestrictions,
+                              health_form_submitted: true
+                            });
+                            setShowHealthForm(false);
+                          } catch {}
+                          finally { setIsSubmittingHealth(false); }
                         }}
-                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                        disabled={isSubmittingHealth}
+                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                       >
-                        Enviar
+                        {isSubmittingHealth ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
                       </button>
                     </div>
                   ) : (
@@ -2750,7 +2783,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     <div className="space-y-4 flex flex-col items-center">
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                        <div className="space-y-2 flex flex-col items-center">
+                        <div className="space-y-2 flex flex-col">
                           {['Ninguna', 'Silla de Ruedas'].map((option) => (
                             <label key={option} className="flex items-center cursor-pointer">
                               <input
@@ -2767,18 +2800,23 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                         </div>
                       </div>
                       <button
-                        onClick={() => {
-                          const finalMobilityRestrictions = mobilityRestrictions || 'Ninguna';
-                          onUpdateGuest({
-                            ...guest,
-                            mobility_restrictions: finalMobilityRestrictions,
-                            mobility_form_submitted: true
-                          });
-                          setShowMobilityForm(false);
+                        onClick={async () => {
+                          setIsSubmittingMobility(true);
+                          try {
+                            const finalMobilityRestrictions = mobilityRestrictions || 'Ninguna';
+                            await onUpdateGuest({
+                              ...guest,
+                              mobility_restrictions: finalMobilityRestrictions,
+                              mobility_form_submitted: true
+                            });
+                            setShowMobilityForm(false);
+                          } catch {}
+                          finally { setIsSubmittingMobility(false); }
                         }}
-                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                        disabled={isSubmittingMobility}
+                        className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                       >
-                        Enviar
+                        {isSubmittingMobility ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
                       </button>
                     </div>
                   ) : (
@@ -3176,14 +3214,19 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                             ))}
                           </div>
                           <button
-                            onClick={() => {
-                              onUpdateGuest({ ...guest, dietary_restrictions: dietaryRestrictions, health_form_submitted: true });
-                              setShowHealthForm(false);
+                            onClick={async () => {
+                              setIsSubmittingHealth(true);
+                              try {
+                                await onUpdateGuest({ ...guest, dietary_restrictions: dietaryRestrictions || 'Ninguna', health_form_submitted: true });
+                                setShowHealthForm(false);
+                              } catch {}
+                              finally { setIsSubmittingHealth(false); }
                             }}
-                            className="w-full py-2 px-4 rounded-xl text-xs font-medium transition-all duration-300"
+                            disabled={isSubmittingHealth}
+                            className="w-full py-2 px-4 rounded-xl text-xs font-medium transition-all duration-300 inline-flex items-center justify-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
                             style={{ backgroundColor: themeColors.primary, color: 'white' }}
                           >
-                            Guardar Preferencias
+                            {isSubmittingHealth ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Guardar Preferencias'}
                           </button>
                         </div>
                       ) : (
@@ -3230,14 +3273,19 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                             ))}
                           </div>
                           <button
-                            onClick={() => {
-                              onUpdateGuest({ ...guest, mobility_restrictions: mobilityRestrictions, mobility_form_submitted: true });
-                              setShowMobilityForm(false);
+                            onClick={async () => {
+                              setIsSubmittingMobility(true);
+                              try {
+                                await onUpdateGuest({ ...guest, mobility_restrictions: mobilityRestrictions || 'Ninguna', mobility_form_submitted: true });
+                                setShowMobilityForm(false);
+                              } catch {}
+                              finally { setIsSubmittingMobility(false); }
                             }}
-                            className="w-full py-2 px-4 rounded-xl text-xs font-medium transition-all duration-300"
+                            disabled={isSubmittingMobility}
+                            className="w-full py-2 px-4 rounded-xl text-xs font-medium transition-all duration-300 inline-flex items-center justify-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
                             style={{ backgroundColor: themeColors.primary, color: 'white' }}
                           >
-                            Guardar Información
+                            {isSubmittingMobility ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Guardar Información'}
                           </button>
                         </div>
                       ) : (
@@ -3805,17 +3853,22 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     />
                   </div>
                   <button
-                    onClick={() => {
-                      onUpdateGuest({
-                        id: guest.id,
-                        dietary_restrictions: dietaryRestrictions,
-                        health_form_submitted: true
-                      });
-                      setShowHealthForm(false);
+                    onClick={async () => {
+                      setIsSubmittingHealth(true);
+                      try {
+                        await onUpdateGuest({
+                          ...guest,
+                          dietary_restrictions: dietaryRestrictions || 'Ninguna',
+                          health_form_submitted: true
+                        });
+                        setShowHealthForm(false);
+                      } catch {}
+                      finally { setIsSubmittingHealth(false); }
                     }}
-                    className="w-full bg-green-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-600 transition-colors duration-200"
+                    disabled={isSubmittingHealth}
+                    className="w-full bg-green-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-600 transition-colors duration-200 disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                   >
-                    Enviar
+                    {isSubmittingHealth ? (<><Loader2 className="w-5 h-5 animate-spin" /> Enviando...</>) : 'Enviar'}
                   </button>
                 </div>
               </div>
@@ -3841,17 +3894,22 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     />
                   </div>
                   <button
-                    onClick={() => {
-                      onUpdateGuest({
-                        id: guest.id,
-                        mobility_restrictions: mobilityRestrictions,
-                        mobility_form_submitted: true
-                      });
-                      setShowMobilityForm(false);
+                    onClick={async () => {
+                      setIsSubmittingMobility(true);
+                      try {
+                        await onUpdateGuest({
+                          ...guest,
+                          mobility_restrictions: mobilityRestrictions || 'Ninguna',
+                          mobility_form_submitted: true
+                        });
+                        setShowMobilityForm(false);
+                      } catch {}
+                      finally { setIsSubmittingMobility(false); }
                     }}
-                    className="w-full bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200"
+                    disabled={isSubmittingMobility}
+                    className="w-full bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200 disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                   >
-                    Enviar
+                    {isSubmittingMobility ? (<><Loader2 className="w-5 h-5 animate-spin" /> Enviando...</>) : 'Enviar'}
                   </button>
                 </div>
               </div>
@@ -4012,7 +4070,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                   <div className="space-y-4 flex flex-col items-center">
                     <div className="space-y-2">
                       <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                      <div className="space-y-2 flex flex-col items-center">
+                      <div className="space-y-2 flex flex-col">
                         {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
                           <label key={option} className="flex items-center cursor-pointer">
                             <input
@@ -4029,18 +4087,22 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                       </div>
                     </div>
                     <button
-                      onClick={() => {
-                        const finalDietaryRestrictions = dietaryRestrictions || 'Ninguna';
-                        onUpdateGuest({
-                          ...guest,
-                          dietary_restrictions: finalDietaryRestrictions,
-                          health_form_submitted: true
-                        });
-                        setShowHealthForm(false);
+                      onClick={async () => {
+                        setIsSubmittingHealth(true);
+                        try {
+                          await onUpdateGuest({
+                            ...guest,
+                            dietary_restrictions: dietaryRestrictions || 'Ninguna',
+                            health_form_submitted: true
+                          });
+                          setShowHealthForm(false);
+                        } catch {}
+                        finally { setIsSubmittingHealth(false); }
                       }}
-                      className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                      disabled={isSubmittingHealth}
+                      className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                     >
-                      Enviar
+                      {isSubmittingHealth ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
                     </button>
                   </div>
                 ) : (
@@ -4062,7 +4124,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                   <div className="space-y-4 flex flex-col items-center">
                     <div className="space-y-2">
                       <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                      <div className="space-y-2 flex flex-col items-center">
+                      <div className="space-y-2 flex flex-col">
                         {['Ninguna', 'Silla de Ruedas'].map((option) => (
                           <label key={option} className="flex items-center cursor-pointer">
                             <input
@@ -4079,19 +4141,22 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                       </div>
                     </div>
                     <button
-                      onClick={() => {
-                        // Asegurar que se guarde "Ninguna" si está seleccionado
-                        const finalMobilityRestrictions = mobilityRestrictions || 'Ninguna';
-                        onUpdateGuest({
-                          ...guest,
-                          mobility_restrictions: finalMobilityRestrictions,
-                          mobility_form_submitted: true
-                        });
-                        setShowMobilityForm(false);
+                      onClick={async () => {
+                        setIsSubmittingMobility(true);
+                        try {
+                          await onUpdateGuest({
+                            ...guest,
+                            mobility_restrictions: mobilityRestrictions || 'Ninguna',
+                            mobility_form_submitted: true
+                          });
+                          setShowMobilityForm(false);
+                        } catch {}
+                        finally { setIsSubmittingMobility(false); }
                       }}
-                      className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                      disabled={isSubmittingMobility}
+                      className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                     >
-                      Enviar
+                      {isSubmittingMobility ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
                     </button>
                   </div>
                 ) : (

@@ -6,6 +6,31 @@ import { RECOMMENDATION_CATEGORIES, CUSTOM_CATEGORY_ICONS, getCategoryById } fro
 import { createInteractiveCard } from '../endpoints/interactiveCard';
 import { notify } from '../lib/notify';
 
+// Background previews (imported so Vite bundles them for production)
+import fondoBoda from '../assets/backgrounds/wedding/fondoboda.png';
+import fondoBoda2 from '../assets/backgrounds/wedding/fondoboda2.png';
+import fondoBoda3 from '../assets/backgrounds/wedding/fondoboda3.png';
+import fondoCumple from '../assets/backgrounds/birthday/fondocumple.png';
+import fondoCumple2 from '../assets/backgrounds/birthday/fondocumple2.png';
+import fondoCumple3 from '../assets/backgrounds/birthday/fondocumple3.png';
+import fondoQuince from '../assets/backgrounds/quinceanos/fondoquince.png';
+import fondoQuince2 from '../assets/backgrounds/quinceanos/fondoquince2.png';
+import fondoQuince3 from '../assets/backgrounds/quinceanos/fondoquince3.png';
+import fondoEmpresarial from '../assets/backgrounds/corporate/fondoempresarial.png';
+import fondoEmpresarial2 from '../assets/backgrounds/corporate/fondoempresarial2.png';
+import fondoEmpresarial3 from '../assets/backgrounds/corporate/fondoempresarial3.png';
+import fondoConferencia from '../assets/backgrounds/conference/fondoconferencia.png';
+import fondoConferencia2 from '../assets/backgrounds/conference/fondoconferencia2.png';
+import fondoConferencia3 from '../assets/backgrounds/conference/fondoconferencia3.png';
+
+const BACKGROUND_PREVIEWS: Record<string, [string, string, string]> = {
+  wedding: [fondoBoda, fondoBoda2, fondoBoda3],
+  birthday: [fondoCumple, fondoCumple2, fondoCumple3],
+  quinceanera: [fondoQuince, fondoQuince2, fondoQuince3],
+  corporate: [fondoEmpresarial, fondoEmpresarial2, fondoEmpresarial3],
+  conference: [fondoConferencia, fondoConferencia2, fondoConferencia3]
+};
+
 interface FormErrors {
   main_image?: string;
   event_name?: string;
@@ -625,27 +650,7 @@ export function EventCardForm({ isLoading: externalIsLoading, initialData, event
                   <div 
                     className="w-full h-full"
                     style={{
-                      backgroundImage: formData.event_type === 'wedding' 
-                        ? option === 1 ? `url('/src/assets/backgrounds/wedding/fondoboda.png')`
-                        : option === 2 ? `url('/src/assets/backgrounds/wedding/fondoboda2.png')`
-                        : `url('/src/assets/backgrounds/wedding/fondoboda3.png')`
-                      : formData.event_type === 'birthday'
-                        ? option === 1 ? `url('/src/assets/backgrounds/birthday/fondocumple.png')`
-                        : option === 2 ? `url('/src/assets/backgrounds/birthday/fondocumple2.png')`
-                        : `url('/src/assets/backgrounds/birthday/fondocumple3.png')`
-                      : formData.event_type === 'quinceanera'
-                        ? option === 1 ? `url('/src/assets/backgrounds/quinceanos/fondoquince.png')`
-                        : option === 2 ? `url('/src/assets/backgrounds/quinceanos/fondoquince2.png')`
-                        : `url('/src/assets/backgrounds/quinceanos/fondoquince3.png')`
-                      : formData.event_type === 'corporate'
-                        ? option === 1 ? `url('/src/assets/backgrounds/corporate/fondoempresarial.png')`
-                        : option === 2 ? `url('/src/assets/backgrounds/corporate/fondoempresarial2.png')`
-                        : `url('/src/assets/backgrounds/corporate/fondoempresarial3.png')`
-                      : formData.event_type === 'conference'
-                        ? option === 1 ? `url('/src/assets/backgrounds/conference/fondoconferencia.png')`
-                        : option === 2 ? `url('/src/assets/backgrounds/conference/fondoconferencia2.png')`
-                        : `url('/src/assets/backgrounds/conference/fondoconferencia3.png')`
-                      : `url('/src/assets/backgrounds/wedding/fondoboda.png')`,
+                      backgroundImage: `url(${BACKGROUND_PREVIEWS[formData.event_type || 'wedding']?.[option - 1] ?? BACKGROUND_PREVIEWS.wedding[0]})`,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center center',
                       backgroundRepeat: 'no-repeat'

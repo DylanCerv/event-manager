@@ -12,6 +12,8 @@ import { HistoryModal } from '../components/HistoryModal';
 import type { Creator } from '../types/creator';
 import { deleteUserAPI } from '../endpoints/user';
 import { getPrizesAPI, createPrizeAPI, deletePrizeAPI } from '../endpoints/prize';
+import { getPointBalancesAPI, adjustPointsAPI } from '../endpoints/points';
+import { configStorage } from '../lib/config-storage';
 import { notify } from '../lib/notify';
 import { appConfirm } from '../lib/dialogs';
 
@@ -34,6 +36,7 @@ interface User {
   createdAt: string;
   createdBy?: string;
   password_plain?: string;
+  commissionPercentage?: number;
 }
 
 export function Usuarios() {
@@ -75,8 +78,10 @@ export function Usuarios() {
   const [showHistoryModal, setShowHistoryModal] = React.useState(false);
   const [selectedUser, setSelectedUser] = React.useState<any>(null);
   
-  // Estado para almacenar puntos de usuarios
+  // Estado para almacenar puntos de usuarios (desde API cuando hay SUPER_ADMIN)
   const [userPoints, setUserPoints] = React.useState<{[key: string]: number}>({});
+  // Configuración de puntos por rol (admin_points, creator_points) para etiquetas
+  const [pointsConfig, setPointsConfig] = React.useState<{ admin: number; creator: number }>({ admin: 2, creator: 1 });
   
   // Estado para historial de transacciones
   const [userTransactions, setUserTransactions] = React.useState<{[key: string]: any[]}>({});
@@ -91,8 +96,33 @@ export function Usuarios() {
     };
   }, [users.length]); // Only recalculate when users array length changes, not content
 
+  const loadUserPointsFromAPI = React.useCallback(async () => {
+    try {
+      const res = await getPointBalancesAPI('ALL');
+      const list = res?.data ?? [];
+      const byUser: { [key: string]: number } = {};
+      list.forEach((row: { userId: string; points: number }) => {
+        byUser[String(row.userId)] = Number(row.points ?? 0);
+      });
+      setUserPoints(prev => ({ ...prev, ...byUser }));
+    } catch {
+      // Keep existing state or localStorage-loaded values
+    }
+  }, []);
+
+  const loadPointsConfigForDisplay = React.useCallback(async () => {
+    try {
+      const config = await configStorage.getPointsConfig();
+      setPointsConfig({ admin: config.admin ?? 2, creator: config.creator ?? 1 });
+    } catch {
+      // keep defaults
+    }
+  }, []);
+
   React.useEffect(() => {
     reloadUsersFromAPI();
+    loadUserPointsFromAPI();
+    loadPointsConfigForDisplay();
     loadUserPoints();
     loadUserTransactions();
     loadPrizes();
@@ -118,7 +148,7 @@ export function Usuarios() {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('localStorageUpdate', handleLocalStorageUpdate);
     };
-  }, []);
+  }, [loadUserPointsFromAPI, loadPointsConfigForDisplay]);
 
   React.useEffect(() => {
     calculatePointsStats();
@@ -230,6 +260,7 @@ export function Usuarios() {
     lastLogin: new Date().toISOString(),
     createdAt: (u as any).created_at || new Date().toISOString(),
     createdBy: (u as any).creator_id ? String((u as any).creator_id) : undefined,
+    commissionPercentage: (u as any).commission_percentage != null ? Number((u as any).commission_percentage) : undefined,
   });
 
   const mapApiCreatorToLocalCreator = (u: ApiUser): Creator => ({
@@ -647,37 +678,23 @@ export function Usuarios() {
     });
   }, [users, searchTerm]);
 
-  const handlePointsAdjust = (adjustmentData: any) => {
-    const { userId, points, action } = adjustmentData;
-    const currentPoints = userPoints[userId] || 0;
-    const newPoints = action === 'add' ? currentPoints + points : Math.max(0, currentPoints - points);
-    
-    const updatedPoints = {
-      ...userPoints,
-      [userId]: newPoints
-    };
-    
-    // Registrar transacción
-    const transaction = {
-      id: Date.now().toString(),
-      type: 'points_adjustment',
-      action,
-      points,
-      reason: adjustmentData.reason,
-      date: new Date().toISOString(),
-      adminId: 'current-admin' // TODO: usar ID real del admin logueado
-    };
-    
-    const updatedTransactions = {
-      ...userTransactions,
-      [userId]: [...(userTransactions[userId] || []), transaction]
-    };
-    
-    saveUserPoints(updatedPoints);
-    setUserTransactions(updatedTransactions);
-    localStorage.setItem('userTransactions', JSON.stringify(updatedTransactions));
-    setShowPointsAdjustModal(false);
-    setSelectedUser(null);
+  const handlePointsAdjust = async (adjustmentData: any) => {
+    const { userId, points, action, reason } = adjustmentData;
+    try {
+      await adjustPointsAPI({
+        user_id: userId,
+        points,
+        action,
+        reason: reason || 'Ajuste manual',
+      });
+      await loadUserPointsFromAPI();
+      setShowPointsAdjustModal(false);
+      setSelectedUser(null);
+      notify.success('Puntos ajustados correctamente');
+    } catch (err) {
+      console.error('Error adjusting points:', err);
+      notify.error('Error al ajustar puntos');
+    }
   };
 
   const handleAwardPrize = (awardData: any) => {
@@ -1118,6 +1135,10 @@ export function Usuarios() {
             if (!userData?.id) return;
             const mapped = mapApiUserToLocalUser(userData as ApiUser);
             setUsers((prev) => prev.map((u) => (u.id === String(mapped.id) ? { ...u, ...mapped } : u)));
+            if (mapped.role === 'CREATOR') {
+              const creatorMapped = mapApiCreatorToLocalCreator(userData as ApiUser);
+              setCreators((prev) => prev.map((c) => (c.id === String(creatorMapped.id) ? { ...c, ...creatorMapped } : c)));
+            }
             fetchAllUsers().catch(() => {});
           }}
         />
@@ -1612,7 +1633,7 @@ export function Usuarios() {
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-600">Puntos por invitado:</span>
-                              <span className="font-medium text-indigo-600">2 pts</span>
+                              <span className="font-medium text-indigo-600">{pointsConfig.admin} pts</span>
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-600">Estado:</span>
@@ -1723,7 +1744,11 @@ export function Usuarios() {
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-600">Puntos por invitado:</span>
-                              <span className="font-medium text-green-600">1.5 pts</span>
+                              <span className="font-medium text-green-600">{pointsConfig.creator} pts</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Comisión:</span>
+                              <span className="font-medium text-green-600">{creator.commissionPercentage ?? 0}%</span>
                             </div>
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-600">Estado:</span>
@@ -2126,16 +2151,13 @@ function PointsAdjustModal({ isOpen, onClose, user, currentPoints, onSubmit }: P
     }
 
     setIsSubmitting(true);
-    
     try {
-      onSubmit({
+      await onSubmit({
         userId: user.id,
         points: pointsValue,
         action,
         reason: reason.trim()
       });
-      
-      // Reset form
       setPoints('');
       setAction('add');
       setReason('');

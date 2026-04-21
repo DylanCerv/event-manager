@@ -24,6 +24,7 @@ interface User {
   createdAt: string;
   createdBy?: string;
   password_plain?: string;
+  commissionPercentage?: number;
 }
 
 interface UserFormData {
@@ -39,6 +40,7 @@ interface UserFormData {
   password: string;
   createdBy: string;
   status: string;
+  commissionPercentage?: number;
 }
 
 interface FormErrors {
@@ -68,7 +70,8 @@ export function EditUserModal({ isOpen, creators, onClose, editingUser, onUpdate
     username: '',
     password: '',
     createdBy: '',
-    status: 'active'
+    status: 'active',
+    commissionPercentage: undefined
   });
 
   const [errors, setErrors] = React.useState<FormErrors>({});
@@ -78,6 +81,7 @@ export function EditUserModal({ isOpen, creators, onClose, editingUser, onUpdate
   React.useEffect(() => {
     if (editingUser) {
       const existingPassword = ((editingUser as any).password_plain ?? '') as string;
+      const commission = editingUser.commissionPercentage ?? (editingUser as any).commission_percentage;
       setInitialPassword(existingPassword || '');
       setFormData({
         firstName: editingUser.firstName,
@@ -89,10 +93,10 @@ export function EditUserModal({ isOpen, creators, onClose, editingUser, onUpdate
         phone: editingUser.phone,
         email: editingUser.email,
         username: editingUser.username,
-        // Prefill if backend provides decrypted password (scoped)
         password: existingPassword || '',
         createdBy: editingUser.createdBy || '',
-        status: editingUser.status
+        status: editingUser.status,
+        commissionPercentage: commission != null ? Number(commission) : undefined
       });
     }
   }, [editingUser]);
@@ -117,7 +121,8 @@ export function EditUserModal({ isOpen, creators, onClose, editingUser, onUpdate
       username: '',
       password: '',
       createdBy: '',
-      status: 'active'
+      status: 'active',
+      commissionPercentage: undefined
     });
     setErrors({});
     setShowPassword(false);
@@ -171,6 +176,9 @@ export function EditUserModal({ isOpen, creators, onClose, editingUser, onUpdate
       const passwordChanged = (formData.password || '') !== (initialPassword || '');
       if (passwordChanged && formData.password && formData.password.trim().length >= 8) {
         payload.password = formData.password;
+      }
+      if (editingUser.role === 'CREATOR' && formData.commissionPercentage != null) {
+        payload.commission_percentage = Number(formData.commissionPercentage);
       }
 
       const response = await updateUserAPI(Number(editingUser.id), payload);
@@ -455,6 +463,27 @@ export function EditUserModal({ isOpen, creators, onClose, editingUser, onUpdate
                 Este campo no se puede editar. El creador se asigna al crear el usuario.
               </p>
             </div>
+
+            {editingUser?.role === 'CREATOR' && (
+              <div>
+                <label className="block text-xs sm:text-sm font-medium text-gray-700">
+                  💰 Porcentaje de Comisión <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={formData.commissionPercentage ?? ''}
+                  onChange={(e) => setFormData({ ...formData, commissionPercentage: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="mt-1 block w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  placeholder="0-100"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Porcentaje que recibirá el creador por cada evento aprobado (0-100%)
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700">

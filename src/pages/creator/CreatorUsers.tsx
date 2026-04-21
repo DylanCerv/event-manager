@@ -433,13 +433,13 @@ export default function CreatorUsers() {
               Estadísticas y usuarios creados por ti
             </p>
           </div>
-          <button
+          {/* <button
             onClick={() => setShowCreateAdmin(true)}
             className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
           >
             <Plus className="h-4 w-4 mr-2" />
             Crear Usuario
-          </button>
+          </button> */}
         </div>
       </div>
 

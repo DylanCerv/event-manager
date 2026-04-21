@@ -1,8 +1,13 @@
 import React from 'react';
 import { X, Mail, Phone, Wrench, Copy, Check } from 'lucide-react';
-import { creatorsStorage } from '../lib/creators-storage';
-import type { Creator } from '../types/creator';
+import { getUserByIdAPI } from '../endpoints/user';
 import type { User } from '../types/auth';
+
+interface CreatorInfo {
+  id: string;
+  name: string;
+  phone?: string;
+}
 
 interface SupportModalProps {
   isOpen: boolean;
@@ -13,50 +18,60 @@ interface SupportModalProps {
 export function SupportModal({ isOpen, onClose, user }: SupportModalProps) {
   const [copiedEmail, setCopiedEmail] = React.useState(false);
   const [copiedPhone, setCopiedPhone] = React.useState(false);
-  const [assignedCreator, setAssignedCreator] = React.useState<Creator | null>(null);
+  const [assignedCreator, setAssignedCreator] = React.useState<CreatorInfo | null>(null);
   const [loadingCreator, setLoadingCreator] = React.useState(false);
 
-  // Obtener datos del creador asignado
   React.useEffect(() => {
     const fetchCreatorData = async () => {
-      if (user?.createdBy) {
-        setLoadingCreator(true);
-        try {
-          let creatorId: string | undefined = user.createdBy;
-          
-          // Para ACCESS_CONTROL y MODERATOR, necesitamos buscar el creador del administrador
-          if (user.role === 'ACCESS_CONTROL' || user.role === 'MODERATOR') {
-            // El createdBy apunta al administrador, necesitamos el creador de ese administrador
-            const { storage } = await import('../lib/storage');
-            const users = await storage.getUsers();
-            const adminUser = users.find(u => u.id === user.createdBy);
-            creatorId = adminUser?.createdBy;
-          }
-          
-          if (creatorId) {
-            const creators = await creatorsStorage.getCreators();
-            const creator = creators.find(c => c.id === creatorId);
-            setAssignedCreator(creator || null);
-          }
-        } catch (error) {
-          console.error('Error al obtener datos del creador:', error);
-        } finally {
-          setLoadingCreator(false);
+      if (!user?.createdBy) return;
+      setLoadingCreator(true);
+      try {
+        let creatorId: string | undefined = user.createdBy;
+
+        // For ACCESS_CONTROL and MODERATOR, createdBy points to the admin user.
+        // We need to walk up one level to find the admin's creator (CREATOR role).
+        if (user.role === 'ACCESS_CONTROL' || user.role === 'MODERATOR') {
+          const adminRes = await getUserByIdAPI({ id: Number(user.createdBy) });
+          const adminData = adminRes?.data ?? adminRes;
+          creatorId = adminData?.creator_id ? String(adminData.creator_id) : undefined;
         }
+
+        if (creatorId) {
+          const creatorRes = await getUserByIdAPI({ id: Number(creatorId) });
+          const creatorData = creatorRes?.data ?? creatorRes;
+          if (creatorData?.id) {
+            setAssignedCreator({
+              id: String(creatorData.id),
+              name: [creatorData.name, creatorData.last_name].filter(Boolean).join(' '),
+              phone: creatorData.phone || undefined,
+            });
+          } else {
+            setAssignedCreator(null);
+          }
+        } else {
+          setAssignedCreator(null);
+        }
+      } catch (error) {
+        console.error('Error al obtener datos del creador:', error);
+        setAssignedCreator(null);
+      } finally {
+        setLoadingCreator(false);
       }
     };
 
     if (isOpen) {
       fetchCreatorData();
+    } else {
+      setAssignedCreator(null);
     }
   }, [isOpen, user?.createdBy, user?.role]);
 
   if (!isOpen) return null;
 
   const supportEmail = "eventos@eventosmanager.com";
-  const personalizedPhone = assignedCreator?.phone || "+54 11 1234-5678"; // Usar teléfono del creador o temporal
-  const personalizedName = "Atención Personalizada"; // Siempre el mismo título
-  const creatorDisplayName = assignedCreator ? `${assignedCreator.firstName} ${assignedCreator.lastName}` : "";
+  const personalizedPhone = assignedCreator?.phone || "+54 11 1234-5678";
+  const personalizedName = "Atención Personalizada";
+  const creatorDisplayName = assignedCreator?.name ?? "";
   const technicalPhone = "+5493512880173";
 
   const copyToClipboard = async (text: string, type: 'email' | 'phone') => {

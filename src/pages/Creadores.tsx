@@ -1,9 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, Plus, Users, Shield, DollarSign, BarChart3, Check, Eye, X, Calendar, CheckCircle, XCircle, Clock, BookOpen, UserCheck, Edit, Trash2 } from 'lucide-react';
-import { creatorsStorage } from '../lib/creators-storage';
 import { deleteUserAPI } from '../endpoints/user';
 import { commissionsStorage } from '../lib/commissions-storage';
-import { storage } from '../lib/storage';
 import { eventBookStorage } from '../lib/eventbook-storage';
 import CreateCreatorModal from '../components/CreateCreatorModal';
 import { useUser } from '../contexts/UserContext';
@@ -11,7 +9,6 @@ import type { ApiUser } from '../types/auth';
 import EditCreatorModal from '../components/EditCreatorModal';
 import type { Creator } from '../types/creator';
 import type { CommissionSummary } from '../types/commission';
-import type { Event as CustomEvent } from '../types/event';
 import { getBoltEventsAPI } from '../endpoints/boltEvent';
 import { notify } from '../lib/notify';
 import { appConfirm } from '../lib/dialogs';
@@ -20,7 +17,6 @@ export default function Creadores() {
   const { filterByRoleId, users: apiUsers, fetchUsers } = useUser();
   const [activeTab, setActiveTab] = useState<'creators' | 'finances'>('creators');
   const [searchTerm, setSearchTerm] = useState('');
-  const [creators, setCreators] = useState<Creator[]>([]);
   const backendCreators: ApiUser[] = useMemo(() => filterByRoleId('CREATOR'), [apiUsers]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -34,7 +30,6 @@ export default function Creadores() {
     pendingCommissions: 0
   });
   const [commissions, setCommissions] = useState<any[]>([]);
-  const [events, setEvents] = useState<CustomEvent[]>([]);
   const [creatorStats, setCreatorStats] = useState({
     total: 0,
     active: 0,
@@ -62,7 +57,6 @@ export default function Creadores() {
   useEffect(() => {
     loadCreators();
     fetchUsers().catch(() => {});
-    loadEvents();
   }, []);
 
   const mapApiCreatorToCreator = (u: ApiUser): Creator => ({
@@ -81,7 +75,7 @@ export default function Creadores() {
     city: (u.city as string) || '',
   });
 
-  // Stats should come from backend (endpoint /users), not creatorsStorage
+  // Recompute creator stats when backend creators or commissions change
   useEffect(() => {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -91,23 +85,33 @@ export default function Creadores() {
       const createdAt = c.created_at ? new Date(c.created_at as string) : null;
       return createdAt ? createdAt >= thirtyDaysAgo : false;
     }).length;
-    setCreatorStats(prev => ({
-      ...prev,
-      total,
-      active,
-      newThisMonth,
-      // topPerformer is computed from commissions (local) elsewhere; keep as-is.
-    }));
-  }, [backendCreators]);
+
+    // Top performer: creator with highest total commissions
+    let topPerformer: { name: string; amount: number } | null = null;
+    if (commissions.length > 0) {
+      const totals: Record<string, number> = {};
+      for (const c of commissions) {
+        totals[c.creatorId] = (totals[c.creatorId] ?? 0) + c.amount;
+      }
+      const topId = Object.entries(totals).sort(([, a], [, b]) => b - a)[0]?.[0];
+      if (topId) {
+        const topCreatorApi = backendCreators.find(c => String(c.id) === topId);
+        if (topCreatorApi && (totals[topId] ?? 0) > 0) {
+          topPerformer = {
+            name: `${topCreatorApi.name || ''} ${(topCreatorApi.last_name as string) || ''}`.trim(),
+            amount: totals[topId],
+          };
+        }
+      }
+    }
+
+    setCreatorStats({ total, active, newThisMonth, topPerformer });
+  }, [backendCreators, commissions]);
 
   const loadCreators = async () => {
     try {
       setIsLoading(true);
-      const creatorsData = await creatorsStorage.getCreators();
-      setCreators(creatorsData);
-      
-      // Load commission data
-      await loadCommissionData(creatorsData);
+      await loadCommissionData();
     } catch (error) {
       console.error('Error loading creators:', error);
     } finally {
@@ -115,32 +119,42 @@ export default function Creadores() {
     }
   };
 
-  const loadCommissionData = async (creatorsData: Creator[]) => {
+  const loadCommissionData = async () => {
     try {
-      // Get global stats
-      const globalData = await commissionsStorage.getAllCommissionsSummary();
+      const [globalData, allCommissions] = await Promise.all([
+        commissionsStorage.getAllCommissionsSummary(),
+        commissionsStorage.getCommissions(),
+      ]);
       setGlobalStats(globalData);
-      
-      // Get commission summaries for each creator
-      const summaries = await Promise.all(
-        creatorsData.map(creator => commissionsStorage.getCommissionSummary(creator.id))
+
+      const sorted = [...allCommissions].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
+      setCommissions(sorted);
+      applyDateFilter(sorted);
+
+      // Build summaries grouped by creator from the commissions themselves
+      const summaryMap: Record<string, CommissionSummary> = {};
+      for (const c of sorted) {
+        if (!summaryMap[c.creatorId]) {
+          summaryMap[c.creatorId] = {
+            creatorId: c.creatorId,
+            totalCommissions: 0,
+            paidCommissions: 0,
+            pendingCommissions: 0,
+            totalEvents: 0,
+            totalGuests: 0,
+            totalRevenue: 0,
+          };
+        }
+        summaryMap[c.creatorId].totalCommissions += c.amount;
+        if (c.status === 'paid') summaryMap[c.creatorId].paidCommissions += c.amount;
+        else summaryMap[c.creatorId].pendingCommissions += c.amount;
+        summaryMap[c.creatorId].totalEvents++;
+        summaryMap[c.creatorId].totalGuests += c.guestCount;
+      }
+      const summaries = Object.values(summaryMap);
       setCommissionSummaries(summaries);
-
-      // Get all commissions and sort by newest first
-      const allCommissions = await Promise.all(
-        creatorsData.map(creator => commissionsStorage.getCommissionsByCreator(creator.id))
-      );
-      const sortedCommissions = allCommissions.flat().sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      setCommissions(sortedCommissions);
-
-      // Calculate creator-specific stats
-      await calculateCreatorStats(creatorsData, summaries);
-      
-      // Apply date filter
-      applyDateFilter(sortedCommissions);
     } catch (error) {
       console.error('Error loading commission data:', error);
     }
@@ -158,8 +172,7 @@ export default function Creadores() {
         )
       );
       
-      // Reload data
-      await loadCommissionData(creators);
+      await loadCommissionData();
     } catch (error) {
       console.error('Error marking commissions as paid:', error);
     }
@@ -369,54 +382,6 @@ export default function Creadores() {
   };
 
 
-  const loadEvents = async () => {
-    try {
-      const eventsData = await storage.getEvents();
-      setEvents(eventsData);
-    } catch (error) {
-      console.error('Error loading events:', error);
-    }
-  };
-
-  const calculateCreatorStats = async (creatorsData: Creator[], summaries: CommissionSummary[]) => {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    // Total and active creators
-    const total = creatorsData.length;
-    const active = creatorsData.filter(c => c.status === 'active').length;
-
-    // New creators this month
-    const newThisMonth = creatorsData.filter(creator => {
-      const createdDate = new Date(creator.createdAt);
-      return createdDate >= thirtyDaysAgo;
-    }).length;
-
-    // Top performer by total commissions
-    let topPerformer = null;
-    if (summaries.length > 0) {
-      const topSummary = summaries.reduce((max, current) => 
-        current.totalCommissions > max.totalCommissions ? current : max
-      );
-      
-      if (topSummary.totalCommissions > 0) {
-        const topCreator = creatorsData.find(c => c.id === topSummary.creatorId);
-        if (topCreator) {
-          topPerformer = {
-            name: `${topCreator.firstName} ${topCreator.lastName}`,
-            amount: topSummary.totalCommissions
-          };
-        }
-      }
-    }
-
-    setCreatorStats({
-      total,
-      active,
-      topPerformer,
-      newThisMonth
-    });
-  };
 
   const applyDateFilter = (allCommissions: any[]) => {
     let filtered = allCommissions;
@@ -511,7 +476,7 @@ export default function Creadores() {
   const handleMarkSingleCommissionAsPaid = async (commissionId: string) => {
     try {
       await commissionsStorage.markAsPaid(commissionId, 'superadmin');
-      await loadCommissionData(creators);
+      await loadCommissionData();
     } catch (error) {
       console.error('Error marking commission as paid:', error);
     }
@@ -968,9 +933,14 @@ export default function Creadores() {
               ) : (
                 <div className="grid gap-4">
                   {(dateFilter.preset === 'all' ? commissions : filteredCommissions).map((commission) => {
-                    const creator = creators.find(c => c.id === commission.creatorId);
-                    const event = events.find(e => e.id === commission.eventId);
-                    
+                    const creatorApi = backendCreators.find(c => String(c.id) === commission.creatorId);
+                    const creatorDisplayName = creatorApi
+                      ? `${creatorApi.name || ''} ${(creatorApi.last_name as string) || ''}`.trim()
+                      : null;
+                    const creatorInitials = creatorApi
+                      ? `${(creatorApi.name || 'C')[0]}${((creatorApi.last_name as string) || 'R')[0]}`
+                      : '??';
+
                     return (
                       <div key={commission.id} className="bg-white shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
                         <div className="p-4 sm:p-6">
@@ -980,7 +950,7 @@ export default function Creadores() {
                               <div className="flex-shrink-0">
                                 <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-indigo-100 flex items-center justify-center">
                                   <span className="text-sm font-medium text-indigo-700">
-                                    {creator ? `${creator.firstName[0]}${creator.lastName[0]}` : '??'}
+                                    {creatorInitials}
                                   </span>
                                 </div>
                               </div>
@@ -990,7 +960,7 @@ export default function Creadores() {
                                 <div className="flex items-center justify-between">
                                   <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-1 sm:space-y-0">
                                     <h4 className="text-base sm:text-lg font-medium text-gray-900 truncate">
-                                      {creator ? `${creator.firstName} ${creator.lastName}` : 'Creador no encontrado'}
+                                      {creatorDisplayName ?? 'Creador no encontrado'}
                                     </h4>
                                     <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 w-fit">
                                       {commission.commissionPercentage}%
@@ -1010,7 +980,7 @@ export default function Creadores() {
                                   </div>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1 truncate">
-                                  {event ? event.name : 'Evento no encontrado'}
+                                  {commission.eventName ?? `Evento #${commission.eventId}`}
                                 </p>
                                 <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-gray-500">
                                   <span className="flex items-center">

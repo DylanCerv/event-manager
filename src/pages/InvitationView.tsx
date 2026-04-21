@@ -229,11 +229,6 @@ export function InvitationView() {
         if (updatedGuest.phone !== undefined) payload.phone = updatedGuest.phone;
       }
 
-      // Completing the form implies "confirmed" (unless already attended)
-      if (guest.confirmation_status !== 'attended') {
-        payload.confirmation_status = 'confirmed';
-      }
-
       const response = await updateInvitationGuestByQrCodeAPI(qrCode, payload);
 
       const apiGuest = response?.guest;
@@ -242,7 +237,6 @@ export function InvitationView() {
         : ({
             ...guest,
             ...updatedGuest,
-            ...(guest.confirmation_status !== 'attended' ? { confirmation_status: 'confirmed' as const } : {}),
             ...(updatedGuest.age_category === 'minor' ? { email: undefined, phone: undefined } : {}),
           } as Guest);
       setGuest(merged);
@@ -280,8 +274,6 @@ export function InvitationView() {
     if (guestData.mobility_restrictions !== undefined) payload.mobility_restrictions = guestData.mobility_restrictions;
     if (guestData.confirmation_status !== undefined) {
       payload.confirmation_status = guestData.confirmation_status;
-    } else if (guest.confirmation_status !== 'attended') {
-      payload.confirmation_status = 'confirmed';
     }
 
     if (Object.keys(payload).length === 0) return;

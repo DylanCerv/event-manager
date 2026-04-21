@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { commissionsStorage } from '../../lib/commissions-storage';
-import { storage } from '../../lib/storage';
 import { configStorage } from '../../lib/config-storage';
 import type { Commission, CommissionSummary } from '../../types/commission';
-import type { Event } from '../../types/event';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -17,7 +15,6 @@ import {
 } from 'lucide-react';
 
 interface CommissionWithEventData extends Commission {
-  eventName?: string;
   eventDate?: string;
   adminName?: string;
 }
@@ -49,61 +46,14 @@ export default function CreatorCommissions() {
     try {
       setLoading(true);
       
-      // Load commissions for this creator
+      // Load commissions for this creator (backend now includes eventName)
       const creatorCommissions = await commissionsStorage.getCommissionsByCreator(user.id);
-      console.log('🔍 Comisiones del creador:', creatorCommissions);
-      
-      // Load events data to get event names and dates
-      const events = await storage.getEvents();
-      console.log('🔍 Eventos cargados:', events);
-      console.log('🔍 Cantidad de eventos:', events.length);
-      if (events.length > 0) {
-        console.log('🔍 Primer evento ejemplo:', events[0]);
-        console.log('🔍 IDs de eventos disponibles:', events.map(e => e.id));
-      }
-      
-      // Load users data to get admin names
-      const users = await storage.getUsers();
-      console.log('🔍 Usuarios cargados:', users);
-      console.log('🔍 Cantidad de usuarios:', users.length);
-      if (users.length > 0) {
-        console.log('🔍 Primer usuario ejemplo:', users[0]);
-        console.log('🔍 IDs de usuarios disponibles:', users.map(u => u.id));
-      }
-      
-      // Enrich commissions with event and admin data
-      const commissionsWithEventData = creatorCommissions.map(commission => {
-        console.log('🔍 Procesando comisión:', commission);
-        console.log('🔍 Buscando evento con ID:', commission.eventId);
-        const event = events.find(e => {
-          console.log('🔍 Comparando:', e.id, 'con', commission.eventId);
-          return e.id === commission.eventId;
-        });
-        console.log('🔍 Evento encontrado:', event);
-        
-        if (event) {
-          console.log('🔍 Buscando admin con ID:', event.created_by);
-          const admin = users.find(u => {
-            console.log('🔍 Comparando usuario:', u.id, 'con', event.created_by);
-            return u.id === event.created_by;
-          });
-          console.log('🔍 Admin encontrado:', admin);
-          
-          return {
-            ...commission,
-            eventName: event.name || 'Sin nombre',
-            eventDate: event.date || '',
-            adminName: admin ? admin.company : `Admin ID: ${event.created_by} no encontrado`
-          };
-        } else {
-          return {
-            ...commission,
-            eventName: `Evento ID: ${commission.eventId} no encontrado`,
-            eventDate: '',
-            adminName: 'Sin evento'
-          };
-        }
-      });
+
+      const commissionsWithEventData: CommissionWithEventData[] = creatorCommissions.map(commission => ({
+        ...commission,
+        eventDate: '',
+        adminName: '',
+      }));
       
       setCommissions(commissionsWithEventData);
       
@@ -428,7 +378,7 @@ export default function CreatorCommissions() {
                   {/* Header - Título y Estado */}
                   <div className="flex items-start justify-between mb-3 sm:mb-2">
                     <h3 className="text-sm sm:text-base font-semibold text-gray-900 pr-2 leading-tight">
-                      {commission.eventName}
+                      {commission.eventName ?? `Evento #${commission.eventId}`}
                     </h3>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
                       commission.status === 'paid'

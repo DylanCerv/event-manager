@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { FileText, Clock, CheckCircle, XCircle, User, Calendar, Search, Users, InboxIcon, Gift } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { storage } from '../../lib/storage';
-import type { Event, EventRequest } from '../../types/event';
+import type { EventRequest } from '../../types/event';
+import { getEventRequestsAPI } from '../../endpoints/eventRequest';
 import { getPrizeRedemptionsAPI } from '../../endpoints/prizeRedemption';
 import { getPrizesAPI } from '../../endpoints/prize';
 
@@ -15,7 +15,7 @@ interface UserInfo {
 }
 
 interface RequestWithDetails extends EventRequest {
-  event?: Event;
+  eventName?: string;
   user?: UserInfo;
 }
 
@@ -62,46 +62,44 @@ export default function CreatorRequests() {
     try {
       setIsLoading(true);
 
-      // Get users created by this creator
-      const allUsers = await storage.getUsers();
-      const creatorUsers = allUsers.filter(u => u.createdBy === user.id);
+      // Backend scopes CREATOR role to only see requests from their admins
+      const response = await getEventRequestsAPI('bolt_event,creator');
+      const rawRequests = response?.data?.data ?? response?.data ?? [];
 
-      // Get all requests from users created by this creator
-      const allRequests = await storage.getEventRequests();
-      const creatorRequests = allRequests.filter(r => 
-        creatorUsers.some(u => u.id === r.requested_by)
-      );
-
-      // Get all events to get event names and guest counts
-      const allEvents = JSON.parse(localStorage.getItem('events') || '[]');
-
-      // Enrich requests with event and user data
-      const enrichedRequests = creatorRequests.map(request => {
-        const eventData = allEvents.find((e: any) => e.id === request.event_id);
-        const requestUser = creatorUsers.find(u => u.id === request.requested_by);
-        
+      const enrichedRequests: RequestWithDetails[] = rawRequests.map((r: any) => {
+        const boltEvent = r.bolt_event ?? r.boltEvent ?? null;
+        const creator = r.creator ?? null;
         return {
-          ...request,
-          event: eventData,
-          user: requestUser,
-          eventName: eventData?.name || 'Evento no encontrado',
-          guestCount: eventData?.guest_count || 0
+          id: String(r.id),
+          event_id: String(r.bolt_event_id ?? r.event_id ?? ''),
+          status: r.status,
+          requested_by: String(r.creator_id ?? ''),
+          created_at: r.created_at,
+          processed_at: r.processed_at ?? null,
+          eventName: boltEvent?.name ?? 'Evento no encontrado',
+          guestCount: boltEvent?.guest_count ?? 0,
+          user: creator
+            ? {
+                id: String(creator.id),
+                firstName: creator.name ?? '',
+                lastName: creator.last_name ?? '',
+                email: creator.email ?? '',
+                company: creator.company ?? '',
+              }
+            : undefined,
         };
       });
-      
 
       setRequests(enrichedRequests);
       setFilteredRequests(enrichedRequests);
 
-      // Calculate stats
       const newStats = {
         total: enrichedRequests.length,
         pending: enrichedRequests.filter(r => r.status === 'pending').length,
         approved: enrichedRequests.filter(r => r.status === 'approved').length,
-        rejected: enrichedRequests.filter(r => r.status === 'rejected').length
+        rejected: enrichedRequests.filter(r => r.status === 'rejected').length,
       };
       setStats(newStats);
-
     } catch (error) {
       console.error('Error loading creator requests:', error);
     } finally {
@@ -191,7 +189,7 @@ export default function CreatorRequests() {
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(request => 
-        (request as any).eventName?.toLowerCase().includes(searchLower) ||
+        request.eventName?.toLowerCase().includes(searchLower) ||
         request.user?.firstName.toLowerCase().includes(searchLower) ||
         request.user?.lastName.toLowerCase().includes(searchLower) ||
         request.user?.email.toLowerCase().includes(searchLower) ||
@@ -512,7 +510,7 @@ export default function CreatorRequests() {
                         <Calendar className="h-5 w-5 text-gray-400 mr-3" />
                         <div>
                           <div className="text-sm font-medium text-gray-900">
-                            {(request as any).eventName || 'Evento no encontrado'}
+                            {request.eventName || 'Evento no encontrado'}
                           </div>
                         </div>
                       </div>
@@ -534,7 +532,7 @@ export default function CreatorRequests() {
                       <div className="flex items-center">
                         <Users className="h-5 w-5 text-gray-400 mr-2" />
                         <span className="text-sm font-medium text-gray-900">
-                          {(request as any).guestCount || 0}
+                          {(request as any).guestCount ?? 0}
                         </span>
                       </div>
                     </td>

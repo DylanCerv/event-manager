@@ -3,6 +3,7 @@ export interface Commission {
   creatorId: string;
   eventRequestId: string;
   eventId: string;
+  eventName?: string | null;
   userId: string;
   amount: number;
   guestCount: number;

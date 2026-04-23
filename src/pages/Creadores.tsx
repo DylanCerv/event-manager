@@ -59,6 +59,12 @@ export default function Creadores() {
     fetchUsers().catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'finances') {
+      loadCommissionData();
+    }
+  }, [activeTab]);
+
   const mapApiCreatorToCreator = (u: ApiUser): Creator => ({
     id: String(u.id),
     firstName: u.name || '',
@@ -944,8 +950,8 @@ export default function Creadores() {
                     return (
                       <div key={commission.id} className="bg-white shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
                         <div className="p-4 sm:p-6">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-                            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 gap-4">
+                            <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1 gap-2">
                               {/* Creator Avatar */}
                               <div className="flex-shrink-0">
                                 <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-indigo-100 flex items-center justify-center">
@@ -966,18 +972,6 @@ export default function Creadores() {
                                       {commission.commissionPercentage}%
                                     </span>
                                   </div>
-                                  <div className="text-right">
-                                    <div className="text-lg sm:text-xl font-bold text-green-600">
-                                      ${commission.amount.toFixed(2)}
-                                    </div>
-                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                      commission.status === 'paid' 
-                                        ? 'bg-green-100 text-green-800' 
-                                        : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                      {commission.status === 'paid' ? 'Pagado' : 'Pendiente'}
-                                    </span>
-                                  </div>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1 truncate">
                                   {commission.eventName ?? `Evento #${commission.eventId}`}
@@ -996,6 +990,19 @@ export default function Creadores() {
                                   </span>
                                 </div>
                               </div>
+                              
+                              <div className="text-center">
+                                <div className="text-lg sm:text-xl font-bold text-green-600">
+                                  ${commission.amount.toFixed(2)}
+                                </div>
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  commission.status === 'paid' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {commission.status === 'paid' ? 'Pagado' : 'Pendiente'}
+                                </span>
+                              </div>
                             </div>
                             
                             {/* Actions */}
@@ -1009,12 +1016,14 @@ export default function Creadores() {
                                   Marcar como Pagado
                                 </button>
                               ) : (
-                                <div className="flex items-center justify-center sm:justify-start text-green-600 bg-green-50 px-3 py-2 rounded-md">
-                                  <Check className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
-                                  <span className="text-xs sm:text-sm font-medium">Pagado</span>
+                                <div className="flex flex-col items-center gap-1">
+                                  <div className="flex items-center justify-center sm:justify-start text-green-600 bg-green-50 px-3 py-2 rounded-md">
+                                      <Check className="w-4 h-4 sm:w-5 sm:h-5 mr-1" />
+                                      <span className="text-xs sm:text-sm font-medium">Pagado</span>
+                                  </div>
                                   {commission.paidAt && (
-                                    <span className="text-xs text-gray-400 ml-2 hidden sm:inline">
-                                      {new Date(commission.paidAt).toLocaleDateString('es-ES', {day: '2-digit', month: '2-digit'})}
+                                    <span className="text-[9px] text-green-400 ml-2 hidden sm:inline">
+                                      {new Date(commission.paidAt).toLocaleDateString('es-ES', {day: 'numeric', month: 'numeric', year: 'numeric'})}
                                     </span>
                                   )}
                                 </div>

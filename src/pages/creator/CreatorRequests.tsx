@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { FileText, Clock, CheckCircle, XCircle, User, Calendar, Search, Users, InboxIcon, Gift } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { EventRequest } from '../../types/event';
@@ -28,6 +29,7 @@ interface RequestStats {
 
 export default function CreatorRequests() {
   const { user } = useAuth();
+  const location = useLocation();
   const [mainTab, setMainTab] = useState<'eventos' | 'canjes'>('eventos');
   const [requests, setRequests] = useState<RequestWithDetails[]>([]);
   const [filteredRequests, setFilteredRequests] = useState<RequestWithDetails[]>([]);
@@ -51,10 +53,11 @@ export default function CreatorRequests() {
   const [availablePrizes, setAvailablePrizes] = useState<any[]>([]);
 
   useEffect(() => {
+    if (!user) return;
     loadRequests();
     loadPrizeRequests();
     loadAvailablePrizes();
-  }, [user]);
+  }, [user, location.pathname]);
 
   const loadRequests = async () => {
     if (!user) return;

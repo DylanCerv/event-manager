@@ -7,16 +7,16 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     description: 'Elegante y romántico',
     icon: '💒',
     colors: {
-      primary: '#ec4899', // Pink-500
-      secondary: '#f3e8ff', // Purple-50
-      accent: '#fdf2f8', // Pink-50
-      background: '#ffffff',
-      text: '#4b5563'
+      primary: '#E8AEB7',
+      secondary: '#F9EEF0',
+      accent: '#D4AF37',
+      background: '#FFFDF9',
+      text: '#333333'
     },
     gradients: {
-      header: 'from-pink-400 via-rose-400 to-red-400',
-      card: 'from-pink-50 via-rose-50 to-white',
-      button: 'from-pink-500 to-rose-500'
+      header: 'from-rose-200 via-pink-200 to-amber-200',
+      card: 'from-rose-50 via-pink-50 to-white',
+      button: 'from-rose-300 to-amber-300'
     }
   },
   {
@@ -25,16 +25,16 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     description: 'Mágico y princesa',
     icon: '👑',
     colors: {
-      primary: '#a855f7', // Purple-500
-      secondary: '#fdf4ff', // Fuchsia-50
-      accent: '#f0f9ff', // Sky-50
-      background: '#ffffff',
-      text: '#4b5563'
+      primary: '#C89ACF',
+      secondary: '#FBF3FC',
+      accent: '#E5C36A',
+      background: '#FFFCFE',
+      text: '#3E3342'
     },
     gradients: {
-      header: 'from-purple-400 via-pink-400 to-fuchsia-400',
-      card: 'from-purple-50 via-fuchsia-50 to-white',
-      button: 'from-purple-500 to-fuchsia-500'
+      header: 'from-fuchsia-200 via-rose-200 to-amber-200',
+      card: 'from-fuchsia-50 via-rose-50 to-white',
+      button: 'from-fuchsia-300 to-amber-300'
     }
   },
   {
@@ -43,16 +43,16 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     description: 'Festivo y alegre',
     icon: '🎉',
     colors: {
-      primary: '#f59e0b', // Amber-500
-      secondary: '#fef3c7', // Amber-100
-      accent: '#fff7ed', // Orange-50
-      background: '#ffffff',
-      text: '#4b5563'
+      primary: '#F2A66D',
+      secondary: '#FFF3E8',
+      accent: '#FFCE8C',
+      background: '#FFFCF8',
+      text: '#43342D'
     },
     gradients: {
-      header: 'from-yellow-400 via-orange-400 to-red-400',
-      card: 'from-yellow-50 via-orange-50 to-white',
-      button: 'from-yellow-500 to-orange-500'
+      header: 'from-amber-200 via-orange-200 to-rose-200',
+      card: 'from-amber-50 via-orange-50 to-white',
+      button: 'from-amber-300 to-orange-300'
     }
   },
   {
@@ -61,16 +61,16 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     description: 'Profesional y moderno',
     icon: '🏢',
     colors: {
-      primary: '#3b82f6', // Blue-500
-      secondary: '#eff6ff', // Blue-50
-      accent: '#f8fafc', // Slate-50
-      background: '#ffffff',
-      text: '#374151'
+      primary: '#47627C',
+      secondary: '#EEF3F7',
+      accent: '#AEBECD',
+      background: '#FCFDFE',
+      text: '#243140'
     },
     gradients: {
-      header: 'from-blue-500 via-indigo-500 to-purple-500',
-      card: 'from-blue-50 via-indigo-50 to-white',
-      button: 'from-blue-500 to-indigo-500'
+      header: 'from-slate-300 via-blue-200 to-slate-200',
+      card: 'from-slate-50 via-blue-50 to-white',
+      button: 'from-slate-500 to-blue-500'
     }
   },
   {
@@ -79,16 +79,16 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     description: 'Académico y serio',
     icon: '🎓',
     colors: {
-      primary: '#059669', // Emerald-600
-      secondary: '#ecfdf5', // Emerald-50
-      accent: '#f0fdf4', // Green-50
-      background: '#ffffff',
-      text: '#374151'
+      primary: '#2F6F73',
+      secondary: '#EDF7F7',
+      accent: '#BFD8C6',
+      background: '#FBFDFC',
+      text: '#23363A'
     },
     gradients: {
-      header: 'from-emerald-500 via-teal-500 to-cyan-500',
-      card: 'from-emerald-50 via-teal-50 to-white',
-      button: 'from-emerald-500 to-teal-500'
+      header: 'from-teal-200 via-emerald-200 to-cyan-200',
+      card: 'from-teal-50 via-emerald-50 to-white',
+      button: 'from-teal-500 to-emerald-500'
     }
   }
 ];

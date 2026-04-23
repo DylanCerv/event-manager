@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Calendar, Clock, MapPin, Phone, Mail, Facebook, Instagram, Sparkles, Heart, Check, Utensils, Music, Gift, Timer, Accessibility, Star, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 // Importar todas las opciones de fondos disponibles
@@ -86,9 +86,113 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
   // Obtener el tema seleccionado o usar el tema por defecto
   const template = getTemplateById(eventCard.event_type || 'wedding') || getTemplateById('wedding')!;
   const themeColors = eventCard.theme_colors || template.colors;
+  const eventTypeLabelMap: Record<string, string> = {
+    wedding: 'Boda',
+    quinceanera: '15 Años',
+    birthday: 'Cumpleaños',
+    corporate: 'Empresarial',
+    conference: 'Conferencia',
+  };
+  const eventTypeLabel = eventTypeLabelMap[eventCard.event_type || 'wedding'] || 'Evento';
+  const isGuestConfirmed = guest.status === 'confirmed' || guest.confirmation_status === 'confirmed';
+  const formattedEventDate = new Intl.DateTimeFormat('es-ES', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(event.date));
+  const eventShortDate = new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(event.date));
+  const eventTimeLabel = new Intl.DateTimeFormat('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(event.date));
+  const eventOccasionTextMap: Record<string, string> = {
+    wedding: 'A celebrar nuestro matrimonio',
+    quinceanera: 'A vivir una noche inolvidable',
+    birthday: 'A celebrar un dia muy especial',
+    corporate: 'A compartir este gran evento',
+    conference: 'A compartir una experiencia inspiradora',
+  };
+  const eventOccasionText = eventOccasionTextMap[eventCard.event_type || 'wedding'] || 'A celebrar juntos este momento';
+  const countdownDescriptionMap: Record<string, string> = {
+    wedding: 'Cada minuto nos acerca a un dia que queremos vivir contigo.',
+    quinceanera: 'Cada instante nos acerca a una celebracion llena de magia, alegria y recuerdos inolvidables.',
+    birthday: 'La cuenta regresiva ya comenzo para reunirnos, celebrar y pasarla increible.',
+    corporate: 'Cada minuto nos acerca a una experiencia pensada para compartir, conectar y disfrutar juntos.',
+    conference: 'Cada minuto nos acerca a una jornada de ideas, aprendizaje y encuentros valiosos.',
+  };
+  const countdownDescription = countdownDescriptionMap[eventCard.event_type || 'wedding'] || 'La cuenta regresiva ya comenzo para este gran evento.';
+  const locationHeadingMap: Record<string, string> = {
+    wedding: 'Te esperamos en un lugar muy especial',
+    quinceanera: 'Te esperamos en un lugar pensado para una noche inolvidable',
+    birthday: 'Te esperamos en el lugar donde comenzara la celebracion',
+    corporate: 'El encuentro se llevara a cabo en este espacio',
+    conference: 'La jornada se realizara en esta ubicación',
+  };
+  const locationHeading = locationHeadingMap[eventCard.event_type || 'wedding'] || 'Te esperamos en este lugar';
+  const rsvpHeadingMap: Record<string, string> = {
+    wedding: 'Nos encantaria contar contigo',
+    quinceanera: 'Queremos celebrar contigo esta noche especial',
+    birthday: 'Queremos celebrar este gran dia contigo',
+    corporate: 'Confirma tu participación',
+    conference: 'Confirma tu asistencia',
+  };
+  const rsvpHeading = rsvpHeadingMap[eventCard.event_type || 'wedding'] || 'Confirma tu asistencia';
+  const rsvpDescriptionMap: Record<string, string> = {
+    wedding: 'Confirma tu asistencia para reservar tu lugar y preparar cada detalle de este dia tan especial.',
+    quinceanera: 'Confirma tu asistencia para preparar cada detalle y vivir juntos una celebracion inolvidable.',
+    birthday: 'Confirma tu asistencia para prepararlo todo y disfrutar juntos esta celebracion.',
+    corporate: 'Confirma tu participación para prepararnos y recibirte en este encuentro de la mejor manera.',
+    conference: 'Confirma tu asistencia para organizar tu participación y brindarte una mejor experiencia durante la jornada.',
+  };
+  const rsvpDescription = rsvpDescriptionMap[eventCard.event_type || 'wedding'] || 'Confirma tu asistencia para reservar tu lugar.';
+  const confirmedMessageMap: Record<string, string> = {
+    wedding: 'Gracias por confirmar, te esperamos con muchisima ilusion.',
+    quinceanera: 'Gracias por confirmar, sera un placer celebrar contigo esta noche tan especial.',
+    birthday: 'Gracias por confirmar, nos encantara celebrar contigo.',
+    corporate: 'Gracias por confirmar tu participación. Te esperamos en este encuentro.',
+    conference: 'Gracias por confirmar tu asistencia. Te esperamos en la jornada.',
+  };
+  const confirmedMessage = confirmedMessageMap[eventCard.event_type || 'wedding'] || 'Gracias por confirmar tu asistencia.';
+  const googleMapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location || eventCard.event_name)}`;
+  const normalizedWhatsapp = eventCard.contact_whatsapp?.replace(/\D/g, '') || '';
+  const whatsappUrl = normalizedWhatsapp ? `https://wa.me/${normalizedWhatsapp}` : '';
+  const scheduleItems = [...(eventCard.event_schedule || [])].sort((a, b) => a.time.localeCompare(b.time));
+  const renderPrimaryAttendanceCta = (fullWidth = false) => (
+    isGuestConfirmed ? (
+      <div className={`${fullWidth ? 'w-full' : ''} invitation-badge px-8 py-4 text-base font-medium tracking-wide relative overflow-hidden`}>
+        <span className="flex items-center justify-center" style={{ color: themeColors.primary }}>
+          <Check className="w-5 h-5 mr-2" />
+          ¡Asistencia Confirmada!
+        </span>
+        <p className="text-xs mt-1 text-center" style={{ color: themeColors.text }}>
+          {confirmedMessage}
+        </p>
+      </div>
+    ) : (
+      <button
+        onClick={() => onConfirmAttendance(guest.id, true)}
+        className={`invitation-primary-button group ${fullWidth ? 'w-full' : ''} px-6 py-4 md:px-10 md:py-4 rounded-full text-sm md:text-base font-medium tracking-[0.14em] uppercase transform transition hover:scale-[1.02] duration-300 ease-in-out relative overflow-hidden backdrop-blur-sm border border-white/30 text-white`}
+        style={{ backgroundColor: themeColors.primary }}
+      >
+        <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-white/25 via-transparent to-white/10 opacity-80" />
+        <span className="relative flex items-center justify-center theme-text">
+          <Heart className="w-5 h-5 mr-2" />
+          Confirmar asistencia
+        </span>
+      </button>
+    )
+  );
   
   // Obtener la imagen de fondo seleccionada
   const selectedBackground = getBackgroundImage(eventCard.event_type || 'wedding', typeof eventCard.background_option === 'string' ? parseInt(eventCard.background_option) : (eventCard.background_option || 1));
+  const heroImage = eventCard.main_image || selectedBackground;
   
   // Determinar el modelo de layout (por defecto 'cover' para compatibilidad)
   // Usar estado para layoutModel para asegurar que se actualice correctamente
@@ -120,40 +224,34 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
       }, {} as Record<string, { category: { id: string; name: string; icon: string }; items: typeof eventCard.event_recommendations }>);
 
       return (
-        <div className="bg-cover bg-center bg-no-repeat rounded-lg p-3 border border-indigo-100/50" style={styleProps}>
-          {/* Título centrado más compacto */}
-          <div className="text-center mb-3">
-            <h3 className="text-base font-semibold text-gray-900 flex items-center justify-center space-x-2">
-              <Star className="w-4 h-4 text-indigo-600" />
-              <span>Recomendaciones</span>
-            </h3>
-          </div>
-          <div className="space-y-2">
-            {Object.values(groupedRecommendations).map(({ category, items }) => (
-              <div key={category.id} className="space-y-1.5">
-                {/* Categoría más compacta */}
-                <div className="flex items-center space-x-2 p-1.5 rounded-md" style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  backdropFilter: 'blur(5px)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)'
-                }}>
-                  <span className="text-sm">{category.icon}</span>
-                  <span className="text-xs font-semibold text-gray-900 capitalize">{category.name}:</span>
-                </div>
-                {/* Items más compactos */}
-                <div className="ml-3 space-y-0.5">
-                  {items.map((item) => (
-                    <div key={item.id} className="flex items-start space-x-1.5 p-1 rounded" style={{
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)'
-                    }}>
-                      <span className="text-gray-400 mt-0.5 text-xs">•</span>
-                      <span className="text-xs text-gray-700 leading-relaxed font-medium">{item.text}</span>
-                    </div>
-                  ))}
+        <div className="grid gap-4 md:grid-cols-2" style={styleProps}>
+          {Object.values(groupedRecommendations).map(({ category, items }) => (
+            <div key={category.id} className="invitation-detail-card rounded-[24px] p-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full text-lg" style={{ backgroundColor: `${themeColors.primary}18` }}>
+                  {category.icon || '•'}
+                </span>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>
+                    Recomendación
+                  </p>
+                  <h4 className="mt-1 text-base font-semibold capitalize" style={{ color: themeColors.text }}>
+                    {category.name}
+                  </h4>
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="mt-4 space-y-2">
+                {items.map((item) => (
+                  <div key={item.id} className="rounded-2xl px-4 py-3" style={{ backgroundColor: 'rgba(255,255,255,0.56)' }}>
+                    <p className="text-sm leading-7" style={{ color: themeColors.text }}>
+                      {item.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       );
     }
@@ -161,13 +259,23 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
     // Fallback al sistema anterior si no hay recomendaciones categorizadas
     if (eventCard.recommendations) {
       return (
-        <div className="bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-indigo-100/50" style={styleProps}>
-          <h3 className="text-lg font-medium text-gray-900 mb-3">Recomendaciones</h3>
-          <div className="prose prose-indigo max-w-none">
-            <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
-              {eventCard.recommendations}
-            </p>
+        <div className="invitation-detail-card rounded-[24px] p-5" style={styleProps}>
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: `${themeColors.primary}18` }}>
+              <Star className="w-5 h-5" style={{ color: themeColors.primary }} />
+            </span>
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>
+                Recomendaciones
+              </p>
+              <h4 className="mt-1 text-base font-semibold" style={{ color: themeColors.text }}>
+                Ten en cuenta estos detalles
+              </h4>
+            </div>
           </div>
+          <p className="mt-4 text-sm leading-7 whitespace-pre-wrap" style={{ color: themeColors.text }}>
+            {eventCard.recommendations}
+          </p>
         </div>
       );
     }
@@ -313,6 +421,491 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
     setTimeout(() => setShowContent(true), 100);
   }, [eventCard, event, detectImageBrightness, layoutModel]);
 
+  const renderPremiumInvitationLayout = () => {
+    const visualMoments = galleryImages
+      .filter(Boolean)
+      .filter((image) => image !== heroImage)
+      .slice(0, 3);
+
+    return (
+      <ThemeStyles
+        eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"}
+        themeColors={themeColors}
+        singleFont
+      >
+        <div
+          className="invitation-frame max-w-5xl mx-auto relative"
+          style={{
+            backgroundImage: `url(${selectedBackground})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center center',
+            backgroundRepeat: 'no-repeat',
+            backgroundAttachment: 'fixed'
+          }}
+        >
+          <ThemeDecorations
+            eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"}
+            themeColors={{
+              primary: themeColors.primary,
+              secondary: themeColors.secondary,
+              accent: themeColors.accent
+            }}
+          />
+
+          <div
+            className="absolute inset-0 border-[16px] border-double rounded-xl pointer-events-none opacity-30"
+            style={{ borderColor: themeColors.accent }}
+          />
+
+          <div className="relative min-h-[88vh] overflow-hidden">
+            <img
+              src={heroImage}
+              alt="Portada del evento"
+              className="w-full h-full absolute inset-0 object-cover"
+            />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_28%),linear-gradient(180deg,rgba(29,29,29,0.12)_0%,rgba(29,29,29,0.28)_35%,rgba(29,29,29,0.76)_100%)]" />
+
+            <div className="relative z-10 flex min-h-[88vh] flex-col justify-between px-5 py-6 sm:px-8 sm:py-8">
+              <div className="flex items-start justify-between gap-4">
+                <span className="invitation-kicker" style={{ color: '#ffffff' }}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {eventTypeLabel}
+                </span>
+                {isGuestConfirmed && (
+                  <div className="invitation-badge text-white font-medium" style={{ backgroundColor: 'rgba(255,255,255,0.16)', color: 'white' }}>
+                    <Check className="w-4 h-4" />
+                    <span>Confirmado</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
+                <div className="invitation-soft-panel w-full rounded-[32px] px-6 py-8 sm:px-10 sm:py-12" style={{ backgroundColor: 'rgba(255,255,255,0.28)' }}>
+                  <p className="text-sm font-medium uppercase tracking-[0.35em] text-black/85">Estás invitado</p>
+                  <h1
+                    className={`theme-title mt-5 ${
+                      eventCard.event_name.length > 25 ? 'very-long-title' :
+                      eventCard.event_name.length > 15 ? 'long-title' : ''
+                    }`}
+                    style={{ color: '#000000', textShadow: '0 10px 30px rgba(0,0,0,0.25)' }}
+                  >
+                    {eventCard.event_name}
+                  </h1>
+                  <p className="mt-4 text-lg sm:text-xl italic text-black/70">{eventOccasionText}</p>
+
+                  <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-black/75">
+                    <span className="rounded-full border border-white/40 bg-white/45 px-4 py-2 backdrop-blur-md">
+                      {eventShortDate}
+                    </span>
+                    <span className="rounded-full border border-white/40 bg-white/45 px-4 py-2 backdrop-blur-md">
+                      {eventTimeLabel}
+                    </span>
+                  </div>
+
+                  <div className="mt-8 flex justify-center">
+                    {renderPrimaryAttendanceCta()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mx-auto mt-6 grid w-full max-w-lg grid-cols-2 gap-3">
+                <div className="invitation-soft-panel rounded-2xl p-4 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}>
+                  <Gift className="mx-auto mb-2 h-5 w-5 text-black" />
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-black/70">Invitado</p>
+                  <p className="mt-1 text-sm font-medium text-black">#{guest.guest_number}</p>
+                </div>
+                <div className="invitation-soft-panel rounded-2xl p-4 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}>
+                  <Music className="mx-auto mb-2 h-5 w-5 text-black" />
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-black/70">Mesa</p>
+                  <p className="mt-1 text-sm font-medium text-black">#{guest.table_number || '--'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-5 py-8 md:px-8 md:py-10 space-y-8">
+            {visualMoments.length > 0 && (
+              <div className="invitation-panel rounded-[30px] p-6 md:p-8">
+                <div className="text-center">
+                  <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Recuerdos
+                  </span>
+                </div>
+                <p className="mx-auto mt-4 max-w-2xl text-center text-sm leading-7" style={{ color: themeColors.text }}>
+                  Una pequeña mirada a la esencia de este dia tan especial.
+                </p>
+                <div className={`mt-6 grid gap-4 ${visualMoments.length === 1 ? 'grid-cols-1' : visualMoments.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
+                  {visualMoments.map((image, index) => (
+                    <div key={`${image}-${index}`} className="invitation-soft-panel overflow-hidden rounded-[26px] p-3">
+                      <div className="overflow-hidden rounded-[20px]">
+                        <img
+                          src={image}
+                          alt={`Momento ${index + 1}`}
+                          className="h-64 w-full object-cover transition-transform duration-700 hover:scale-105"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <SectionSeparator
+              eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"}
+              themeColors={{
+                primary: themeColors.primary,
+                secondary: themeColors.secondary,
+                accent: themeColors.accent
+              }}
+            />
+
+            <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="invitation-panel rounded-[30px] p-6 md:p-8 text-center lg:text-left">
+                <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                  <Clock className="w-3.5 h-3.5" />
+                  Cuenta regresiva
+                </span>
+                <p className="mt-5 text-sm uppercase tracking-[0.28em]" style={{ color: themeColors.primary }}>Faltan</p>
+                <p className="mt-2 text-5xl md:text-6xl font-semibold" style={{ color: themeColors.text }}>
+                  {timeLeft}
+                </p>
+                <p className="mt-4 text-base leading-7" style={{ color: themeColors.text }}>
+                  {countdownDescription}
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="invitation-detail-card rounded-[26px] p-5">
+                  <div className="flex items-center gap-3">
+                    <Calendar className="w-5 h-5" style={{ color: themeColors.primary }} />
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>Fecha</p>
+                      <p className="mt-1 text-base leading-7" style={{ color: themeColors.text }}>{formattedEventDate}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="invitation-detail-card rounded-[26px] p-5">
+                  <div className="flex items-center gap-3">
+                    <Heart className="w-5 h-5" style={{ color: themeColors.primary }} />
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>Celebración</p>
+                      <p className="mt-1 text-base leading-7" style={{ color: themeColors.text }}>{eventOccasionText}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="invitation-panel rounded-[30px] p-6 md:p-8">
+              <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+                <div>
+                  <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                    <MapPin className="w-3.5 h-3.5" />
+                    Ubicación
+                  </span>
+                  <h3 className="mt-5 text-3xl md:text-4xl" style={{ color: themeColors.text }}>
+                    {locationHeading}
+                  </h3>
+                  <p className="mt-4 text-base leading-8" style={{ color: themeColors.text }}>
+                    {event.location}
+                  </p>
+                  <div className="mt-6">
+                    <a
+                      href={googleMapsSearchUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="invitation-primary-button inline-flex items-center rounded-full px-7 py-3 text-sm font-medium uppercase tracking-[0.18em] text-white"
+                      style={{ backgroundColor: themeColors.primary }}
+                    >
+                      <MapPin className="mr-2 h-4 w-4" />
+                      Ver en Google Maps
+                    </a>
+                  </div>
+                </div>
+
+                {eventCard.event_location && (
+                  <div className="invitation-soft-panel overflow-hidden rounded-[28px] p-3">
+                    <div
+                      className="h-[320px] overflow-hidden rounded-[22px]"
+                      dangerouslySetInnerHTML={{
+                        __html: eventCard.event_location.replace(
+                          'frameborder="0"',
+                          'style="border:0; width:100%; height:100%;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"'
+                        )
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {scheduleItems.length > 0 && (
+              <section className="invitation-panel rounded-[30px] p-6 md:p-8">
+                <div className="text-center">
+                  <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                    <Timer className="w-3.5 h-3.5" />
+                    Cronograma
+                  </span>
+                  <h3 className="mt-5 text-3xl md:text-4xl" style={{ color: themeColors.text }}>
+                    Asi viviremos el evento
+                  </h3>
+                </div>
+
+                <div className="relative mx-auto mt-8 max-w-3xl">
+                  <div className="absolute left-5 top-0 bottom-0 hidden w-px md:block" style={{ background: `linear-gradient(to bottom, transparent, ${themeColors.accent}, transparent)` }} />
+                  <div className="space-y-4">
+                    {scheduleItems.map((item) => (
+                      <div key={item.id} className="invitation-detail-card relative rounded-[24px] p-5 md:pl-14">
+                        <div className="absolute left-[14px] top-1/2 hidden h-3.5 w-3.5 -translate-y-1/2 rounded-full border-2 md:block" style={{ backgroundColor: themeColors.primary, borderColor: '#ffffff' }} />
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-5">
+                          <div className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold" style={{ backgroundColor: `${themeColors.primary}18`, color: themeColors.primary }}>
+                            {item.time}
+                          </div>
+                          <p className="text-base leading-7" style={{ color: themeColors.text }}>
+                            {item.description}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {((eventCard.event_recommendations && eventCard.event_recommendations.length > 0) || eventCard.recommendations) && (
+              <section className="invitation-panel rounded-[30px] p-6 md:p-8">
+                <div className="text-center">
+                  <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                    <Star className="w-3.5 h-3.5" />
+                    Recomendaciones
+                  </span>
+                </div>
+                <div className="mt-6">
+                  {renderRecommendations()}
+                </div>
+              </section>
+            )}
+
+            {(eventCard.include_health_form || eventCard.include_mobility_form) && (
+              <section className="space-y-5">
+                <div className="text-center">
+                  <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Detalles para recibirte mejor
+                  </span>
+                </div>
+
+                <div className="grid gap-5 lg:grid-cols-2">
+                  {eventCard.include_health_form && (
+                    <div className="invitation-panel rounded-[30px] p-6">
+                      <div className="flex items-center gap-3">
+                        <Utensils className="w-5 h-5" style={{ color: themeColors.primary }} />
+                        <h3 className="text-xl" style={{ color: themeColors.text }}>Salud y alimentacion</h3>
+                      </div>
+                      <p className="mt-3 text-sm leading-7" style={{ color: themeColors.text }}>
+                        Queremos prepararlo todo para que disfrutes el evento con total tranquilidad.
+                      </p>
+
+                      {showHealthForm ? (
+                        <div className="mt-5 space-y-3">
+                          {['Ninguna', 'Vegetariano', 'Vegano', 'Sin Gluten', 'Sin Lactosa', 'Diabético'].map((option) => (
+                            <label key={option} className="invitation-detail-card flex cursor-pointer items-center gap-3 rounded-2xl p-4">
+                              <input
+                                type="radio"
+                                name="dietary"
+                                value={option}
+                                checked={dietaryRestrictions === option}
+                                onChange={(e) => setDietaryRestrictions(e.target.value)}
+                                style={{ accentColor: themeColors.primary }}
+                              />
+                              <span style={{ color: themeColors.text }}>{option}</span>
+                            </label>
+                          ))}
+                          <button
+                            onClick={async () => {
+                              setIsSubmittingHealth(true);
+                              try {
+                                await onUpdateGuest({
+                                  ...guest,
+                                  dietary_restrictions: dietaryRestrictions || 'Ninguna',
+                                  health_form_submitted: true
+                                });
+                                setShowHealthForm(false);
+                              } catch {}
+                              finally { setIsSubmittingHealth(false); }
+                            }}
+                            disabled={isSubmittingHealth}
+                            className="invitation-primary-button mt-3 w-full rounded-full px-6 py-3 text-sm font-medium uppercase tracking-[0.16em] text-white disabled:opacity-70 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: themeColors.primary }}
+                          >
+                            {isSubmittingHealth ? 'Guardando...' : 'Guardar preferencia'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="invitation-soft-panel mt-5 rounded-2xl p-5 text-center">
+                          <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>Tu respuesta</p>
+                          <p className="mt-2 text-base font-medium" style={{ color: themeColors.text }}>
+                            {guest.dietary_restrictions || 'Ninguna'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {eventCard.include_mobility_form && (
+                    <div className="invitation-panel rounded-[30px] p-6">
+                      <div className="flex items-center gap-3">
+                        <Accessibility className="w-5 h-5" style={{ color: themeColors.primary }} />
+                        <h3 className="text-xl" style={{ color: themeColors.text }}>Movilidad y accesibilidad</h3>
+                      </div>
+                      <p className="mt-3 text-sm leading-7" style={{ color: themeColors.text }}>
+                        Si necesitas apoyo especial, queremos saberlo para recibirte de la mejor manera.
+                      </p>
+
+                      {showMobilityForm ? (
+                        <div className="mt-5 space-y-3">
+                          {['Ninguna', 'Silla de Ruedas', 'Bastón', 'Andador'].map((option) => (
+                            <label key={option} className="invitation-detail-card flex cursor-pointer items-center gap-3 rounded-2xl p-4">
+                              <input
+                                type="radio"
+                                name="mobility"
+                                value={option}
+                                checked={mobilityRestrictions === option}
+                                onChange={(e) => setMobilityRestrictions(e.target.value)}
+                                style={{ accentColor: themeColors.primary }}
+                              />
+                              <span style={{ color: themeColors.text }}>{option}</span>
+                            </label>
+                          ))}
+                          <button
+                            onClick={async () => {
+                              setIsSubmittingMobility(true);
+                              try {
+                                await onUpdateGuest({
+                                  ...guest,
+                                  mobility_restrictions: mobilityRestrictions || 'Ninguna',
+                                  mobility_form_submitted: true
+                                });
+                                setShowMobilityForm(false);
+                              } catch {}
+                              finally { setIsSubmittingMobility(false); }
+                            }}
+                            disabled={isSubmittingMobility}
+                            className="invitation-primary-button mt-3 w-full rounded-full px-6 py-3 text-sm font-medium uppercase tracking-[0.16em] text-white disabled:opacity-70 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: themeColors.primary }}
+                          >
+                            {isSubmittingMobility ? 'Guardando...' : 'Guardar informacion'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="invitation-soft-panel mt-5 rounded-2xl p-5 text-center">
+                          <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>Tu respuesta</p>
+                          <p className="mt-2 text-base font-medium" style={{ color: themeColors.text }}>
+                            {guest.mobility_restrictions || 'Ninguna'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            <section className="invitation-panel rounded-[30px] px-6 py-8 text-center md:px-10">
+              <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                <Heart className="w-3.5 h-3.5" />
+                RSVP
+              </span>
+              <h3 className="mt-5 text-3xl md:text-4xl" style={{ color: themeColors.text }}>
+                {rsvpHeading}
+              </h3>
+              <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: themeColors.text }}>
+                {rsvpDescription}
+              </p>
+              <div className="mx-auto mt-8 flex max-w-md justify-center">
+                {renderPrimaryAttendanceCta(true)}
+              </div>
+            </section>
+
+            {eventCard.show_contact_footer && (
+              <section className="invitation-panel rounded-[30px] p-6 md:p-8 text-center">
+                <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                  <Mail className="w-3.5 h-3.5" />
+                  Contacto
+                </span>
+                <h3 className="mt-5 text-3xl md:text-4xl" style={{ color: themeColors.text }}>
+                  Estamos para ayudarte
+                </h3>
+
+                {eventCard.contact_message && (
+                  <p className="mx-auto mt-4 max-w-2xl text-base leading-8 whitespace-pre-wrap" style={{ color: themeColors.text }}>
+                    {eventCard.contact_message}
+                  </p>
+                )}
+
+                <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                  {whatsappUrl && (
+                    <a
+                      href={whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-w-[220px] items-center justify-center rounded-full px-7 py-4 text-sm font-medium uppercase tracking-[0.18em] text-white shadow-lg transition-transform duration-300 hover:scale-[1.02]"
+                      style={{ backgroundColor: '#25D366' }}
+                    >
+                      <Phone className="mr-2 h-4 w-4" />
+                      WhatsApp
+                    </a>
+                  )}
+
+                  {eventCard.contact_email && (
+                    <a
+                      href={`mailto:${eventCard.contact_email}`}
+                      className="inline-flex min-w-[220px] items-center justify-center rounded-full px-7 py-4 text-sm font-medium uppercase tracking-[0.18em] text-white shadow-lg transition-transform duration-300 hover:scale-[1.02]"
+                      style={{ backgroundColor: themeColors.primary }}
+                    >
+                      <Mail className="mr-2 h-4 w-4" />
+                      Email
+                    </a>
+                  )}
+                </div>
+
+                {(eventCard.facebook_url || eventCard.instagram_url) && (
+                  <div className="mt-8 flex justify-center gap-4">
+                    {eventCard.facebook_url && (
+                      <a
+                        href={eventCard.facebook_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="invitation-soft-panel rounded-full p-4 transition-transform duration-300 hover:scale-105"
+                      >
+                        <Facebook className="h-5 w-5" style={{ color: themeColors.primary }} />
+                      </a>
+                    )}
+                    {eventCard.instagram_url && (
+                      <a
+                        href={eventCard.instagram_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="invitation-soft-panel rounded-full p-4 transition-transform duration-300 hover:scale-105"
+                      >
+                        <Instagram className="h-5 w-5" style={{ color: themeColors.primary }} />
+                      </a>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        </div>
+      </ThemeStyles>
+    );
+  };
+
+  if (['portada', 'circular', 'gallery', 'fixed-background', 'cover'].includes(layoutModel)) {
+    return renderPremiumInvitationLayout();
+  }
+
   // Renderizar modelo portada
   if (eventCard.card_model === 'portada') {
     return (
@@ -322,7 +915,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
         singleFont
       >
         <div 
-          className="max-w-4xl mx-auto shadow-2xl overflow-hidden border border-gray-100 relative rounded-lg"
+          className="invitation-frame max-w-5xl mx-auto relative"
           style={{
             backgroundImage: `url(${selectedBackground})`,
             backgroundSize: 'cover',
@@ -1143,7 +1736,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
         singleFont
       >
         <div 
-          className="max-w-4xl mx-auto shadow-2xl overflow-hidden border border-gray-100 relative rounded-lg"
+          className="invitation-frame max-w-5xl mx-auto relative"
           style={{
             backgroundImage: `url(${selectedBackground})`,
             backgroundSize: 'cover',
@@ -2914,7 +3507,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
         themeColors={themeColors}
         singleFont
       >
-        <div className="relative h-screen overflow-hidden">
+        <div className="relative min-h-screen overflow-hidden">
           {/* Imagen de fondo fija - altura fija del viewport */}
           <div 
             className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
@@ -2936,23 +3529,23 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
           {/* Contenido scrolleable sobre la imagen fija */}
           <div className="relative z-10 h-full overflow-y-auto">
-            <div className="p-4 flex flex-col items-center justify-start min-h-full">
+            <div className="p-4 sm:p-6 flex flex-col items-center justify-start min-h-full">
                 {/* Contenedor principal con glassmorphism más transparente */}
                 <div 
-                  className={`backdrop-blur-md rounded-2xl border border-white/15 shadow-xl p-3 sm:p-4 space-y-3 sm:space-y-4 transition-all duration-1000 hover:shadow-2xl ${
+                  className={`invitation-panel w-full max-w-3xl rounded-[30px] p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-5 transition-all duration-700 ${
                     showContent 
                       ? 'opacity-100 transform translate-y-0' 
                       : 'opacity-0 transform translate-y-8'
                   }`}
-                  style={{
-                    backgroundColor: 'transparent',
-                    backdropFilter: 'none',
-                    WebkitBackdropFilter: 'none',
-                    boxShadow: 'none'
-                  }}
               >
                 {/* Header con bienvenida */}
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-3">
+                  <div className="flex items-center justify-center">
+                    <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {eventTypeLabel}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-center space-x-2 text-xs">
                     <Sparkles className="w-3 h-3" style={{ color: themeColors.primary }} />
                     <span className="tracking-wider" style={{ color: themeColors.text }}>
@@ -2960,7 +3553,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     </span>
                   </div>
                   
-                  <h2 className="text-2xl tracking-wide font-bold" style={{ color: themeColors.text }}>
+                  <h2 className="text-3xl sm:text-4xl tracking-wide font-bold" style={{ color: themeColors.text }}>
                     ¡Hola {guest.name || 'Invitado'}!
                   </h2>
                   
@@ -2972,12 +3565,11 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                     {eventCard.event_name}
                   </h1>
                   
-                  {guest.status === 'confirmed' && (
+                  {isGuestConfirmed && (
                     <div 
-                      className="inline-flex items-center rounded-full px-6 py-3 border-2 border-white/30 shadow-sm font-medium backdrop-blur-sm"
+                      className="invitation-badge font-medium"
                       style={{ 
-                        backgroundColor: `${themeColors.primary}E6`,
-                        color: 'white'
+                        color: themeColors.primary
                       }}
                     >
                       <Check className="w-5 h-5 mr-2" />
@@ -2988,12 +3580,9 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
                 {/* Countdown con glassmorphism mejorado */}
                 <div 
-                  className="text-center rounded-2xl p-3 sm:p-4 backdrop-blur-lg border border-white/25 transition-all duration-300 hover:border-white/40"
+                  className="invitation-soft-panel text-center rounded-[26px] p-4 sm:p-5"
                   style={{ 
-                    backgroundColor: `${themeColors.secondary}90`,
-                    backdropFilter: 'blur(12px) saturate(150%)',
-                    WebkitBackdropFilter: 'blur(12px) saturate(150%)',
-                    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.15)'
+                    backgroundColor: `${themeColors.secondary}80`
                   }}
                 >
                   <p className="text-sm font-medium uppercase tracking-wide mb-2 opacity-80" style={{ color: themeColors.text }}>
@@ -3008,34 +3597,21 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 {/* Detalles del evento con glassmorphism mejorado */}
                 <div className="space-y-3">
                   <div 
-                    className="flex items-center space-x-3 p-3 rounded-xl backdrop-blur-md border border-white/25 transition-all duration-300 hover:border-white/40 hover:scale-[1.02]"
+                    className="invitation-detail-card flex items-center space-x-3 p-3 sm:p-4 rounded-2xl"
                     style={{ 
-                      backgroundColor: `${themeColors.secondary}70`,
-                      backdropFilter: 'blur(10px) saturate(140%)',
-                      WebkitBackdropFilter: 'blur(10px) saturate(140%)',
-                      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                      backgroundColor: `${themeColors.secondary}68`
                     }}
                   >
                     <Calendar className="w-5 h-5 flex-shrink-0" style={{ color: themeColors.primary }} />
                     <span className="text-xs sm:text-sm font-medium" style={{ color: themeColors.text }}>
-                      {new Date(event.date).toLocaleDateString('es-ES', {
-                        weekday: 'long',
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      {formattedEventDate}
                     </span>
                   </div>
 
                   <div 
-                    className="flex items-center space-x-3 p-3 rounded-xl backdrop-blur-md border border-white/25 transition-all duration-300 hover:border-white/40 hover:scale-[1.02]"
+                    className="invitation-detail-card flex items-center space-x-3 p-3 sm:p-4 rounded-2xl"
                     style={{ 
-                      backgroundColor: `${themeColors.secondary}70`,
-                      backdropFilter: 'blur(10px) saturate(140%)',
-                      WebkitBackdropFilter: 'blur(10px) saturate(140%)',
-                      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                      backgroundColor: `${themeColors.secondary}68`
                     }}
                   >
                     <MapPin className="w-5 h-5 flex-shrink-0" style={{ color: themeColors.primary }} />
@@ -3045,10 +3621,10 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
                 {/* Botón de confirmación */}
                 <div className="flex justify-center pt-2">
-                  {guest.status === 'confirmed' ? (
+                  {isGuestConfirmed ? (
                     <div 
-                      className="px-8 py-3 rounded-full text-base font-medium tracking-wide shadow-lg backdrop-blur-sm border border-green-300/30"
-                      style={{ backgroundColor: '#10b981E6', color: 'white' }}
+                      className="invitation-badge px-8 py-3 text-base tracking-wide"
+                      style={{ color: themeColors.primary }}
                     >
                       <span className="flex items-center justify-center">
                         <Check className="w-5 h-5 mr-2" />
@@ -3058,7 +3634,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                   ) : (
                     <button
                       onClick={() => onConfirmAttendance(guest.id, true)}
-                      className="group px-6 py-3 md:px-8 md:py-3 rounded-full text-sm md:text-base font-medium tracking-wide shadow-lg transform transition hover:scale-105 duration-300 ease-in-out relative overflow-hidden backdrop-blur-sm border border-white/30 text-white"
+                      className="invitation-primary-button group px-6 py-3 md:px-8 md:py-3 rounded-full text-sm md:text-base font-medium tracking-wide transform transition hover:scale-[1.02] duration-300 ease-in-out relative overflow-hidden backdrop-blur-sm border border-white/30 text-white"
                       style={{ backgroundColor: `${themeColors.primary}E6` }}
                     >
                       <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-white/20 to-transparent transform -skew-x-45 translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
@@ -3071,12 +3647,12 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 </div>
 
                 {/* Información adicional */}
-                <div className="flex justify-center space-x-6 pt-2">
-                  <div className="text-center">
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div className="invitation-soft-panel rounded-2xl p-3 text-center">
                     <Gift className="w-5 h-5 mx-auto mb-1" style={{ color: themeColors.primary }} />
                     <p className="text-xs opacity-80" style={{ color: themeColors.text }}>Código: #{guest.guest_number}</p>
                   </div>
-                  <div className="text-center">
+                  <div className="invitation-soft-panel rounded-2xl p-3 text-center">
                     <Music className="w-5 h-5 mx-auto mb-1" style={{ color: themeColors.primary }} />
                     <p className="text-xs opacity-80" style={{ color: themeColors.text }}>Mesa: #{guest.table_number || '--'}</p>
                   </div>
@@ -3085,11 +3661,9 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 {/* Google Maps iframe */}
                 {eventCard.event_location && (
                   <div 
-                    className="rounded-2xl overflow-hidden backdrop-blur-md border border-white/25"
+                    className="invitation-soft-panel rounded-2xl overflow-hidden"
                     style={{ 
-                      backgroundColor: `${themeColors.secondary}60`,
-                      backdropFilter: 'blur(10px)',
-                      WebkitBackdropFilter: 'blur(10px)'
+                      backgroundColor: `${themeColors.secondary}60`
                     }}
                   >
                     <div className="p-3">
@@ -3108,11 +3682,9 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 {/* Recomendaciones - Debajo del mapa */}
                 {((eventCard.event_recommendations && eventCard.event_recommendations.length > 0) || eventCard.recommendations) && (
                   <div 
-                    className="rounded-2xl backdrop-blur-md border border-white/25 p-4"
+                    className="invitation-soft-panel rounded-2xl p-4"
                     style={{ 
-                      backgroundColor: `${themeColors.secondary}60`,
-                      backdropFilter: 'blur(10px)',
-                      WebkitBackdropFilter: 'blur(10px)'
+                      backgroundColor: `${themeColors.secondary}60`
                     }}
                   >
                     <div className="space-y-3">
@@ -3124,11 +3696,9 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
                 {/* Cronograma - Debajo de recomendaciones */}
                 {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
                   <div 
-                    className="rounded-2xl backdrop-blur-md border border-white/25 p-4"
+                    className="invitation-soft-panel rounded-2xl p-4"
                     style={{ 
-                      backgroundColor: `${themeColors.secondary}60`,
-                      backdropFilter: 'blur(10px)',
-                      WebkitBackdropFilter: 'blur(10px)'
+                      backgroundColor: `${themeColors.secondary}60`
                     }}
                   >
                     <div className="space-y-3">
@@ -3392,7 +3962,7 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
       themeColors={themeColors}
       singleFont
     >
-      <div className="max-w-4xl mx-auto shadow-2xl overflow-hidden border border-gray-100 relative rounded-lg">
+      <div className="invitation-frame max-w-5xl mx-auto relative">
         {/* Theme-specific Decorative Elements */}
         <ThemeDecorations 
           eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
@@ -3435,808 +4005,419 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
           }}
         />
 
-        {/* Cover Image */}
-        <div className="relative h-64 rounded-t-lg overflow-hidden">
+        <div className="relative min-h-[88vh] overflow-hidden">
           <img
-            src={eventCard.main_image}
+            src={heroImage}
             alt="Portada del evento"
-            className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700 rounded-t-lg"
+            className="w-full h-full absolute inset-0 object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-          
-          {/* Confirmation Badge on Cover (if confirmed) */}
-          {guest.status === 'confirmed' && (
-            <div className="absolute top-4 right-4">
-              <div 
-                className="inline-flex items-center rounded-full px-4 py-2 border-2 border-white/30 shadow-lg text-white font-medium"
-                style={{ backgroundColor: `${themeColors.primary}E6` }}
-              >
-                <Check className="w-5 h-5 mr-2" />
-                <span>Confirmado</span>
-              </div>
-            </div>
-          )}
-        </div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_28%),linear-gradient(180deg,rgba(29,29,29,0.12)_0%,rgba(29,29,29,0.28)_35%,rgba(29,29,29,0.76)_100%)]" />
 
-        {/* Invitation Content */}
-        <div className="px-4 py-6 space-y-6">
-          {/* Guest Welcome Section */}
-          <div 
-            className="text-center space-y-4 rounded-xl p-6 border theme-text"
-            style={{
-              background: `linear-gradient(135deg, ${themeColors.secondary} 0%, ${themeColors.accent} 50%, ${themeColors.secondary} 100%)`,
-              borderColor: `${themeColors.primary}30`
-            }}
-          >
-            <div className="flex items-center justify-center space-x-2 text-sm">
-              <Sparkles className="w-4 h-4" style={{ color: themeColors.primary }} />
-              <span className="tracking-wider theme-text font-bold" style={{ 
-                color: themeColors.primary
-              }}>
-                Invitación Especial
+          <div className="relative z-10 flex min-h-[88vh] flex-col justify-between px-5 py-6 sm:px-8 sm:py-8">
+            <div className="flex items-start justify-between gap-4">
+              <span className="invitation-kicker" style={{ color: '#ffffff' }}>
+                <Sparkles className="w-3.5 h-3.5" />
+                {eventTypeLabel}
               </span>
-            </div>
-            
-            <h2 
-              className="text-4xl tracking-wide relative pb-2 theme-text"
-              style={{ color: themeColors.text }}
-            >
-              ¡Hola {guest.name || 'Invitado'}!
-              <span 
-                className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-24 h-px"
-                style={{ background: `linear-gradient(to right, transparent, ${themeColors.primary}60, transparent)` }}
-              />
-            </h2>
-            
-            <p 
-              className="italic text-lg tracking-wide theme-text"
-              style={{ color: themeColors.text }}
-            >
-              Has sido invitado a
-            </p>
-            
-            <h1 
-              className={`theme-title relative ${
-                eventCard.event_name.length > 25 ? 'very-long-title' : 
-                eventCard.event_name.length > 15 ? 'long-title' : ''
-              }`}
-              style={{ color: themeColors.text }}
-            >
-              {eventCard.event_name}
-              <span 
-                className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-32 h-px"
-                style={{ background: `linear-gradient(to right, transparent, ${themeColors.primary}60, transparent)` }}
-              />
-            </h1>
-            
-            {guest.status === 'confirmed' && (
-              <div 
-                className="inline-flex items-center rounded-full px-6 py-3 border-2 shadow-sm theme-text"
-                style={{ 
-                  backgroundColor: `${themeColors.primary}20`,
-                  borderColor: `${themeColors.primary}40`,
-                  color: themeColors.primary
-                }}
-              >
-                <Check className="w-5 h-5 mr-2" />
-                <span className="font-medium">¡Asistencia Confirmada!</span>
-              </div>
-            )}
-          </div>
-
-          {/* Subtle Section Separator */}
-          <SectionSeparator 
-            eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
-            themeColors={{
-              primary: themeColors.primary,
-              secondary: themeColors.secondary,
-              accent: themeColors.accent
-            }} 
-          />
-
-          {/* Countdown */}
-          <div 
-            className="text-center rounded-xl p-8 border transform hover:scale-102 transition-transform duration-300 shadow-md theme-text"
-            style={{
-              background: `linear-gradient(135deg, ${themeColors.secondary} 0%, ${themeColors.accent} 100%)`,
-              borderColor: `${themeColors.primary}30`
-            }}
-          >
-            <div>
-              <p 
-                className="text-sm font-medium uppercase tracking-wide mb-2 theme-text"
-                style={{ color: themeColors.primary }}
-              >
-                Faltan
-              </p>
-              <Clock 
-                className="w-6 h-6 mx-auto mt-2 animate-pulse" 
-                style={{ color: themeColors.primary }}
-              />
-              <p 
-                className="text-4xl font-bold mt-1 theme-text"
-                style={{ 
-                  background: `linear-gradient(135deg, ${themeColors.primary} 0%, ${themeColors.text} 100%)`,
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
-                }}
-              >
-                {timeLeft}
-              </p>
-            </div>
-          </div>
-
-          {/* Subtle Section Separator */}
-          <SectionSeparator 
-            eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
-            themeColors={{
-              primary: themeColors.primary,
-              secondary: themeColors.secondary,
-              accent: themeColors.accent
-            }} 
-          />
-
-          {/* Event Details */}
-          <div className="space-y-4 theme-text">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div 
-                className="flex items-center space-x-3 p-4 rounded-lg transition-colors duration-300 theme-text"
-                style={{ 
-                  backgroundColor: `${themeColors.secondary}`
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColors.accent}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColors.secondary}
-              >
-                <Calendar className="w-5 h-5" style={{ color: themeColors.primary }} />
-                <span className="theme-text" style={{ color: themeColors.text }}>
-                  {new Date(event.date).toLocaleDateString('es-ES', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </span>
-              </div>
-
-              <div 
-                className="flex items-center space-x-3 p-4 rounded-lg transition-colors duration-300 theme-text"
-                style={{ 
-                  backgroundColor: `${themeColors.secondary}`
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColors.accent}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColors.secondary}
-              >
-                <MapPin className="w-5 h-5" style={{ color: themeColors.primary }} />
-                <span className="theme-text" style={{ color: themeColors.text }}>{event.location}</span>
-              </div>
-            </div>
-
-            {/* Cronograma Section */}
-            {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
-              <div 
-                className="rounded-xl p-6 border shadow-sm space-y-4"
-                style={{
-                  backgroundColor: themeColors.background,
-                  borderColor: `${themeColors.primary}30`
-                }}
-              >
-                <div className="flex items-center space-x-2">
-                  <Timer className="w-5 h-5" style={{ color: themeColors.primary }} />
-                  <h3 className="text-lg font-medium" style={{ color: themeColors.text }}>
-                    Cronograma del Evento
-                  </h3>
+              {isGuestConfirmed && (
+                <div className="invitation-badge text-white font-medium" style={{ backgroundColor: 'rgba(255,255,255,0.16)', color: 'white' }}>
+                  <Check className="w-4 h-4" />
+                  <span>Confirmado</span>
                 </div>
-                <div className="space-y-4">
-                  {(eventCard.event_schedule || [])
-                    .sort((a, b) => a.time.localeCompare(b.time))
-                    .map((item) => (
-                    <div 
-                      key={item.id} 
-                      className="flex items-center space-x-4 p-3 rounded-lg transition-colors"
-                      style={{ backgroundColor: themeColors.secondary }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = themeColors.accent}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = themeColors.secondary}
-                    >
-                      <div 
-                        className="flex-shrink-0 w-20 font-medium"
-                        style={{ color: themeColors.primary }}
-                      >
-                        {new Date(`2000-01-01T${item.time}`).toLocaleTimeString('es-ES', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false
-                        })}
-                      </div>
-                      <div className="flex-1" style={{ color: themeColors.text }}>
-                        {item.description}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Subtle Section Separator */}
-            <SectionSeparator 
-              eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
-              themeColors={{
-                primary: themeColors.primary,
-                secondary: themeColors.secondary,
-                accent: themeColors.accent
-              }} 
-            />
-
-            {/* Confirmation Button */}
-            <div className="flex justify-center pt-4">
-              {guest.status === 'confirmed' ? (
-                <div className="px-12 py-4 rounded-full text-base font-medium tracking-wide shadow-lg relative overflow-hidden ring-2 ring-offset-2 bg-green-100 border-green-300">
-                  <span className="flex items-center justify-center text-green-700">
-                    <Check className="w-5 h-5 mr-2" />
-                    ¡Asistencia Confirmada!
-                  </span>
-                  <p className="text-xs text-green-600 mt-1 text-center">
-                    Tu confirmación ha sido registrada exitosamente
-                  </p>
-                </div>
-              ) : (
-                <button
-                  onClick={() => onConfirmAttendance(guest.id, true)}
-                  className="group px-6 py-3 md:px-12 md:py-4 rounded-full text-sm md:text-base font-medium tracking-wide shadow-lg transform transition hover:scale-105 duration-300 ease-in-out relative overflow-hidden ring-2 ring-offset-2 theme-text"
-                  style={{
-                    backgroundColor: themeColors.primary,
-                    color: 'white',
-                    borderColor: `${themeColors.primary}60`
-                  }}
-                >
-                  <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-white/20 to-transparent transform -skew-x-45 translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
-                  <span className="relative flex items-center justify-center theme-text">
-                    <Heart className="w-5 h-5 mr-2" />
-                    Confirmar Asistencia
-                  </span>
-                </button>
               )}
             </div>
 
-            <div className="flex justify-center space-x-8 pt-4">
-              <div className="text-center">
-                <Gift className="w-6 h-6 text-indigo-600 mx-auto mb-2" />
-                <p className="text-sm text-gray-600">Código: #{guest.guest_number}</p>
+            <div className="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
+              <div className="invitation-soft-panel w-full rounded-[32px] px-6 py-8 sm:px-10 sm:py-12" style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}>
+                <p className="text-sm font-medium uppercase tracking-[0.35em] text-black/85">Estás invitado</p>
+                <h1
+                  className={`theme-title mt-5 ${
+                    eventCard.event_name.length > 25 ? 'very-long-title' :
+                    eventCard.event_name.length > 15 ? 'long-title' : ''
+                  }`}
+                  style={{ color: '#000000', textShadow: '0 10px 30px rgba(0,0,0,0.25)' }}
+                >
+                  {eventCard.event_name}
+                </h1>
+                <p className="mt-4 text-lg sm:text-xl italic text-black/90">{eventOccasionText}</p>
+
+                <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-black/90">
+                  <span className="rounded-full border border-white/25 bg-white/10 px-4 py-2 backdrop-blur-md">
+                    {eventShortDate}
+                  </span>
+                  <span className="rounded-full border border-white/25 bg-white/10 px-4 py-2 backdrop-blur-md">
+                    {eventTimeLabel}
+                  </span>
+                </div>
+
+                <div className="mt-8 flex justify-center">
+                  {renderPrimaryAttendanceCta()}
+                </div>
               </div>
-              <div className="text-center">
-                <Music className="w-6 h-6 text-indigo-600 mx-auto mb-2" />
-                <p className="text-sm text-gray-600">Mesa: #{guest.table_number || '--'}</p>
+            </div>
+
+            <div className="mx-auto mt-6 grid w-full max-w-lg grid-cols-2 gap-3">
+              <div className="invitation-soft-panel rounded-2xl p-4 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}>
+                <Gift className="mx-auto mb-2 h-5 w-5 text-black" />  
+                <p className="text-[11px] uppercase tracking-[0.24em] text-black/70">Invitado</p>
+                <p className="mt-1 text-sm font-medium text-black">#{guest.guest_number}</p>
+              </div>
+              <div className="invitation-soft-panel rounded-2xl p-4 text-center" style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}>
+                <Music className="mx-auto mb-2 h-5 w-5 text-black" />
+                <p className="text-[11px] uppercase tracking-[0.24em] text-black/70">Mesa</p>
+                <p className="mt-1 text-sm font-medium text-black">#{guest.table_number || '--'}</p>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Layout de galería - Diseño artístico inspirado */}
-          <div className="relative h-96 overflow-hidden" style={{background: `linear-gradient(135deg, #ffd7be 0%, #fecfef 100%)`}}>
-            {/* Elementos decorativos de fondo */}
-            <div className="absolute inset-0 opacity-20">
-              {/* Flores decorativas */}
-              <div className="absolute top-8 right-12 w-16 h-16">
-                <svg viewBox="0 0 64 64" className="w-full h-full text-white">
-                  <path d="M32 16c-4 0-8 4-8 8s4 8 8 8 8-4 8-8-4-8-8-8zm0 24c-4 0-8 4-8 8s4 8 8 8 8-4 8-8-4-8-8-8zm-16-8c-4 0-8 4-8 8s4 8 8 8 8-4 8-8-4-8-8-8zm32 0c-4 0-8 4-8 8s4 8 8 8 8-4 8-8-4-8-8-8z" fill="currentColor"/>
-                </svg>
-              </div>
-              
-              {/* Líneas geométricas */}
-              <div className="absolute top-16 left-8 w-24 h-1 bg-white transform rotate-45"></div>
-              <div className="absolute bottom-20 right-16 w-20 h-1 bg-white transform -rotate-12"></div>
-              
-              {/* Círculos decorativos */}
-              <div className="absolute top-24 left-16 w-8 h-8 border-2 border-white rounded-full"></div>
-              <div className="absolute bottom-16 left-12 w-6 h-6 bg-white rounded-full opacity-60"></div>
-              <div className="absolute top-32 right-20 w-4 h-4 bg-white rounded-full opacity-40"></div>
-              
-              {/* Patrones adicionales */}
-              <div className="absolute bottom-8 right-8 w-12 h-12">
-                <svg viewBox="0 0 48 48" className="w-full h-full text-white">
-                  <circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4,4"/>
-                  <circle cx="24" cy="24" r="12" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="2,2"/>
-                </svg>
-              </div>
+        <div className="px-5 py-8 md:px-8 md:py-10 space-y-8">
+          <SectionSeparator 
+            eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
+            themeColors={{
+              primary: themeColors.primary,
+              secondary: themeColors.secondary,
+              accent: themeColors.accent
+            }} 
+          />
+
+          <section className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="invitation-panel rounded-[30px] p-6 md:p-8 text-center lg:text-left">
+              <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                <Clock className="w-3.5 h-3.5" />
+                Cuenta regresiva
+              </span>
+              <p className="mt-5 text-sm uppercase tracking-[0.28em]" style={{ color: themeColors.primary }}>Faltan</p>
+              <p className="mt-2 text-5xl md:text-6xl font-semibold" style={{ color: themeColors.text }}>
+                {timeLeft}
+              </p>
+              <p className="mt-4 text-base leading-7" style={{ color: themeColors.text }}>
+                Cada minuto nos acerca a un dia que queremos vivir contigo.
+              </p>
             </div>
 
-
-            {/* Imagen 1 - Estilo polaroid izquierda */}
-              {(eventCard.gallery_images?.[0] || eventCard.main_image) && (
-              <div className="absolute w-32 h-40 top-6 left-1 -rotate-6 md:w-56 md:h-64 md:top-16 md:left-8 md:-rotate-12 bg-white rounded-lg shadow-2xl transform z-10 p-3">
-                <div className="w-full h-32 md:h-52 rounded overflow-hidden">
-                  <img src={eventCard.gallery_images?.[0] || eventCard.main_image} alt="Imagen 1" className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700" />
-                </div>
-                <div className="h-8 flex items-center justify-center">
-                  <div className="w-8 h-1 bg-gray-200 rounded"></div>
-                </div>
-              </div>
-            )}
-            
-            {/* Imagen 2 - Estilo polaroid derecha superior */}
-            {eventCard.gallery_images?.[1] && (
-              <div className="absolute w-32 h-40 top-2 right-1 rotate-6 md:w-56 md:h-64 md:top-8 md:right-12 md:rotate-12 bg-white rounded-lg shadow-2xl transform z-5 p-3">
-                <div className="w-full h-32 md:h-52 rounded overflow-hidden">
-                  <img src={eventCard.gallery_images[1]} alt="Imagen 2" className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700" />
-                </div>
-                <div className="h-8 flex items-center justify-center">
-                  <div className="w-6 h-1 bg-gray-200 rounded"></div>
-                </div>
-              </div>
-            )}
-            
-            {/* Imagen 3 - Estilo polaroid centro-abajo */}
-            {eventCard.gallery_images?.[2] && (
-              <div className="absolute w-32 h-40 bottom-16 left-1/2 transform -translate-x-1/2 rotate-1 md:w-56 md:h-64 md:bottom-8 md:rotate-2 bg-white rounded-lg shadow-2xl z-5 p-3">
-                <div className="w-full h-32 md:h-52 rounded overflow-hidden">
-                  <img src={eventCard.gallery_images[2]} alt="Imagen 3" className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700" />
-                </div>
-                <div className="h-8 flex items-center justify-center">
-                  <div className="w-5 h-1 bg-gray-200 rounded"></div>
-                </div>
-              </div>
-            )}
-
-          </div>
-
-          {/* Contenido completo de la tarjeta */}
-          <div className="p-8 space-y-8">
-            {/* Título del evento */}
-            <div className="text-center">
-              <h1 className="text-2xl text-gray-900 mb-2 tracking-wide">
-                {eventCard.event_name}
-              </h1>
-              <div className="flex items-center justify-center space-x-4 text-gray-600">
-                <div className="flex items-center">
-                  <Calendar className="w-5 h-5 mr-2" />
-                  <span>{new Date(event.date).toLocaleDateString('es-ES', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}</span>
-                </div>
-                <div className="flex items-center">
-                  <MapPin className="w-5 h-5 mr-2" />
-                  <span>{event.location}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Confirmación de asistencia */}
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-100/50">
-              <h3 className="text-xl text-gray-900 mb-4 text-center">Confirmación de Asistencia</h3>
-              <div className="flex justify-center space-x-4">
-                <button
-                  onClick={() => onConfirmAttendance(guest.id, true)}
-                  className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
-                    guest.status === 'confirmed' 
-                      ? 'bg-green-500 text-white shadow-lg transform scale-105' 
-                      : 'bg-white text-green-600 border border-green-200 hover:bg-green-50'
-                  }`}
-                >
-                  <Check className="w-5 h-5" />
-                  <span>Asistiré</span>
-                </button>
-                <button
-                  onClick={() => onConfirmAttendance(guest.id, false)}
-                  className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
-                    guest.status !== 'confirmed' 
-                      ? 'bg-red-500 text-white shadow-lg transform scale-105' 
-                      : 'bg-white text-red-600 border border-red-200 hover:bg-red-50'
-                  }`}
-                >
-                  <span>No podré asistir</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Formularios de salud y movilidad */}
-            {eventCard.include_health_form && showHealthForm && (
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-100/50">
-                <h3 className="text-xl text-gray-900 mb-4 flex items-center">
-                  <Utensils className="w-6 h-6 mr-2 text-green-600" />
-                  Formulario de Salud
-                </h3>
-                <div className="space-y-4">
+            <div className="space-y-4">
+              <div className="invitation-detail-card rounded-[26px] p-5">
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-5 h-5" style={{ color: themeColors.primary }} />
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      ¿Tienes alguna restricción alimentaria o alergia que debamos conocer?
-                    </label>
-                    <textarea
-                      value={dietaryRestrictions}
-                      onChange={(e) => setDietaryRestrictions(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      rows={3}
-                      placeholder="Describe cualquier alergia o restricción alimentaria..."
-                    />
+                    <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>Fecha</p>
+                    <p className="mt-1 text-base leading-7" style={{ color: themeColors.text }}>{formattedEventDate}</p>
                   </div>
-                  <button
-                    onClick={async () => {
-                      setIsSubmittingHealth(true);
-                      try {
-                        await onUpdateGuest({
-                          ...guest,
-                          dietary_restrictions: dietaryRestrictions || 'Ninguna',
-                          health_form_submitted: true
-                        });
-                        setShowHealthForm(false);
-                      } catch {}
-                      finally { setIsSubmittingHealth(false); }
-                    }}
-                    disabled={isSubmittingHealth}
-                    className="w-full bg-green-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-600 transition-colors duration-200 disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-                  >
-                    {isSubmittingHealth ? (<><Loader2 className="w-5 h-5 animate-spin" /> Enviando...</>) : 'Enviar'}
-                  </button>
                 </div>
               </div>
-            )}
-
-            {eventCard.include_mobility_form && showMobilityForm && (
-              <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-6 border border-blue-100/50">
-                <h3 className="text-xl text-gray-900 mb-4 flex items-center">
-                  <Accessibility className="w-6 h-6 mr-2 text-blue-600" />
-                  Formulario de Movilidad
-                </h3>
-                <div className="space-y-4">
+              <div className="invitation-detail-card rounded-[26px] p-5">
+                <div className="flex items-center gap-3">
+                  <Sparkles className="w-5 h-5" style={{ color: themeColors.primary }} />
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      ¿Necesitas algún tipo de asistencia especial para la movilidad?
-                    </label>
-                    <textarea
-                      value={mobilityRestrictions}
-                      onChange={(e) => setMobilityRestrictions(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      rows={3}
-                      placeholder="Describe cualquier necesidad de movilidad o accesibilidad..."
-                    />
+                    <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>Momento</p>
+                    <p className="mt-1 text-base leading-7" style={{ color: themeColors.text }}>{eventOccasionText}</p>
                   </div>
-                  <button
-                    onClick={async () => {
-                      setIsSubmittingMobility(true);
-                      try {
-                        await onUpdateGuest({
-                          ...guest,
-                          mobility_restrictions: mobilityRestrictions || 'Ninguna',
-                          mobility_form_submitted: true
-                        });
-                        setShowMobilityForm(false);
-                      } catch {}
-                      finally { setIsSubmittingMobility(false); }
-                    }}
-                    disabled={isSubmittingMobility}
-                    className="w-full bg-blue-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-600 transition-colors duration-200 disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-                  >
-                    {isSubmittingMobility ? (<><Loader2 className="w-5 h-5 animate-spin" /> Enviando...</>) : 'Enviar'}
-                  </button>
                 </div>
               </div>
-            )}
-
-            {/* Google Maps */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100/50">
-              <h3 className="text-2xl text-gray-900 mb-4 flex items-center justify-center">
-                <MapPin className="w-7 h-7 mr-3 text-blue-600" />
-                Ubicación del Evento
-              </h3>
-              <div
-                className="h-48"
-                dangerouslySetInnerHTML={{
-                  __html: eventCard.event_location.replace(
-                    'frameborder="0"',
-                    'style="border:0; width: 100%; height: 100%;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"'
-                  )
-                }}
-              />
             </div>
+          </section>
 
-            {/* Cronograma */}
-            {(eventCard.show_cronograma || eventCard.event_schedule?.length > 0) && (eventCard.event_schedule && eventCard.event_schedule.length > 0) && (
-              <div className="rounded-xl p-6 border" style={eventCard.event_type === 'quinceanera' ? {
-                backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                backdropFilter: 'blur(2px)',
-                borderColor: 'rgba(255, 255, 255, 0.1)'
-              } : {
-                background: 'linear-gradient(to right, rgb(255 251 235), rgb(254 249 195))',
-                borderColor: 'rgba(245 158 11, 0.5)'
-              }}>
-                <h3 className="text-2xl text-gray-900 mb-6 flex items-center justify-center">
-                  <Timer className="w-7 h-7 mr-3 text-amber-600" />
-                  Cronograma del Evento
+          <section className="invitation-panel rounded-[30px] p-6 md:p-8">
+            <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+              <div>
+                <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                  <MapPin className="w-3.5 h-3.5" />
+                  Ubicación
+                </span>
+                <h3 className="mt-5 text-3xl md:text-4xl" style={{ color: themeColors.text }}>
+                  Te esperamos en un lugar muy especial
                 </h3>
+                <p className="mt-4 text-base leading-8" style={{ color: themeColors.text }}>
+                  {event.location}
+                </p>
+                <div className="mt-6">
+                  <a
+                    href={googleMapsSearchUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="invitation-primary-button inline-flex items-center rounded-full px-7 py-3 text-sm font-medium uppercase tracking-[0.18em] text-white"
+                    style={{ backgroundColor: themeColors.primary }}
+                  >
+                    <MapPin className="mr-2 h-4 w-4" />
+                    Ver en Google Maps
+                  </a>
+                </div>
+              </div>
+
+              {eventCard.event_location && (
+                <div className="invitation-soft-panel overflow-hidden rounded-[28px] p-3">
+                  <div
+                    className="h-[320px] overflow-hidden rounded-[22px]"
+                    dangerouslySetInnerHTML={{
+                      __html: eventCard.event_location.replace(
+                        'frameborder="0"',
+                        'style="border:0; width:100%; height:100%;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"'
+                      )
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </section>
+
+          {scheduleItems.length > 0 && (
+            <section className="invitation-panel rounded-[30px] p-6 md:p-8">
+              <div className="text-center">
+                <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                  <Timer className="w-3.5 h-3.5" />
+                  Cronograma
+                </span>
+                <h3 className="mt-5 text-3xl md:text-4xl" style={{ color: themeColors.text }}>
+                  Asi viviremos el evento
+                </h3>
+              </div>
+
+              <div className="relative mx-auto mt-8 max-w-3xl">
+                <div className="absolute left-5 top-0 bottom-0 hidden w-px md:block" style={{ background: `linear-gradient(to bottom, transparent, ${themeColors.accent}, transparent)` }} />
                 <div className="space-y-4">
-                  {(eventCard.event_schedule || []).map((item) => (
-                    <div key={item.id} className="flex items-center space-x-4 p-4 rounded-lg shadow-sm" style={eventCard.event_type === 'quinceanera' ? {
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                      backdropFilter: 'blur(1px)'
-                    } : {
-                      backgroundColor: 'rgba(255, 255, 255, 0.7)'
-                    }}>
-                      <div className="flex-shrink-0">
-                        <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                          <Clock className="w-6 h-6 text-amber-600" />
+                  {scheduleItems.map((item) => (
+                    <div key={item.id} className="invitation-detail-card relative rounded-[24px] p-5 md:pl-14">
+                      <div className="absolute left-[14px] top-1/2 hidden h-3.5 w-3.5 -translate-y-1/2 rounded-full border-2 md:block" style={{ backgroundColor: themeColors.primary, borderColor: '#ffffff' }} />
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-5">
+                        <div className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold" style={{ backgroundColor: `${themeColors.primary}18`, color: themeColors.primary }}>
+                          {item.time}
                         </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <span className="text-lg font-semibold text-amber-700">{item.time}</span>
-                          <span className="text-gray-600">•</span>
-                          <span className="text-gray-800">{item.description}</span>
-                        </div>
+                        <p className="text-base leading-7" style={{ color: themeColors.text }}>
+                          {item.description}
+                        </p>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
+            </section>
+          )}
 
-            {/* Recommendations */}
-            <div className="bg-cover bg-center bg-no-repeat rounded-lg p-4 border border-indigo-100/50" style={(eventCard.event_type === 'wedding' || eventCard.event_type === 'quinceanera') ? {
-                backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                backdropFilter: 'blur(2px)',
-                borderColor: 'rgba(255, 255, 255, 0.1)'
-              } : {
-                backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                backdropFilter: 'blur(2px)',
-                borderColor: 'rgba(255, 255, 255, 0.1)'
-              }}>
-           {renderRecommendations()}
-          </div>
-
-            {/* Footer de contacto */}
-            {eventCard.show_contact_footer && (
-              <div className="rounded-xl p-6 border" style={eventCard.event_type === 'quinceanera' ? {
-                backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                backdropFilter: 'blur(2px)',
-                borderColor: 'rgba(255, 255, 255, 0.1)'
-              } : {
-                background: 'linear-gradient(to right, rgb(249 250 251), rgb(248 250 252))',
-                borderColor: 'rgba(156 163 175, 0.5)'
-              }}>
-                <h3 className="text-2xl text-gray-900 mb-4 text-center">Contacto</h3>
-                
-                {eventCard.contact_message && (
-                  <div className="text-center mb-6">
-                    <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">
-                      {eventCard.contact_message}
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-6">
-                  {eventCard.contact_whatsapp && (
-                    <a
-                      href={`https://wa.me/${eventCard.contact_whatsapp.replace(/\D/g, '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors duration-200 shadow-lg text-sm"
-                    >
-                      <Phone className="w-5 h-5" />
-                      <span>WhatsApp</span>
-                    </a>
-                  )}
-
-                  {eventCard.contact_email && (
-                    <a
-                      href={`mailto:${eventCard.contact_email}`}
-                      className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors duration-200 shadow-lg text-sm"
-                    >
-                      <Mail className="w-5 h-5" />
-                      <span>Email</span>
-                    </a>
-                  )}
-                </div>
-
-                {/* Redes sociales */}
-                <div className="flex justify-center space-x-4 mt-6">
-                  {eventCard.facebook_url && (
-                    <a
-                      href={eventCard.facebook_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 transform hover:scale-110 transition-all duration-200 p-2"
-                    >
-                      <Facebook className="h-6 w-6" />
-                    </a>
-                  )}
-
-                  {eventCard.instagram_url && (
-                    <a
-                      href={eventCard.instagram_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-pink-600 hover:text-pink-800 transform hover:scale-110 transition-all duration-200 p-2"
-                    >
-                      <Instagram className="h-6 w-6" />
-                    </a>
-                  )}
-                </div>
+          {((eventCard.event_recommendations && eventCard.event_recommendations.length > 0) || eventCard.recommendations) && (
+            <section className="invitation-panel rounded-[30px] p-6 md:p-8">
+              <div className="text-center">
+                <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                  <Star className="w-3.5 h-3.5" />
+                  Recomendaciones
+                </span>
               </div>
-            )}
-          </div>
-        )
+              <div className="mt-6">
+                {renderRecommendations()}
+              </div>
+            </section>
+          )}
 
-          {/* Forms Section */}
-          <div className="space-y-6 text-center flex flex-col items-center">
-            {eventCard.include_health_form && (
-              <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showHealthForm ? 'opacity-75' : ''}`}>
-                <div className="flex items-center justify-center space-x-2 mb-4">
-                  <Utensils className="w-5 h-5 text-indigo-600" />
-                  <h3 className="text-lg font-medium text-gray-900">Información de Salud</h3>
-                </div>
-                {showHealthForm ? (
-                  <div className="space-y-4 flex flex-col items-center">
-                    <div className="space-y-2">
-                      <p className="text-sm text-gray-600">¿Tienes alguna restricción alimentaria?</p>
-                      <div className="space-y-2 flex flex-col">
-                        {['Ninguna', 'Diabético', 'Celíaco', 'Vegetariano', 'Vegano'].map((option) => (
-                          <label key={option} className="flex items-center cursor-pointer">
+          {(eventCard.include_health_form || eventCard.include_mobility_form) && (
+            <section className="space-y-5">
+              <div className="text-center">
+                <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Detalles para recibirte mejor
+                </span>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                {eventCard.include_health_form && (
+                  <div className="invitation-panel rounded-[30px] p-6">
+                    <div className="flex items-center gap-3">
+                      <Utensils className="w-5 h-5" style={{ color: themeColors.primary }} />
+                      <h3 className="text-xl" style={{ color: themeColors.text }}>Salud y alimentacion</h3>
+                    </div>
+                    <p className="mt-3 text-sm leading-7" style={{ color: themeColors.text }}>
+                      Queremos prepararlo todo para que disfrutes el evento con total tranquilidad.
+                    </p>
+
+                    {showHealthForm ? (
+                      <div className="mt-5 space-y-3">
+                        {['Ninguna', 'Vegetariano', 'Vegano', 'Sin Gluten', 'Sin Lactosa', 'Diabético'].map((option) => (
+                          <label key={option} className="invitation-detail-card flex cursor-pointer items-center gap-3 rounded-2xl p-4">
                             <input
                               type="radio"
                               name="dietary"
                               value={option}
                               checked={dietaryRestrictions === option}
                               onChange={(e) => setDietaryRestrictions(e.target.value)}
-                              className="text-indigo-600 focus:ring-indigo-500"
+                              style={{ accentColor: themeColors.primary }}
                             />
-                            <span className="ml-2 text-sm text-gray-700">{option}</span>
+                            <span style={{ color: themeColors.text }}>{option}</span>
                           </label>
                         ))}
+                        <button
+                          onClick={async () => {
+                            setIsSubmittingHealth(true);
+                            try {
+                              await onUpdateGuest({
+                                ...guest,
+                                dietary_restrictions: dietaryRestrictions || 'Ninguna',
+                                health_form_submitted: true
+                              });
+                              setShowHealthForm(false);
+                            } catch {}
+                            finally { setIsSubmittingHealth(false); }
+                          }}
+                          disabled={isSubmittingHealth}
+                          className="invitation-primary-button mt-3 w-full rounded-full px-6 py-3 text-sm font-medium uppercase tracking-[0.16em] text-white disabled:opacity-70 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: themeColors.primary }}
+                        >
+                          {isSubmittingHealth ? 'Guardando...' : 'Guardar preferencia'}
+                        </button>
                       </div>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        setIsSubmittingHealth(true);
-                        try {
-                          await onUpdateGuest({
-                            ...guest,
-                            dietary_restrictions: dietaryRestrictions || 'Ninguna',
-                            health_form_submitted: true
-                          });
-                          setShowHealthForm(false);
-                        } catch {}
-                        finally { setIsSubmittingHealth(false); }
-                      }}
-                      disabled={isSubmittingHealth}
-                      className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
-                    >
-                      {isSubmittingHealth ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <p className="text-sm text-gray-600">Tu respuesta</p>
-                    <p className="font-medium text-gray-900 mt-1">{guest.dietary_restrictions || 'Ninguna'}</p>
+                    ) : (
+                      <div className="invitation-soft-panel mt-5 rounded-2xl p-5 text-center">
+                        <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>Tu respuesta</p>
+                        <p className="mt-2 text-base font-medium" style={{ color: themeColors.text }}>
+                          {guest.dietary_restrictions || 'Ninguna'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {eventCard.include_mobility_form && (
-              <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm transition-all duration-300 w-full max-w-md ${!showMobilityForm ? 'opacity-75' : ''}`}>
-                <div className="flex items-center justify-center space-x-2 mb-4">
-                  <Accessibility className="w-5 h-5 text-indigo-600" />
-                  <h3 className="text-lg font-medium text-gray-900">Información de Movilidad</h3>
-                </div>
-                {showMobilityForm ? (
-                  <div className="space-y-4 flex flex-col items-center">
-                    <div className="space-y-2">
-                      <p className="text-sm text-gray-600">¿Necesitas asistencia especial de movilidad?</p>
-                      <div className="space-y-2 flex flex-col">
-                        {['Ninguna', 'Silla de Ruedas'].map((option) => (
-                          <label key={option} className="flex items-center cursor-pointer">
+                {eventCard.include_mobility_form && (
+                  <div className="invitation-panel rounded-[30px] p-6">
+                    <div className="flex items-center gap-3">
+                      <Accessibility className="w-5 h-5" style={{ color: themeColors.primary }} />
+                      <h3 className="text-xl" style={{ color: themeColors.text }}>Movilidad y accesibilidad</h3>
+                    </div>
+                    <p className="mt-3 text-sm leading-7" style={{ color: themeColors.text }}>
+                      Si necesitas apoyo especial, queremos saberlo para recibirte de la mejor manera.
+                    </p>
+
+                    {showMobilityForm ? (
+                      <div className="mt-5 space-y-3">
+                        {['Ninguna', 'Silla de Ruedas', 'Bastón', 'Andador'].map((option) => (
+                          <label key={option} className="invitation-detail-card flex cursor-pointer items-center gap-3 rounded-2xl p-4">
                             <input
                               type="radio"
                               name="mobility"
                               value={option}
                               checked={mobilityRestrictions === option}
                               onChange={(e) => setMobilityRestrictions(e.target.value)}
-                              className="text-indigo-600 focus:ring-indigo-500"
+                              style={{ accentColor: themeColors.primary }}
                             />
-                            <span className="ml-2 text-sm text-gray-700">{option}</span>
+                            <span style={{ color: themeColors.text }}>{option}</span>
                           </label>
                         ))}
+                        <button
+                          onClick={async () => {
+                            setIsSubmittingMobility(true);
+                            try {
+                              await onUpdateGuest({
+                                ...guest,
+                                mobility_restrictions: mobilityRestrictions || 'Ninguna',
+                                mobility_form_submitted: true
+                              });
+                              setShowMobilityForm(false);
+                            } catch {}
+                            finally { setIsSubmittingMobility(false); }
+                          }}
+                          disabled={isSubmittingMobility}
+                          className="invitation-primary-button mt-3 w-full rounded-full px-6 py-3 text-sm font-medium uppercase tracking-[0.16em] text-white disabled:opacity-70 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: themeColors.primary }}
+                        >
+                          {isSubmittingMobility ? 'Guardando...' : 'Guardar informacion'}
+                        </button>
                       </div>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        setIsSubmittingMobility(true);
-                        try {
-                          await onUpdateGuest({
-                            ...guest,
-                            mobility_restrictions: mobilityRestrictions || 'Ninguna',
-                            mobility_form_submitted: true
-                          });
-                          setShowMobilityForm(false);
-                        } catch {}
-                        finally { setIsSubmittingMobility(false); }
-                      }}
-                      disabled={isSubmittingMobility}
-                      className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
-                    >
-                      {isSubmittingMobility ? (<><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>) : 'Enviar'}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <p className="text-sm text-gray-600">Tu respuesta</p>
-                    <p className="font-medium text-gray-900 mt-1">{guest.mobility_restrictions || 'Ninguna'}</p>
+                    ) : (
+                      <div className="invitation-soft-panel mt-5 rounded-2xl p-5 text-center">
+                        <p className="text-xs uppercase tracking-[0.22em]" style={{ color: themeColors.primary }}>Tu respuesta</p>
+                        <p className="mt-2 text-base font-medium" style={{ color: themeColors.text }}>
+                          {guest.mobility_restrictions || 'Ninguna'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
+            </section>
+          )}
 
-        {/* Contact Footer */}
-        {eventCard.show_contact_footer && (
-          <div className="mt-8 pt-8 pb-12 border-t border-gray-200 bg-gradient-to-b from-white to-gray-50">
-            <div className="text-center space-y-6">
+          <section className="invitation-panel rounded-[30px] px-6 py-8 text-center md:px-10">
+            <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+              <Heart className="w-3.5 h-3.5" />
+              RSVP
+            </span>
+            <h3 className="mt-5 text-3xl md:text-4xl" style={{ color: themeColors.text }}>
+              Nos encantaria contar contigo
+            </h3>
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-8" style={{ color: themeColors.text }}>
+              Confirma tu asistencia para reservar tu lugar y preparar cada detalle de este dia tan especial.
+            </p>
+            <div className="mx-auto mt-8 flex max-w-md justify-center">
+              {renderPrimaryAttendanceCta(true)}
+            </div>
+          </section>
+
+          {eventCard.show_contact_footer && (
+            <section className="invitation-panel rounded-[30px] p-6 md:p-8 text-center">
+              <span className="invitation-kicker" style={{ color: themeColors.primary }}>
+                <Mail className="w-3.5 h-3.5" />
+                Contacto
+              </span>
+              <h3 className="mt-5 text-3xl md:text-4xl" style={{ color: themeColors.text }}>
+                Estamos para ayudarte
+              </h3>
+
               {eventCard.contact_message && (
-                <p className="text-gray-600 italic text-lg px-6 leading-relaxed">{eventCard.contact_message}</p>
+                <p className="mx-auto mt-4 max-w-2xl text-base leading-8 whitespace-pre-wrap" style={{ color: themeColors.text }}>
+                  {eventCard.contact_message}
+                </p>
               )}
 
-              <div className="flex justify-center space-x-4">
-                {eventCard.contact_whatsapp && (
+              <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                {whatsappUrl && (
                   <a
-                    href={`https://wa.me/${eventCard.contact_whatsapp}`}
+                    href={whatsappUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center px-4 py-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors duration-200 shadow-lg text-sm"
+                    className="inline-flex min-w-[220px] items-center justify-center rounded-full px-7 py-4 text-sm font-medium uppercase tracking-[0.18em] text-white shadow-lg transition-transform duration-300 hover:scale-[1.02]"
+                    style={{ backgroundColor: '#25D366' }}
                   >
-                    <Phone className="w-5 h-5" />
-                    <span>WhatsApp</span>
+                    <Phone className="mr-2 h-4 w-4" />
+                    WhatsApp
                   </a>
                 )}
 
                 {eventCard.contact_email && (
                   <a
                     href={`mailto:${eventCard.contact_email}`}
-                    className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors duration-200 shadow-lg text-sm"
+                    className="inline-flex min-w-[220px] items-center justify-center rounded-full px-7 py-4 text-sm font-medium uppercase tracking-[0.18em] text-white shadow-lg transition-transform duration-300 hover:scale-[1.02]"
+                    style={{ backgroundColor: themeColors.primary }}
                   >
-                    <Mail className="w-5 h-5" />
-                    <span>Email</span>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Email
                   </a>
                 )}
               </div>
 
               {(eventCard.facebook_url || eventCard.instagram_url) && (
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-500 mb-3">
-                    Síguenos en redes sociales
-                  </p>
-                  <div className="flex justify-center space-x-6">
-                    <div className="flex space-x-4">
-                      {eventCard.facebook_url && (
-                        <a
-                          href={eventCard.facebook_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 transform hover:scale-110 transition-all duration-200 p-2"
-                        >
-                          <Facebook className="h-6 w-6" />
-                        </a>
-                      )}
-
-                      {eventCard.instagram_url && (
-                        <a
-                          href={eventCard.instagram_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-pink-600 hover:text-pink-800 transform hover:scale-110 transition-all duration-200 p-2"
-                        >
-                          <Instagram className="h-6 w-6" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
+                <div className="mt-8 flex justify-center gap-4">
+                  {eventCard.facebook_url && (
+                    <a
+                      href={eventCard.facebook_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="invitation-soft-panel rounded-full p-4 transition-transform duration-300 hover:scale-105"
+                    >
+                      <Facebook className="h-5 w-5" style={{ color: themeColors.primary }} />
+                    </a>
+                  )}
+                  {eventCard.instagram_url && (
+                    <a
+                      href={eventCard.instagram_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="invitation-soft-panel rounded-full p-4 transition-transform duration-300 hover:scale-105"
+                    >
+                      <Instagram className="h-5 w-5" style={{ color: themeColors.primary }} />
+                    </a>
+                  )}
                 </div>
               )}
-            </div>
-          </div>
-        )}
+            </section>
+          )}
+        </div>
       </div>
     </ThemeStyles>
   );

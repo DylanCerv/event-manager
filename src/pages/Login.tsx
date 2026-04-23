@@ -78,13 +78,16 @@ export function Login() {
       <div className="max-w-md w-full space-y-8">
         {/* Logo and Title */}
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg flex items-center justify-center transform hover:rotate-6 transition-transform duration-300">
-            <img
-              src={'/logoem.png'}
-              alt="Eventos Manager"
-              className='h-12 w-12'
-            />
-            {/* <KeyRound className="h-8 w-8 text-white" /> */}
+          <div className="mx-auto h-20 w-20 rounded-[22px] bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 p-[1px] shadow-[0_16px_40px_-18px_rgba(109,40,217,0.65)] transform hover:rotate-6 transition-transform duration-300">
+            <div className="flex h-full w-full items-center justify-center rounded-[21px] bg-white/12 backdrop-blur-sm ring-1 ring-white/20">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/92 shadow-inner">
+                <img
+                  src={'/logoem.png'}
+                  alt="Eventos Manager"
+                  className="h-10 w-10 object-contain drop-shadow-[0_4px_10px_rgba(79,70,229,0.18)]"
+                />
+              </div>
+            </div>
           </div>
           <h2 className="mt-6 text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             Eventos Manager

@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertTriangle, Loader2, Sparkles, Ticket } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { storage } from '../lib/storage';
 import { finalizationStorage } from '../lib/finalization-storage';
@@ -304,28 +305,48 @@ export function InvitationView() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.16),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(168,85,247,0.14),_transparent_28%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_48%,_#fdf4ff_100%)]">
       {loading ? (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Cargando invitación...</p>
+        <div className="min-h-screen flex items-center justify-center px-4">
+          <div className="w-full max-w-md rounded-[28px] border border-white/70 bg-white/80 p-8 text-center shadow-[0_30px_80px_-35px_rgba(79,70,229,0.45)] backdrop-blur-xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shadow-inner">
+              <Loader2 className="h-7 w-7 animate-spin" />
+            </div>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.28em] text-indigo-500">
+              Invitation
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900">Preparando tu experiencia</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Estamos cargando los detalles de tu invitación.
+            </p>
           </div>
         </div>
       ) : error ? (
-        <div className="min-h-screen bg-gradient-to-br from-red-50 to-pink-50 flex items-center justify-center">
-          <div className="text-center p-8">
-            <div className="text-red-500 text-6xl mb-4">⚠️</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
-            <p className="text-gray-600">{error}</p>
+        <div className="min-h-screen flex items-center justify-center px-4">
+          <div className="w-full max-w-lg rounded-[28px] border border-white/70 bg-white/85 p-8 text-center shadow-[0_30px_80px_-35px_rgba(239,68,68,0.35)] backdrop-blur-xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500 shadow-inner">
+              <AlertTriangle className="h-7 w-7" />
+            </div>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.28em] text-red-500">
+              Invitation
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900">No pudimos abrir la invitación</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{error}</p>
           </div>
         </div>
       ) : !guest || !event ? (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-          <div className="text-center p-8">
-            <div className="text-gray-400 text-6xl mb-4">🎫</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Invitación no encontrada</h2>
-            <p className="text-gray-600">No se pudo encontrar la invitación solicitada.</p>
+        <div className="min-h-screen flex items-center justify-center px-4">
+          <div className="w-full max-w-lg rounded-[28px] border border-white/70 bg-white/85 p-8 text-center shadow-[0_30px_80px_-35px_rgba(15,23,42,0.2)] backdrop-blur-xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-500 shadow-inner">
+              <Ticket className="h-7 w-7" />
+            </div>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
+              Invitation
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900">Invitación no encontrada</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              No se pudo encontrar la invitación solicitada.
+            </p>
           </div>
         </div>
       ) : finalization?.is_finalized ? (
@@ -346,12 +367,19 @@ export function InvitationView() {
             onUpdateGuest={handleUpdateGuest}
           />
         ) : (
-          <div className="flex items-center justify-center min-h-screen">
-            <div className="text-center p-8">
-              <div className="text-indigo-500 text-6xl mb-4">🎉</div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Bienvenido!</h2>
-              <p className="text-gray-600 mb-4">Invitado #{guest.guest_number}</p>
-              <p className="text-gray-500">La tarjeta de invitación estará disponible pronto.</p>
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="w-full max-w-lg rounded-[28px] border border-white/70 bg-white/85 p-8 text-center shadow-[0_30px_80px_-35px_rgba(79,70,229,0.35)] backdrop-blur-xl">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-violet-100 text-violet-600 shadow-inner">
+                <Sparkles className="h-7 w-7" />
+              </div>
+              <p className="mt-5 text-xs font-semibold uppercase tracking-[0.28em] text-violet-500">
+                Invitation
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold text-slate-900">Tu invitación estará lista muy pronto</h2>
+              <p className="mt-2 text-sm font-medium text-slate-600">Invitado #{guest.guest_number}</p>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                Todavía no hay una tarjeta interactiva asociada a este evento.
+              </p>
             </div>
           </div>
         )

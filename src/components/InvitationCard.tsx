@@ -3,29 +3,29 @@ import { Calendar, Clock, MapPin, Phone, Mail, Facebook, Instagram, Sparkles, He
 
 // Importar todas las opciones de fondos disponibles
 // Bodas
-import fondoBoda from '../assets/backgrounds/wedding/fondoboda.png';
-import fondoBoda2 from '../assets/backgrounds/wedding/fondoboda2.png';
-import fondoBoda3 from '../assets/backgrounds/wedding/fondoboda3.png';
+import fondoBoda from '../assets/backgrounds/wedding/fondoboda.jpg';
+import fondoBoda2 from '../assets/backgrounds/wedding/fondoboda2.jpg';
+import fondoBoda3 from '../assets/backgrounds/wedding/fondoboda3.jpg';
 
 // Cumpleaños
-import fondoCumple from '../assets/backgrounds/birthday/fondocumple.png';
-import fondoCumple2 from '../assets/backgrounds/birthday/fondocumple2.png';
-import fondoCumple3 from '../assets/backgrounds/birthday/fondocumple3.png';
+import fondoCumple from '../assets/backgrounds/birthday/fondocumple.jpg';
+import fondoCumple2 from '../assets/backgrounds/birthday/fondocumple2.jpg';
+import fondoCumple3 from '../assets/backgrounds/birthday/fondocumple3.jpg';
 
 // Quinceañeras
-import fondoQuince from '../assets/backgrounds/quinceanos/fondoquince.png';
-import fondoQuince2 from '../assets/backgrounds/quinceanos/fondoquince2.png';
-import fondoQuince3 from '../assets/backgrounds/quinceanos/fondoquince3.png';
+import fondoQuince from '../assets/backgrounds/quinceanos/fondoquince.jpg';
+import fondoQuince2 from '../assets/backgrounds/quinceanos/fondoquince2.jpg';
+import fondoQuince3 from '../assets/backgrounds/quinceanos/fondoquince3.jpg';
 
 // Empresarial
-import fondoEmpresarial from '../assets/backgrounds/corporate/fondoempresarial.png';
-import fondoEmpresarial2 from '../assets/backgrounds/corporate/fondoempresarial2.png';
-import fondoEmpresarial3 from '../assets/backgrounds/corporate/fondoempresarial3.png';
+import fondoEmpresarial from '../assets/backgrounds/corporate/fondoempresarial.jpg';
+import fondoEmpresarial2 from '../assets/backgrounds/corporate/fondoempresarial2.jpg';
+import fondoEmpresarial3 from '../assets/backgrounds/corporate/fondoempresarial3.jpg';
 
 // Conferencias
-import fondoConferencia from '../assets/backgrounds/conference/fondoconferencia.png';
-import fondoConferencia2 from '../assets/backgrounds/conference/fondoconferencia2.png';
-import fondoConferencia3 from '../assets/backgrounds/conference/fondoconferencia3.png';
+import fondoConferencia from '../assets/backgrounds/conference/fondoconferencia.jpg';
+import fondoConferencia2 from '../assets/backgrounds/conference/fondoconferencia2.jpg';
+import fondoConferencia3 from '../assets/backgrounds/conference/fondoconferencia3.jpg';
 
 import { Event, Guest, EventCard } from '../types/event';
 import { getTemplateById } from '../lib/event-templates';

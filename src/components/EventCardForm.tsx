@@ -1,4 +1,4 @@
-import React, { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { Upload, Map, FileText, AlertCircle, Clock, Plus, Trash2, Palette, ImageIcon, Tag, Utensils, Phone } from 'lucide-react';
 import type { EventCard, CronogramaItem, RecommendationItem } from '../types/event';
 import { EVENT_TEMPLATES, getTemplateById } from '../lib/event-templates';
@@ -7,21 +7,21 @@ import { createInteractiveCard } from '../endpoints/interactiveCard';
 import { notify } from '../lib/notify';
 
 // Background previews (imported so Vite bundles them for production)
-import fondoBoda from '../assets/backgrounds/wedding/fondoboda.png';
-import fondoBoda2 from '../assets/backgrounds/wedding/fondoboda2.png';
-import fondoBoda3 from '../assets/backgrounds/wedding/fondoboda3.png';
-import fondoCumple from '../assets/backgrounds/birthday/fondocumple.png';
-import fondoCumple2 from '../assets/backgrounds/birthday/fondocumple2.png';
-import fondoCumple3 from '../assets/backgrounds/birthday/fondocumple3.png';
-import fondoQuince from '../assets/backgrounds/quinceanos/fondoquince.png';
-import fondoQuince2 from '../assets/backgrounds/quinceanos/fondoquince2.png';
-import fondoQuince3 from '../assets/backgrounds/quinceanos/fondoquince3.png';
-import fondoEmpresarial from '../assets/backgrounds/corporate/fondoempresarial.png';
-import fondoEmpresarial2 from '../assets/backgrounds/corporate/fondoempresarial2.png';
-import fondoEmpresarial3 from '../assets/backgrounds/corporate/fondoempresarial3.png';
-import fondoConferencia from '../assets/backgrounds/conference/fondoconferencia.png';
-import fondoConferencia2 from '../assets/backgrounds/conference/fondoconferencia2.png';
-import fondoConferencia3 from '../assets/backgrounds/conference/fondoconferencia3.png';
+import fondoBoda from '../assets/backgrounds/wedding/fondoboda.jpg';
+import fondoBoda2 from '../assets/backgrounds/wedding/fondoboda2.jpg';
+import fondoBoda3 from '../assets/backgrounds/wedding/fondoboda3.jpg';
+import fondoCumple from '../assets/backgrounds/birthday/fondocumple.jpg';
+import fondoCumple2 from '../assets/backgrounds/birthday/fondocumple2.jpg';
+import fondoCumple3 from '../assets/backgrounds/birthday/fondocumple3.jpg';
+import fondoQuince from '../assets/backgrounds/quinceanos/fondoquince.jpg';
+import fondoQuince2 from '../assets/backgrounds/quinceanos/fondoquince2.jpg';
+import fondoQuince3 from '../assets/backgrounds/quinceanos/fondoquince3.jpg';
+import fondoEmpresarial from '../assets/backgrounds/corporate/fondoempresarial.jpg';
+import fondoEmpresarial2 from '../assets/backgrounds/corporate/fondoempresarial2.jpg';
+import fondoEmpresarial3 from '../assets/backgrounds/corporate/fondoempresarial3.jpg';
+import fondoConferencia from '../assets/backgrounds/conference/fondoconferencia.jpg';
+import fondoConferencia2 from '../assets/backgrounds/conference/fondoconferencia2.jpg';
+import fondoConferencia3 from '../assets/backgrounds/conference/fondoconferencia3.jpg';
 
 const BACKGROUND_PREVIEWS: Record<string, [string, string, string]> = {
   wedding: [fondoBoda, fondoBoda2, fondoBoda3],

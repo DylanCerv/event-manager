@@ -79,7 +79,12 @@ export function Login() {
         {/* Logo and Title */}
         <div className="text-center">
           <div className="mx-auto h-16 w-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg flex items-center justify-center transform hover:rotate-6 transition-transform duration-300">
-            <KeyRound className="h-8 w-8 text-white" />
+            <img
+              src={'/logoem.png'}
+              alt="Eventos Manager"
+              className='h-12 w-12'
+            />
+            {/* <KeyRound className="h-8 w-8 text-white" /> */}
           </div>
           <h2 className="mt-6 text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             Eventos Manager

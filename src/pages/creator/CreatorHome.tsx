@@ -27,6 +27,14 @@ interface QuickStat {
   icon: React.ComponentType<any>;
 }
 
+const quickStatIconMap: Record<string, React.ComponentType<any>> = {
+  Users,
+  CheckCircle,
+  Calendar,
+  TrendingUp,
+  BarChart3,
+};
+
 export default function CreatorHome() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -168,7 +176,7 @@ export default function CreatorHome() {
       const eventChange = getEventChange();
       const approvalChange = getApprovalChange();
 
-      const stats: QuickStat[] = [
+      const fallbackStats: QuickStat[] = [
         {
           label: 'Usuarios Activos',
           value: creatorUsers.length.toString(),
@@ -199,51 +207,58 @@ export default function CreatorHome() {
         }
       ];
 
+      const stats: QuickStat[] = Array.isArray(dashboardData.quickStats) && dashboardData.quickStats.length > 0
+        ? dashboardData.quickStats.map((stat: any) => ({
+            label: stat.label,
+            value: String(stat.value ?? '0'),
+            change: stat.change ?? 'Sin cambios',
+            trend: stat.trend ?? 'neutral',
+            icon: quickStatIconMap[stat.icon] ?? BarChart3,
+          }))
+        : fallbackStats;
+
       setNotifications(creatorNotifications);
       setSystemUpdates(creatorUpdates);
       setQuickStats(stats);
       
-      // Generate recent activity based on real data with timestamps
-      const activity = [];
-      
-      // Add recent requests
-      const recentRequests = creatorRequests
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 3);
-      
-      for (const request of recentRequests) {
-        const user = creatorUsers.find(u => u.id === request.requested_by);
-        const event = loadedEvents.find((e: any) => e.id === request.event_id);
-        if (user && event) {
+      const activity = Array.isArray(dashboardData.recentActivity)
+        ? dashboardData.recentActivity.map((item: any) => ({
+            text: item.text,
+            timestamp: item.timestamp,
+          }))
+        : [];
+
+      if (activity.length === 0) {
+        const recentRequests = creatorRequests
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 3);
+        
+        for (const request of recentRequests) {
+          const event = loadedEvents.find((e: any) => String(e.id) === String(request.event_id));
           activity.push({
-            text: `${user.company} creó una nueva solicitud para "${event.name}"`,
+            text: `Nueva solicitud para "${event?.name || 'evento'}"`,
             timestamp: request.created_at
           });
         }
-      }
-      
-      // Add recent user registrations
-      const recentUsers = creatorUsers
-        .sort((a, b) => new Date(b.createdAt || b.created_at).getTime() - new Date(a.createdAt || a.created_at).getTime())
-        .slice(0, 2);
-      
-      for (const user of recentUsers) {
-        activity.push({
-          text: `${user.company || 'Usuario'} se registró en el sistema`,
-          timestamp: user.createdAt || user.created_at
-        });
-      }
-      
-      // Add recent approvals
-      const recentApprovals = approvedRequests
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 2);
-      
-      for (const request of recentApprovals) {
-        const user = creatorUsers.find(u => u.id === request.requested_by);
-        if (user) {
+        
+        const recentUsers = creatorUsers
+          .sort((a, b) => new Date(b.createdAt || b.created_at).getTime() - new Date(a.createdAt || a.created_at).getTime())
+          .slice(0, 2);
+        
+        for (const user of recentUsers) {
           activity.push({
-            text: `Se aprobó la solicitud de ${user.company}`,
+            text: `${user.company || 'Usuario'} se registró en el sistema`,
+            timestamp: user.createdAt || user.created_at
+          });
+        }
+        
+        const recentApprovals = approvedRequests
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 2);
+        
+        for (const request of recentApprovals) {
+          activity.push({
+            text: 'Se aprobó una solicitud',
             timestamp: request.created_at
           });
         }
@@ -296,16 +311,9 @@ export default function CreatorHome() {
   };
 
   const getEventsForDate = (date: Date) => {
-    if (!events || !users) return [];
-    
-    // Get users created by this creator
-    const creatorUsers = users.filter(u => String(u.createdBy) === String(user?.id));
-    
-    // Filter events created by creator's users for this specific date
-    return events.filter(event => {
-      const isCreatorUserEvent = creatorUsers.some(u => String(u.id) === String(event.created_by));
-      if (!isCreatorUserEvent) return false;
+    if (!events) return [];
 
+    return events.filter(event => {
       const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
         date.getDate()
       ).padStart(2, '0')}`;
@@ -356,7 +364,16 @@ export default function CreatorHome() {
   };
 
   const getUserById = (userId: string) => {
-    return users.find(u => u.id === userId);
+    return users.find(u => String(u.id) === String(userId));
+  };
+
+  const getEventOwnerName = (event: any) => {
+    const eventUser = getUserById(event.created_by);
+    if (eventUser?.company) return eventUser.company;
+    if (String(event.created_by) === String(user?.id)) {
+      return user?.company || user?.name || 'Tu cuenta';
+    }
+    return 'Usuario desconocido';
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -665,10 +682,7 @@ export default function CreatorHome() {
                         Total Eventos
                       </dt>
                       <dd className="text-3xl font-bold text-white">
-                        {events ? events.filter(e => {
-                          const creatorUsers = users?.filter(u => u.createdBy === user?.id) || [];
-                          return creatorUsers.some(u => u.id === e.created_by);
-                        }).length : 0}
+                        {events?.length || 0}
                       </dd>
                     </dl>
                   </div>
@@ -689,11 +703,9 @@ export default function CreatorHome() {
                       </dt>
                       <dd className="text-3xl font-bold text-white">
                         {events ? events.filter(e => {
-                          const creatorUsers = users?.filter(u => u.createdBy === user?.id) || [];
                           const eventDate = new Date(e.date);
                           const now = new Date();
-                          return creatorUsers.some(u => u.id === e.created_by) &&
-                                 eventDate.getMonth() === now.getMonth() &&
+                          return eventDate.getMonth() === now.getMonth() &&
                                  eventDate.getFullYear() === now.getFullYear();
                         }).length : 0}
                       </dd>
@@ -716,12 +728,10 @@ export default function CreatorHome() {
                       </dt>
                       <dd className="text-3xl font-bold text-white">
                         {events ? events.filter(e => {
-                          const creatorUsers = users?.filter(u => u.createdBy === user?.id) || [];
                           const eventDate = new Date(e.date);
                           const now = new Date();
                           const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                          return creatorUsers.some(u => u.id === e.created_by) &&
-                                 eventDate >= now && eventDate <= nextWeek;
+                          return eventDate >= now && eventDate <= nextWeek;
                         }).length : 0}
                       </dd>
                     </dl>
@@ -816,7 +826,7 @@ export default function CreatorHome() {
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 mb-1">Creado por</h4>
                   <p className="text-sm text-gray-900">
-                    {getUserById(selectedEvent.created_by)?.company || 'Usuario desconocido'}
+                    {getEventOwnerName(selectedEvent)}
                   </p>
                 </div>
               </div>

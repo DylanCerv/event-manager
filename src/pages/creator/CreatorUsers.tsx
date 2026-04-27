@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Users, FileText, CheckCircle, User, Mail, Building, Eye, X, Calendar, ClipboardList, BookOpen, UserCheck, Plus } from 'lucide-react';
+import { Users, FileText, CheckCircle, User, Mail, Building, Eye, X, Calendar, ClipboardList, BookOpen, UserCheck } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { storage } from '../../lib/storage';
 import { eventBookStorage } from '../../lib/eventbook-storage';
 import { createUserAPI } from '../../endpoints/user';
 import { useUser } from '../../contexts/UserContext';
@@ -108,7 +107,7 @@ export default function CreatorUsers() {
 
   useEffect(() => {
     loadData();
-  }, [user]);
+  }, [user, scopedEvents]);
 
   // Helper functions for date filtering
   const getUserDateFilterRange = (filter: string, specificDate: string) => {
@@ -280,22 +279,19 @@ export default function CreatorUsers() {
           createdBy: String(u.creator_id ?? ''),
         }));
 
-      // Get all requests from users created by this creator
-      const allRequests = (await storage.getEventRequests()) as any[];
-      const creatorRequests = allRequests.filter(request => 
-        creatorUsers.some(u => u.id === request.requested_by)
+      const creatorUserIds = new Set(creatorUsers.map((u) => String(u.id)));
+      const creatorEvents = (scopedEvents || []).filter((event) =>
+        creatorUserIds.has(String(event.created_by))
       );
-
-      // Get events data for guest count calculations
-      const eventsData = JSON.parse(localStorage.getItem('events') || '[]');
+      const approvedEvents = creatorEvents.filter((event: any) => event.request?.status === 'approved');
       
       // Calculate user with most approved requests
-      const approvedRequests = creatorRequests.filter(r => r.status === 'approved');
       const userApprovalCounts = new Map<string, number>();
       
-      approvedRequests.forEach(request => {
-        const currentCount = userApprovalCounts.get(request.requested_by) || 0;
-        userApprovalCounts.set(request.requested_by, currentCount + 1);
+      approvedEvents.forEach((event) => {
+        const userId = String(event.created_by);
+        const currentCount = userApprovalCounts.get(userId) || 0;
+        userApprovalCounts.set(userId, currentCount + 1);
       });
       
       let topUserByApprovals = null;
@@ -314,11 +310,12 @@ export default function CreatorUsers() {
       // Calculate user with most guests (from approved requests)
       const userGuestCounts = new Map<string, number>();
       
-      approvedRequests.forEach(request => {
-        const event = eventsData.find((e: any) => e.id === request.event_id);
-        if (event && event.guest_count) {
-          const currentCount = userGuestCounts.get(request.requested_by) || 0;
-          userGuestCounts.set(request.requested_by, currentCount + event.guest_count);
+      approvedEvents.forEach((event) => {
+        const guestCount = Number(event.guest_count || 0);
+        if (guestCount > 0) {
+          const userId = String(event.created_by);
+          const currentCount = userGuestCounts.get(userId) || 0;
+          userGuestCounts.set(userId, currentCount + guestCount);
         }
       });
       
@@ -336,12 +333,13 @@ export default function CreatorUsers() {
       }
 
       // Calculate average guests per event (approved events only)
-      const approvedEventsWithGuests = approvedRequests.map(request => 
-        eventsData.find((e: any) => e.id === request.event_id)
-      ).filter(event => event && event.guest_count);
+      const approvedEventsWithGuests = approvedEvents.filter((event) => Number(event.guest_count || 0) > 0);
       
       const avgGuestsPerEvent = approvedEventsWithGuests.length > 0 
-        ? Math.round(approvedEventsWithGuests.reduce((sum: number, event: any) => sum + event.guest_count, 0) / approvedEventsWithGuests.length)
+        ? Math.round(
+            approvedEventsWithGuests.reduce((sum: number, event: any) => sum + Number(event.guest_count || 0), 0) /
+              approvedEventsWithGuests.length
+          )
         : 0;
 
       setStats({

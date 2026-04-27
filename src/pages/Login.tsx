@@ -78,18 +78,18 @@ export function Login() {
       <div className="max-w-md w-full space-y-8">
         {/* Logo and Title */}
         <div className="text-center">
-          <div className="mx-auto h-20 w-20 rounded-[22px] bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 p-[0.75px] shadow-[0_16px_40px_-18px_rgba(109,40,217,0.55)] transform hover:rotate-6 transition-transform duration-300">
+          {/* <div className="mx-auto h-20 w-20 rounded-[22px] bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-600 p-[0.75px] shadow-[0_16px_40px_-18px_rgba(109,40,217,0.55)] transform hover:rotate-6 transition-transform duration-300">
             <div className="flex h-full w-full items-center justify-center rounded-[21px] bg-gradient-to-br from-white via-indigo-50 to-purple-100 ring-1 ring-white/70">
-              <img
-                src={'/logoem.png'}
-                alt="Eventos Manager"
-                className="h-full object-cover"
-              />
             </div>
-          </div>
-          <h2 className="mt-6 text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+          </div> */}
+          <img
+            src={'/logoem.png'}
+            alt="Eventos Manager"
+            className="h-full object-cover -mb-16 px-4"
+          />
+          {/* <h2 className="mt-6 text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
             Eventos Manager
-          </h2>
+          </h2> */}
           <p className="mt-2 text-sm text-gray-600">
           Bienvenido a la nueva generación de gestión de eventos.
           </p>

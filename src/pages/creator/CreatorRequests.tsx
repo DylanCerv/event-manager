@@ -18,6 +18,7 @@ interface UserInfo {
 interface RequestWithDetails extends EventRequest {
   eventName?: string;
   user?: UserInfo;
+  processed_at?: string | null;
 }
 
 interface RequestStats {
@@ -25,6 +26,22 @@ interface RequestStats {
   pending: number;
   approved: number;
   rejected: number;
+}
+
+interface PrizeRequestInfo {
+  id: string;
+  prizeTitle: string;
+  prizePoints: number;
+  userId: string;
+  userName: string;
+  company: string;
+  email: string;
+  userType: string;
+  creatorId: string | null;
+  creatorName: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestDate: string;
+  processedDate: string | null;
 }
 
 export default function CreatorRequests() {
@@ -41,7 +58,7 @@ export default function CreatorRequests() {
   const [isLoading, setIsLoading] = useState(true);
   
   // Estados para canjes de premios
-  const [prizeRequests, setPrizeRequests] = useState<any[]>([]);
+  const [prizeRequests, setPrizeRequests] = useState<PrizeRequestInfo[]>([]);
   const [prizeRequestsStats, setPrizeRequestsStats] = useState({
     total: 0,
     pending: 0,
@@ -66,12 +83,12 @@ export default function CreatorRequests() {
       setIsLoading(true);
 
       // Backend scopes CREATOR role to only see requests from their admins
-      const response = await getEventRequestsAPI('bolt_event,creator');
+      const response = await getEventRequestsAPI('bolt_event,creator,bolt_event.creator');
       const rawRequests = response?.data?.data ?? response?.data ?? [];
 
       const enrichedRequests: RequestWithDetails[] = rawRequests.map((r: any) => {
         const boltEvent = r.bolt_event ?? r.boltEvent ?? null;
-        const creator = r.creator ?? null;
+        const creator = r.creator ?? boltEvent?.creator ?? null;
         return {
           id: String(r.id),
           event_id: String(r.bolt_event_id ?? r.event_id ?? ''),
@@ -110,39 +127,37 @@ export default function CreatorRequests() {
     }
   };
 
-  // Función para obtener información del usuario que solicita el canje
-  const getPrizeRequestUserInfo = (userId: string) => {
-    // Buscar en los usuarios creados por este creador
-    const allUsers = JSON.parse(localStorage.getItem('admin_users') || '[]');
-    const adminUser = allUsers.find((u: any) => u.id === userId);
-    
-    if (adminUser) {
-      return {
-        name: `${adminUser.firstName} ${adminUser.lastName}`,
-        company: adminUser.company,
-        email: adminUser.email,
-        type: 'Administrador'
-      };
-    }
-    
-    return {
-      name: userId,
-      company: 'N/A',
-      email: 'N/A',
-      type: 'Desconocido'
-    };
-  };
+  const getPrizeRequestUserInfo = (request: PrizeRequestInfo) => ({
+    name: request.userName || request.userId,
+    company: request.company || 'N/A',
+    email: request.email || 'N/A',
+    type: request.userType || 'Desconocido',
+    creatorName: request.creatorName || 'N/A',
+  });
 
-  // Cargar solicitudes de premios desde localStorage (solo de administradores de este creador)
   const loadPrizeRequests = async () => {
     if (!user) return;
 
     try {
       const response = await getPrizeRedemptionsAPI();
       const allRequests = response?.data || [];
-
-      // Filter only redemptions from admins created by this creator (backend includes creatorId)
-      const creatorPrizeRequests = allRequests.filter((r: any) => r.creatorId === String(user.id));
+      const creatorPrizeRequests: PrizeRequestInfo[] = allRequests
+        .filter((r: any) => r.creatorId === String(user.id))
+        .map((r: any) => ({
+          id: String(r.id),
+          prizeTitle: r.prizeTitle ?? 'Premio sin nombre',
+          prizePoints: Number(r.prizePoints ?? 0),
+          userId: String(r.userId ?? ''),
+          userName: r.userName ?? '',
+          company: r.company ?? '',
+          email: r.email ?? '',
+          userType: r.userType ?? '',
+          creatorId: r.creatorId ? String(r.creatorId) : null,
+          creatorName: r.creatorName ?? '',
+          status: r.status,
+          requestDate: r.requestDate,
+          processedDate: r.processedDate ?? null,
+        }));
 
       setPrizeRequests(creatorPrizeRequests);
 
@@ -761,14 +776,17 @@ export default function CreatorRequests() {
                             <div className="text-sm text-gray-600">
                               <span className="font-medium">Empresa:</span> 
                               <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-md font-bold ml-2">
-                                {getPrizeRequestUserInfo(request.userId).company}
+                                {getPrizeRequestUserInfo(request).company}
                               </span>
                             </div>
                             <div className="text-sm text-gray-600">
-                              <span className="font-medium">Solicitante:</span> {getPrizeRequestUserInfo(request.userId).name} ({getPrizeRequestUserInfo(request.userId).type})
+                              <span className="font-medium">Solicitante:</span> {getPrizeRequestUserInfo(request).name} ({getPrizeRequestUserInfo(request).type})
                             </div>
                             <div className="text-sm text-gray-500">
-                              <span className="font-medium">Email:</span> {getPrizeRequestUserInfo(request.userId).email}
+                              <span className="font-medium">Email:</span> {getPrizeRequestUserInfo(request).email}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              <span className="font-medium">Creador:</span> {getPrizeRequestUserInfo(request).creatorName}
                             </div>
                             <div className="text-sm text-gray-500">
                               <span className="font-medium">Solicitado:</span> {new Date(request.requestDate).toLocaleDateString('es-ES')}

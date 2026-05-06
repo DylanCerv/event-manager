@@ -105,7 +105,7 @@ export function UserProfileDropdown({ user, isOpen, onClose, onViewRewards, onCl
           <div className="space-y-3 mb-4">
             <div className="flex items-center text-sm text-gray-600">
               <Calendar className="h-4 w-4 mr-2" />
-              <span>Miembro desde: {formatMemberSince(user.createdAt || new Date().toISOString())}</span>
+              <span>Miembro desde: {formatMemberSince(user.created_at || new Date().toISOString())}</span>
             </div>
             
             <div className="flex items-center text-sm">
@@ -139,7 +139,7 @@ export function UserProfileDropdown({ user, isOpen, onClose, onViewRewards, onCl
         isOpen={isPhotoModalOpen}
         onClose={() => setIsPhotoModalOpen(false)}
         onPhotoUpdate={handlePhotoUpdate}
-        currentPhoto={user.profilePhoto}
+        currentPhoto={user.profile_photo}
       />
     </>
   );

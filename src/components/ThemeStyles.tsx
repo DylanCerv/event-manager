@@ -12,6 +12,8 @@ interface ThemeStylesProps {
   children: React.ReactNode;
   /** Una sola fuente para toda la tarjeta (ej. invitación) */
   singleFont?: boolean;
+  /** Hace que el shell ocupe 100% del padre en vez de min-height: 100vh */
+  fullHeight?: boolean;
 }
 
 const SINGLE_FONT = {
@@ -20,7 +22,7 @@ const SINGLE_FONT = {
   letterSpacing: '0.01em',
 };
 
-export function ThemeStyles({ eventType = 'wedding', themeColors, children, singleFont }: ThemeStylesProps) {
+export function ThemeStyles({ eventType = 'wedding', themeColors, children, singleFont, fullHeight }: ThemeStylesProps) {
   const themeVariables = {
     '--theme-primary': themeColors.primary,
     '--theme-secondary': themeColors.secondary,
@@ -30,15 +32,10 @@ export function ThemeStyles({ eventType = 'wedding', themeColors, children, sing
   } as React.CSSProperties;
 
   const shellStyles: React.CSSProperties = {
-    minHeight: '100vh',
+    ...(fullHeight ? { height: '100%' } : { minHeight: '100vh' }),
     color: themeColors.text,
     colorScheme: 'light',
-    background: `
-      radial-gradient(circle at top left, ${themeColors.primary}22 0%, transparent 35%),
-      radial-gradient(circle at top right, ${themeColors.accent}1c 0%, transparent 30%),
-      radial-gradient(circle at bottom center, ${themeColors.secondary}22 0%, transparent 42%),
-      linear-gradient(180deg, #ffffff 0%, ${themeColors.background} 45%, #f8fafc 100%)
-    `,
+    background: 'transparent',
   };
 
   const getContainerStyles = () => {
@@ -53,55 +50,59 @@ export function ThemeStyles({ eventType = 'wedding', themeColors, children, sing
         return {
           ...baseStyles,
           borderRadius: '24px',
-          border: `4px solid ${themeColors.primary}20`,
-          boxShadow: `0 25px 50px -12px ${themeColors.primary}40, inset 0 0 50px ${themeColors.accent}30`,
-          background: `
-            radial-gradient(circle at 20% 20%, ${themeColors.accent}40 0%, transparent 50%),
-            radial-gradient(circle at 80% 80%, ${themeColors.secondary}60 0%, transparent 50%),
-            linear-gradient(135deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
-          `
+          // border: `4px solid ${themeColors.primary}20`,
+          // boxShadow: `0 25px 50px -12px ${themeColors.primary}40, inset 0 0 50px ${themeColors.accent}30`,
+          // background: `
+          //   radial-gradient(circle at 20% 20%, ${themeColors.accent}40 0%, transparent 50%),
+          //   radial-gradient(circle at 80% 80%, ${themeColors.secondary}60 0%, transparent 50%),
+          //   linear-gradient(135deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
+          // `
+          background: 'transparent',
         };
       
       case 'quinceanera':
         return {
           ...baseStyles,
           borderRadius: '20px',
-          border: `6px double ${themeColors.primary}`,
-          boxShadow: `
-            0 0 30px ${themeColors.primary}60,
-            inset 0 0 30px ${themeColors.accent}40,
-            0 0 60px ${themeColors.primary}30
-          `,
-          background: `
-            conic-gradient(from 0deg at 50% 50%, ${themeColors.primary}20, ${themeColors.accent}40, ${themeColors.secondary}60, ${themeColors.primary}20),
-            linear-gradient(135deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
-          `
+          // border: `6px double ${themeColors.primary}`,
+          // boxShadow: `
+          //   0 0 30px ${themeColors.primary}60,
+          //   inset 0 0 30px ${themeColors.accent}40,
+          //   0 0 60px ${themeColors.primary}30
+          // `,
+          // background: `
+          //   conic-gradient(from 0deg at 50% 50%, ${themeColors.primary}20, ${themeColors.accent}40, ${themeColors.secondary}60, ${themeColors.primary}20),
+          //   linear-gradient(135deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
+          // `
+          background: 'transparent',
         };
       
       case 'birthday':
         return {
           ...baseStyles,
           borderRadius: '16px',
-          border: `3px solid ${themeColors.primary}60`,
-          boxShadow: `0 15px 30px -8px ${themeColors.primary}40, 0 0 0 5px ${themeColors.accent}20`,
-          background: `
-            radial-gradient(circle at 70% 30%, ${themeColors.accent}20 0%, transparent 40%),
-            radial-gradient(circle at 30% 70%, ${themeColors.primary}15 0%, transparent 40%),
-            linear-gradient(135deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
-          `
+          // border: `3px solid ${themeColors.primary}60`,
+          // boxShadow: `0 15px 30px -8px ${themeColors.primary}40, 0 0 0 5px ${themeColors.accent}20`,
+          // background: `
+          //   radial-gradient(circle at 70% 30%, ${themeColors.accent}20 0%, transparent 40%),
+          //   radial-gradient(circle at 30% 70%, ${themeColors.primary}15 0%, transparent 40%),
+          //   linear-gradient(135deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
+          // `
+          background: 'transparent',
         };
       
       case 'corporate':
         return {
           ...baseStyles,
           borderRadius: '8px',
-          border: `2px solid ${themeColors.primary}`,
-          boxShadow: `0 10px 25px -5px ${themeColors.primary}30, inset 0 1px 0 ${themeColors.background}`,
-          background: `
-            linear-gradient(90deg, ${themeColors.secondary}50 1px, transparent 1px),
-            linear-gradient(180deg, ${themeColors.secondary}50 1px, transparent 1px),
-            linear-gradient(180deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
-          `,
+          // border: `2px solid ${themeColors.primary}`,
+          // boxShadow: `0 10px 25px -5px ${themeColors.primary}30, inset 0 1px 0 ${themeColors.background}`,
+          // background: `
+          //   linear-gradient(90deg, ${themeColors.secondary}50 1px, transparent 1px),
+          //   linear-gradient(180deg, ${themeColors.secondary}50 1px, transparent 1px),
+          //   linear-gradient(180deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
+          // `,
+          background: 'transparent',
           backgroundSize: '20px 20px, 20px 20px, 100% 100%'
         };
       
@@ -109,15 +110,16 @@ export function ThemeStyles({ eventType = 'wedding', themeColors, children, sing
         return {
           ...baseStyles,
           borderRadius: '12px',
-          border: `3px solid ${themeColors.primary}`,
-          boxShadow: `0 8px 20px -5px ${themeColors.primary}40, inset 0 2px 4px ${themeColors.secondary}`,
-          background: `
-            linear-gradient(45deg, ${themeColors.secondary}20 25%, transparent 25%),
-            linear-gradient(-45deg, ${themeColors.secondary}20 25%, transparent 25%),
-            linear-gradient(45deg, transparent 75%, ${themeColors.accent}20 75%),
-            linear-gradient(-45deg, transparent 75%, ${themeColors.accent}20 75%),
-            linear-gradient(180deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
-          `,
+          // border: `3px solid ${themeColors.primary}`,
+          // boxShadow: `0 8px 20px -5px ${themeColors.primary}40, inset 0 2px 4px ${themeColors.secondary}`,
+          // background: `
+          //   linear-gradient(45deg, ${themeColors.secondary}20 25%, transparent 25%),
+          //   linear-gradient(-45deg, ${themeColors.secondary}20 25%, transparent 25%),
+          //   linear-gradient(45deg, transparent 75%, ${themeColors.accent}20 75%),
+          //   linear-gradient(-45deg, transparent 75%, ${themeColors.accent}20 75%),
+          //   linear-gradient(180deg, ${themeColors.background} 0%, ${themeColors.secondary} 100%)
+          // `,
+          background: 'transparent',
           backgroundSize: '20px 20px, 20px 20px, 20px 20px, 20px 20px, 100% 100%'
         };
       
@@ -254,23 +256,8 @@ export function ThemeStyles({ eventType = 'wedding', themeColors, children, sing
   };
 
   return (
-    <div className="theme-shell relative overflow-hidden px-3 py-4 sm:px-6 sm:py-8" style={shellStyles}>
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div
-          className="absolute -top-20 left-[-5rem] h-52 w-52 rounded-full blur-3xl"
-          style={{ background: `${themeColors.primary}22` }}
-        />
-        <div
-          className="absolute right-[-4rem] top-1/4 h-56 w-56 rounded-full blur-3xl"
-          style={{ background: `${themeColors.accent}1f` }}
-        />
-        <div
-          className="absolute bottom-[-6rem] left-1/2 h-72 w-72 -translate-x-1/2 rounded-full blur-3xl"
-          style={{ background: `${themeColors.secondary}2a` }}
-        />
-      </div>
-
-      <div className="relative z-10" style={{ ...themeVariables, ...getContainerStyles(), ...getTextStyles(), color: themeColors.text, colorScheme: 'light' }}>
+    <div className={`theme-shell relative overflow-hidden px-3 py-2 sm:px-6 sm:py-4${fullHeight ? ' h-full' : ''}`} style={shellStyles}>
+      <div className={`relative z-10${fullHeight ? ' h-full' : ''}`} style={{ ...themeVariables, ...getContainerStyles(), ...getTextStyles(), color: themeColors.text, colorScheme: 'light' }}>
       <style>
         {`
           .theme-shell,

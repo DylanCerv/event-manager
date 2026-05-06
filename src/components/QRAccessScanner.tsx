@@ -117,6 +117,10 @@ export function QRAccessScanner({
   const readerTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const lastKeypressRef = React.useRef<number>(0);
   const readerDetectionTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  // Cooldown para evitar que el scanner de cámara procese el mismo QR múltiples veces por frame
+  const lastCameraScanRef = React.useRef<{ code: string; at: number }>({ code: '', at: 0 });
+  const isCameraProcessingRef = React.useRef<boolean>(false);
+  const CAMERA_SCAN_COOLDOWN_MS = 3000;
   const [eventName, setEventName] = React.useState<string>('');
   const [screensaverEnabled, setScreensaverEnabled] = React.useState(true);
 
@@ -432,8 +436,20 @@ export function QRAccessScanner({
 
       await scannerRef.current.render(
         (decodedText) => {
-          console.log('QR Code detected:', decodedText);
-          processQRCode(decodedText);
+          const now = Date.now();
+          const last = lastCameraScanRef.current;
+          // Ignore if same code scanned within cooldown window or still processing
+          if (
+            isCameraProcessingRef.current ||
+            (last.code === decodedText && now - last.at < CAMERA_SCAN_COOLDOWN_MS)
+          ) {
+            return;
+          }
+          lastCameraScanRef.current = { code: decodedText, at: now };
+          isCameraProcessingRef.current = true;
+          processQRCode(decodedText).finally(() => {
+            isCameraProcessingRef.current = false;
+          });
         },
         (error) => {
           // Errores de escaneo son normales, no los mostramos

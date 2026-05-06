@@ -128,9 +128,9 @@ export default function CreatorNavbar() {
               >
                 {/* Profile Photo */}
                 <div className="flex-shrink-0">
-                  {user.profilePhoto ? (
+                  {user.profile_photo ? (
                     <img 
-                      src={user.profilePhoto} 
+                      src={user.profile_photo} 
                       alt="Perfil" 
                       className="h-8 w-8 rounded-full object-cover"
                     />
@@ -220,9 +220,9 @@ export default function CreatorNavbar() {
               className="flex items-center px-4 w-full text-left hover:bg-gray-50 py-2 rounded-md mx-2"
             >
               <div className="flex-shrink-0">
-                {user.profilePhoto ? (
+                {user.profile_photo ? (
                   <img 
-                    src={user.profilePhoto} 
+                    src={user.profile_photo} 
                     alt="Perfil" 
                     className="h-10 w-10 rounded-full object-cover"
                   />

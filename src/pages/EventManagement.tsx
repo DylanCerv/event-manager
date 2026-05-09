@@ -679,11 +679,15 @@ export function EventManagement() {
       {/* Full View Modal */}
       {showFullView && eventCard && (
         <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 z-50">
-          <div className={viewMode === 'mobile' 
-            ? "max-w-sm w-full max-h-[90vh] overflow-y-auto bg-white rounded-lg" 
-            : "max-w-4xl w-full max-h-[90vh] overflow-y-auto bg-white rounded-lg"
-          }>
-            <div className="sticky top-0 z-50 bg-white px-4 py-3 border-b border-gray-200 flex justify-between items-center shadow-sm">
+          {/* Wrapper: altura fija de 90vh para que los hijos puedan resolver h-full */}
+          <div
+            className={`flex flex-col rounded-lg overflow-hidden bg-white ${
+              viewMode === 'mobile' ? 'max-w-sm w-full' : 'max-w-4xl w-full'
+            }`}
+            style={{ height: '90vh' }}
+          >
+            {/* Header fijo */}
+            <div className="flex-none bg-white px-4 py-3 border-b border-gray-200 flex justify-between items-center shadow-sm">
               <div className="flex items-center space-x-4">
                 <h3 className="text-lg font-medium text-gray-900">Vista Previa</h3>
                 <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
@@ -718,17 +722,18 @@ export function EventManagement() {
                 <X className="h-6 w-6" />
               </button>
             </div>
-            <div className="p-6">
+
+            {/* Área de contenido: ocupa el resto de los 90vh y contiene el card */}
+            <div className="flex-1 overflow-hidden min-h-0">
               <InvitationCard
                 event={event}
                 eventCard={eventCard}
+                viewportMode="contained"
                 guest={{
                   id: 'preview',
                   event_id: event.id,
                   name: 'Invitado de Ejemplo',
                   guest_number: 100,
-                  // confirmed: false,
-                  // attended: false,
                   qr_code: 'preview',
                   confirmation_status: 'not confirmed',
                   created_at: new Date().toISOString(),

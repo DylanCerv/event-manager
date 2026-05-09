@@ -195,8 +195,9 @@ export const updateBoltEventSilentAPI = async (id: number, body: object): Promis
 
 /**
  * Delete a Bolt Event
+ * The backend responds with 204 No Content (empty body), so we must NOT call response.json().
  */
-export const deleteBoltEventAPI = async (id: number): Promise<any> => {
+export const deleteBoltEventAPI = async (id: number): Promise<void> => {
     try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/bolt-events/${id}`, {
             method: 'DELETE',
@@ -206,11 +207,15 @@ export const deleteBoltEventAPI = async (id: number): Promise<any> => {
                 ...getAuthHeaders(),
             },
         });
-        const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.message || `Error al eliminar evento con ID ${id}`);
+            let errorMessage = `Error al eliminar evento con ID ${id}`;
+            try {
+                const data = await response.json();
+                errorMessage = data.message || errorMessage;
+            } catch { /* body vacío o no es JSON */ }
+            throw new Error(errorMessage);
         }
-        return data;
+        // 204 No Content — no hay body que parsear
     } catch (error) {
         console.error(`Error en deleteBoltEventAPI (ID: ${id}):`, error);
         throw error;

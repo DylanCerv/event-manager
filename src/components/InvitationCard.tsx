@@ -38,9 +38,12 @@ interface InvitationCardProps {
   eventCard: EventCard;
   onConfirmAttendance: (guestId: string, confirmed: boolean) => void | Promise<void>;
   onUpdateGuest: (guest: Partial<Guest>) => void | Promise<void>;
+  /** 'contained': renderiza dentro de un contenedor acotado (ej. modal preview).
+   *  'full': ocupa el viewport completo (producción). Por defecto 'full'. */
+  viewportMode?: 'full' | 'contained';
 }
 
-function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdateGuest }: InvitationCardProps) {
+function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdateGuest, viewportMode = 'full' }: InvitationCardProps) {
   
   // Función para obtener el fondo correcto según tipo de evento y opción seleccionada
   const getBackgroundImage = (eventType: string, backgroundOption: number = 1) => {
@@ -2960,12 +2963,14 @@ function InvitationCard({ event, guest, eventCard, onConfirmAttendance, onUpdate
 
   // Renderizar modelo de fondo fijo
   if (layoutModel === 'fixed-background') {
+    const isContained = viewportMode === 'contained';
     return (
       <ThemeStyles 
         eventType={eventCard.event_type as "wedding" | "quinceanera" | "birthday" | "corporate" | "conference"} 
         themeColors={themeColors}
+        fullHeight={isContained}
       >
-        <div className="relative h-screen overflow-hidden">
+        <div className={`relative overflow-hidden ${isContained ? 'h-full' : 'h-screen'}`}>
           {/* Imagen de fondo fija - altura fija del viewport */}
           <div 
             className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
